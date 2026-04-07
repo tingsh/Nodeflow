@@ -1,0 +1,83 @@
+[tool.ruff]
+# Exclude a variety of commonly ignored directories.
+extend-exclude = [
+    ".direnv",
+    ".git",
+    ".ruff_cache",
+    "node_modules",
+    "migrations",
+]
+line-length = 120
+indent-width = 4
+target-version = "py311"
+
+[tool.ruff.lint]
+fixable = [
+    "ALL",
+]
+unfixable = []
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.setuptools]
+py-modules = []
+
+[project]
+name = "iot-platform"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "Django>=5.2",
+    "boto3",
+    "celery",
+    "celery-progress",
+    "celery[redis]",
+    "channels",
+    "channels_redis",
+    "dj-stripe>=2.9",
+    "django-allauth[socialaccount,mfa]",
+    "django-anymail[mailgun]", # email services
+    "django-celery-beat",
+    "django-cors-headers",
+    "django-environ",
+    "django-health-check",
+    "django-hijack",
+    "django-htmx",
+    "django-storages",
+    "django-template-partials",
+    "django-vite>=3.1.0",
+    "django-waffle",
+    "djangorestframework",
+    "djangorestframework-api-key",
+    "drf-spectacular",
+    "litellm>=1.65.1",
+    "markdown",
+    "nh3>=0.2.21",
+    "openai",
+    "psycopg2-binary",
+    "redis",
+    "requests",
+    "sentry-sdk",
+    "stripe<12.0",
+    "wagtail",
+]
+
+[dependency-groups]
+dev = [
+    "channels[daphne]",
+    "django-debug-toolbar",
+    "pre-commit",
+    "ruff",
+    "pegasus-cli>=0.8",
+]
+prod = [
+    "gunicorn",
+    "uvicorn[standard]",
+]

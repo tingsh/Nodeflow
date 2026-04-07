@@ -1,0 +1,49 @@
+# syntax = docker/dockerfile:1.5
+FROM python:3.12-bookworm
+ENV PYTHONUNBUFFERED=1
+# tell uv to use a python environment outside the code directory
+ENV UV_PROJECT_ENVIRONMENT=/usr/local/venv/
+
+# install node/npm
+RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
+    --mount=target=/var/cache/apt,type=cache,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get update && \
+    apt-get install -yqq nodejs \
+    # install gettext for translations
+    gettext
+
+# use latest npm
+RUN npm install -g npm@11.3
+
+# create code directory
+RUN mkdir /code
+WORKDIR /code
+
+# install uv
+COPY --from=ghcr.io/astral-sh/uv:0.5.2 /uv /uvx /bin/
+
+ARG MY_UID=1000
+ARG MY_GID=1000
+# create user and group (or update if they already exist)
+RUN groupadd -g $MY_GID -r django || \
+  (groupmod -g $MY_GID django 2>/dev/null || true) && \
+  useradd -u $MY_UID -r -g django -m -d /home/django django 2>/dev/null || \
+  usermod -u $MY_UID -g django -d /home/django django
+
+# install python requirements
+# copy just dependency file(s) and install before rest of code to avoid having to
+# reinstall packages during build every time code changes
+COPY uv.lock pyproject.toml ./
+RUN uv sync --frozen
+# make sure we use the right uv environment by default
+ENV PATH="/usr/local/venv/bin:$PATH"
+# Change ownership of the venv to the django user so uv commands can run
+RUN chown -R django:django /usr/local/venv/
+
+# copy code files
+COPY --chown=django:django . /code/
+
+# set user
+USER django

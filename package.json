@@ -1,0 +1,35 @@
+{
+  "name": "iot_platform",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "vite build",
+    "dev": "vite",
+    "dev-watch": "vite",
+    "type-check": "tsc --noEmit",
+    "type-check-watch": "npm run type-check -- --watch"
+  },
+  "author": "",
+  "homepage": "http://example.com/",
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.16",
+    "@types/node": "^22.15.17",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.3",
+    "postcss-import": "^16.1.0",
+    "postcss-nested": "^7.0.2",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  },
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.1.6",
+    "alpinejs": "^3.14.9",
+    "api-client": "file:./api-client",
+    "chart.js": "^4.4.9",
+    "daisyui": "^5.0.35",
+    "htmx.org": "^2.0.0",
+    "js-cookie": "^3.0.5",
+    "tailwindcss": "^4.1.6"
+  }
+}
