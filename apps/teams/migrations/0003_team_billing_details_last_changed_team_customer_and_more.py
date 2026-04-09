@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('auth', '0012_alter_user_first_name_max_length'),
-        ('djstripe', '0014_2_9a'),
+        ('djstripe', '0012_2_8'),
         ('teams', '0002_auto_20200519_1242'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]

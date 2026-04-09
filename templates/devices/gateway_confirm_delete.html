@@ -1,0 +1,25 @@
+{% extends "web/app/app_base.html" %}
+{% block app %}
+<div class="px-4 sm:px-6 lg:px-8 py-8 max-w-lg mx-auto">
+    <div class="bg-white dark:bg-gray-800 shadow rounded-xl border border-gray-100 dark:border-gray-700 p-8 text-center">
+        <div class="inline-flex items-center justify-center p-4 bg-red-100 dark:bg-red-900/30 rounded-full mb-4">
+            <i class="fa fa-trash text-red-600 text-2xl"></i>
+        </div>
+        <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Delete Gateway</h2>
+        <p class="text-gray-500 mb-6">Are you sure you want to delete <strong>{{ object.name }}</strong>? All associated devices and telemetry data will be affected.</p>
+        <form method="post">
+            {% csrf_token %}
+            <div class="flex justify-center space-x-4">
+                <a href="{% url 'web_team:devices:gateway_list' request.team.slug %}"
+                   class="rounded-md bg-white dark:bg-gray-700 px-4 py-2 text-sm font-semibold text-gray-900 dark:text-white shadow-sm ring-1 ring-inset ring-gray-300">
+                    Cancel
+                </a>
+                <button type="submit"
+                        class="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500">
+                    Delete Gateway
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

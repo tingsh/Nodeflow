@@ -1,0 +1,198 @@
+{% extends "web/app/app_base.html" %}
+{% load static %}
+{% block app %}
+<div class="px-4 sm:px-6 lg:px-8 py-8">
+    <nav class="flex mb-8" aria-label="Breadcrumb">
+        <ol role="list" class="flex items-center space-x-4">
+            <li>
+                <div>
+                    <a href="{% url 'web_team:devices:device_list' request.team.slug %}" class="text-gray-400 hover:text-gray-500">
+                        <i class="fa fa-microchip"></i>
+                    </a>
+                </div>
+            </li>
+            <li>
+                <div class="flex items-center">
+                    <i class="fa fa-chevron-right text-gray-400 text-xs mr-4"></i>
+                    <a href="{% url 'web_team:devices:device_list' request.team.slug %}" class="text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">Devices</a>
+                </div>
+            </li>
+            <li>
+                <div class="flex items-center">
+                    <i class="fa fa-chevron-right text-gray-400 text-xs mr-4"></i>
+                    <span class="text-sm font-medium text-gray-900 dark:text-white" aria-current="page">{{ device.name }}</span>
+                </div>
+            </li>
+        </ol>
+    </nav>
+
+    <div class="md:flex md:items-center md:justify-between mb-8">
+        <div class="min-w-0 flex-1">
+            <h2 class="text-2xl font-bold leading-7 text-gray-900 dark:text-white sm:truncate sm:text-3xl sm:tracking-tight">{{ device.name }}</h2>
+            <div class="mt-1 flex items-center space-x-4">
+                <div class="flex items-center">
+                    <div class="h-2.5 w-2.5 rounded-full mr-2 {% if device.status == 'online' %}bg-green-500{% else %}bg-gray-400{% endif %}"></div>
+                    <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">{{ device.get_status_display }}</span>
+                </div>
+                <div class="text-sm text-gray-300 dark:text-gray-600">|</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">{{ device.get_device_type_display }}</div>
+                <div class="text-sm text-gray-300 dark:text-gray-600">|</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">{{ device.site.name }}</div>
+            </div>
+        </div>
+        <div class="mt-5 flex lg:ml-4 lg:mt-0 space-x-3">
+             <a href="{% url 'web_team:devices:device_edit' request.team.slug device.pk %}" class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-2 text-sm font-semibold text-gray-900 dark:text-white shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600">
+                <i class="fa fa-edit mr-1.5 flex-shrink-0 text-gray-400"></i>Edit
+            </a>
+        </div>
+    </div>
+
+    {% if ai_insights %}
+    <div class="mb-8 p-6 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl shadow-lg border border-indigo-500/30 relative overflow-hidden">
+        <!-- Decoration -->
+        <div class="absolute -right-4 -bottom-4 opacity-10">
+            <i class="fa fa-brain text-8xl text-white"></i>
+        </div>
+        
+        <div class="relative z-10">
+            <div class="flex items-center mb-4 text-white">
+                <i class="fa fa-sparkles mr-2"></i>
+                <h3 class="text-sm font-bold uppercase tracking-wider">AI Fleet Insights</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for insight in ai_insights %}
+                <div class="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/10 flex items-start">
+                    <div class="mr-3 mt-0.5">
+                        {% if insight.type == 'anomaly' %}
+                        <i class="fa fa-exclamation-triangle text-amber-300"></i>
+                        {% else %}
+                        <i class="fa fa-chart-line text-green-300"></i>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-white">{{ insight.message }}</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Active Power Chart -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden p-6 mb-8 border border-gray-100 dark:border-gray-700">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white">Active Power (Watts)</h3>
+            <span class="flex items-center text-xs text-gray-400 animate-pulse">
+                <i class="fa fa-circle text-green-500 mr-2"></i> Live Polling (5s)
+            </span>
+        </div>
+        
+        <!-- HTMX Polling Target -->
+        <div hx-get="{% url 'web_team:telemetry:chart_partial' request.team.slug device.pk 'active_power' %}"
+             hx-trigger="load, every 5s"
+             hx-swap="innerHTML"
+             class="min-h-[256px]">
+            <div class="flex items-center justify-center h-64 border-2 border-dashed border-gray-100 dark:border-gray-700 rounded">
+                <i class="fa fa-spinner fa-spin text-gray-300 mr-3"></i>
+                <span class="text-sm text-gray-400">Connecting to telemetry stream...</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- KPI Dashboard -->
+    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+        <!-- Active Power KPI -->
+        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-100 dark:border-gray-700 p-5"
+             hx-get="{% url 'web_team:telemetry:kpi_partial' request.team.slug device.pk 'active_power' %}"
+             hx-trigger="load, every 5s">
+            <div class="animate-pulse flex space-x-4">
+                <div class="flex-1 space-y-4 py-1">
+                    <div class="h-4 bg-gray-100 rounded w-3/4"></div>
+                    <div class="h-8 bg-gray-100 rounded w-1/2"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Voltage KPI -->
+        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-100 dark:border-gray-700 p-5"
+             hx-get="{% url 'web_team:telemetry:kpi_partial' request.team.slug device.pk 'voltage' %}"
+             hx-trigger="load, every 5s">
+            <div class="animate-pulse flex space-x-4">
+                <div class="flex-1 space-y-4 py-1">
+                    <div class="h-4 bg-gray-100 rounded w-3/4"></div>
+                    <div class="h-8 bg-gray-100 rounded w-1/2"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Frequency KPI -->
+        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-100 dark:border-gray-700 p-5"
+             hx-get="{% url 'web_team:telemetry:kpi_partial' request.team.slug device.pk 'frequency' %}"
+             hx-trigger="load, every 5s">
+            <div class="animate-pulse flex space-x-4">
+                <div class="flex-1 space-y-4 py-1">
+                    <div class="h-4 bg-gray-100 rounded w-3/4"></div>
+                    <div class="h-8 bg-gray-100 rounded w-1/2"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Solar Gen KPI -->
+        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-100 dark:border-gray-700 p-5"
+             hx-get="{% url 'web_team:telemetry:kpi_partial' request.team.slug device.pk 'solar_generation' %}"
+             hx-trigger="load, every 5s">
+            <div class="animate-pulse flex space-x-4">
+                <div class="flex-1 space-y-4 py-1">
+                    <div class="h-4 bg-gray-100 rounded w-3/4"></div>
+                    <div class="h-8 bg-gray-100 rounded w-1/2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-8 lg:grid-cols-3">
+        <div class="lg:col-span-1 bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700">
+            <div class="px-6 py-5 border-b border-gray-100 dark:border-gray-700">
+                <h3 class="text-base font-medium leading-6 text-gray-900 dark:text-white">Device Attributes</h3>
+            </div>
+            <div class="px-6 py-4">
+                <dl class="grid grid-cols-1 gap-x-4 gap-y-4">
+                    <div class="sm:col-span-1">
+                        <dt class="text-xs font-semibold text-gray-500 uppercase tracking-tight">Protocol</dt>
+                        <dd class="mt-1 text-sm text-gray-900 dark:text-white font-medium">{{ device.get_protocol_display }}</dd>
+                    </div>
+                    <div class="sm:col-span-1 border-t border-gray-50 dark:border-gray-700 pt-3">
+                        <dt class="text-xs font-semibold text-gray-500 uppercase tracking-tight">Energy Category</dt>
+                        <dd class="mt-1 text-sm text-gray-900 dark:text-white font-medium">{{ device.get_energy_category_display }}</dd>
+                    </div>
+                    <div class="sm:col-span-1 border-t border-gray-50 dark:border-gray-700 pt-3">
+                        <dt class="text-xs font-semibold text-gray-500 uppercase tracking-tight">Template</dt>
+                        <dd class="mt-1 text-sm text-gray-900 dark:text-white font-medium">{{ device.template.name|default:"Manual Config" }}</dd>
+                    </div>
+                    <div class="sm:col-span-1 border-t border-gray-50 dark:border-gray-700 pt-3">
+                        <dt class="text-xs font-semibold text-gray-500 uppercase tracking-tight">Last Data Received</dt>
+                        <dd class="mt-1 text-sm text-gray-900 dark:text-white font-medium">{{ device.last_telemetry_at|default:"N/A" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <div class="lg:col-span-2 bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700">
+             <div class="px-6 py-5 border-b border-gray-100 dark:border-gray-700">
+                <h3 class="text-base font-medium leading-6 text-gray-900 dark:text-white">Connection Configuration</h3>
+            </div>
+            <div class="px-0 py-0">
+                <pre class="bg-gray-900 text-green-400 p-6 overflow-x-auto text-sm font-mono leading-relaxed">{{ device.connection_config|default:"{}" }}</pre>
+            </div>
+            <div class="bg-gray-50 dark:bg-gray-700/50 px-6 py-4 border-t border-gray-100 dark:border-gray-700">
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                    <i class="fa fa-info-circle mr-1"></i> These settings are pushed to the Gateway (SN: {{ device.gateway.serial_number }}) to perform local data polling.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

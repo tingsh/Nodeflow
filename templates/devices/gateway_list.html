@@ -1,0 +1,60 @@
+{% extends "web/app/app_base.html" %}
+{% load static %}
+{% block app %}
+<div class="px-4 sm:px-6 lg:px-8 py-8">
+    <div class="sm:flex sm:items-center">
+        <div class="sm:flex-auto">
+            <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Gateways</h1>
+            <p class="mt-2 text-sm text-gray-700 dark:text-gray-300">Edge devices connecting your hardware to the cloud.</p>
+        </div>
+        <div class="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
+            <a href="{% url 'web_team:devices:gateway_create' request.team.slug %}"
+               class="inline-flex items-center justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 sm:w-auto">
+                <i class="fa fa-plus mr-2"></i> Add Gateway
+            </a>
+        </div>
+    </div>
+
+    <div class="mt-8 overflow-hidden bg-white dark:bg-gray-800 shadow sm:rounded-md">
+        <ul role="list" class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% for gateway in gateways %}
+            <li>
+                <div class="block hover:bg-gray-50 dark:hover:bg-gray-700/50 transition duration-150 ease-in-out">
+                    <div class="px-4 py-4 sm:px-6 flex items-center justify-between">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500">
+                                <i class="fa fa-server"></i>
+                            </div>
+                            <div class="ml-4">
+                                <div class="text-sm font-medium text-primary-600 truncate">{{ gateway.name }}</div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">SN: {{ gateway.serial_number }}</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-8">
+                            <div class="hidden md:block">
+                                <div class="text-xs text-gray-500 dark:text-gray-400 capitalize">Location</div>
+                                <div class="text-sm text-gray-900 dark:text-white">{{ gateway.site.name }}</div>
+                            </div>
+                            <div class="hidden md:block">
+                                <div class="text-xs text-gray-500 dark:text-gray-400">Status</div>
+                                <div class="flex items-center">
+                                    <div class="h-2 w-2 rounded-full mr-1.5 {% if gateway.status == 'online' %}bg-green-500{% else %}bg-gray-400{% endif %}"></div>
+                                    <span class="text-sm text-gray-900 dark:text-white">{{ gateway.get_status_display }}</span>
+                                </div>
+                            </div>
+                            <div>
+                                <i class="fa fa-chevron-right text-gray-400 text-xs"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </li>
+            {% empty %}
+            <li class="px-4 py-12 text-center text-gray-500 dark:text-gray-400 italic">
+                No gateways registered. Plug in your first gateway to get started.
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

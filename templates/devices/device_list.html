@@ -1,0 +1,109 @@
+{% extends "web/app/app_base.html" %}
+{% load static %}
+{% block app %}
+<div class="px-4 sm:px-6 lg:px-8 py-8">
+    <div class="sm:flex sm:items-center">
+        <div class="sm:flex-auto">
+            <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Devices</h1>
+            <p class="mt-2 text-sm text-gray-700 dark:text-gray-300">Monitor and manage your energy generation and consumption equipment.</p>
+        </div>
+        <div class="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
+            <a href="{% url 'web_team:devices:device_create' request.team.slug %}"
+               class="inline-flex items-center justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 sm:w-auto">
+                <i class="fa fa-plus mr-2"></i> Add Device
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters placeholder -->
+    <div class="mt-8 flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-4">
+        <div class="flex space-x-4">
+            <button class="text-primary-600 font-medium text-sm">All</button>
+            <button class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-sm">Online</button>
+            <button class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-sm">Offline</button>
+            <button class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-sm">Alarm</button>
+        </div>
+    </div>
+
+    <div class="mt-4 flex flex-col">
+        <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
+            <div class="inline-block min-w-full py-2 align-middle md:px-6 lg:px-8">
+                <div class="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
+                    <table class="min-w-full divide-y divide-gray-300 dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-800">
+                            <tr>
+                                <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 dark:text-white sm:pl-6">Name</th>
+                                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-white">Type</th>
+                                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-white">Category</th>
+                                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-white">Status</th>
+                                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 dark:text-white">Last Data</th>
+                                <th scope="col" class="relative py-3.5 pl-3 pr-4 sm:pr-6 text-right">
+                                    <span class="sr-only">Actions</span>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-900">
+                            {% for device in devices %}
+                            <tr>
+                                <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm sm:pl-6">
+                                    <div class="flex items-center">
+                                        <div class="h-10 w-10 flex-shrink-0">
+                                            <div class="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                                                {% if device.device_type == 'power_meter' %}<i class="fa fa-bolt"></i>
+                                                {% elif device.device_type == 'solar_inverter' %}<i class="fa fa-sun"></i>
+                                                {% else %}<i class="fa fa-microchip"></i>{% endif %}
+                                            </div>
+                                        </div>
+                                        <div class="ml-4">
+                                            <div class="font-medium text-gray-900 dark:text-white">
+                                                <a href="{% url 'web_team:devices:device_detail' request.team.slug device.pk %}" class="hover:text-primary-600">
+                                                    {{ device.name }}
+                                                </a>
+                                            </div>
+                                            <div class="text-xs text-gray-500 dark:text-gray-400">{{ device.site.name }}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                    {{ device.get_device_type_display }}
+                                </td>
+                                <td class="whitespace-nowrap px-3 py-4 text-sm">
+                                    <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium 
+                                        {% if device.energy_category == 'generation' %}bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300
+                                        {% elif device.energy_category == 'consumption' %}bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300
+                                        {% else %}bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400{% endif %}">
+                                        {{ device.get_energy_category_display }}
+                                    </span>
+                                </td>
+                                <td class="whitespace-nowrap px-3 py-4 text-sm">
+                                    <div class="flex items-center">
+                                        <div class="h-2.5 w-2.5 rounded-full mr-2 
+                                            {% if device.status == 'online' %}bg-green-500
+                                            {% elif device.status == 'offline' %}bg-gray-400
+                                            {% else %}bg-red-500{% endif %}"></div>
+                                        <span class="text-gray-700 dark:text-gray-300">{{ device.get_status_display }}</span>
+                                    </div>
+                                </td>
+                                <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                    {{ device.last_telemetry_at|default:"--" }}
+                                </td>
+                                <td class="whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                                    <a href="{% url 'web_team:devices:device_edit' request.team.slug device.pk %}" class="text-primary-600 hover:text-primary-900 dark:hover:text-primary-400 mr-4">Edit</a>
+                                    <a href="{% url 'web_team:devices:device_detail' request.team.slug device.pk %}" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">View</a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                                    No devices tracked yet. Add your first piece of equipment.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

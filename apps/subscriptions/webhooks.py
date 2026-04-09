@@ -1,7 +1,7 @@
 import logging
 
 from django.core.mail import mail_admins
-from djstripe.event_handlers import djstripe_receiver
+from djstripe.webhooks import handler as djstripe_receiver
 from djstripe.models import Customer, Price, Subscription
 
 from apps.teams.models import Team

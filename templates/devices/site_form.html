@@ -1,0 +1,60 @@
+{% extends "web/app/app_base.html" %}
+{% load static %}
+{% block app %}
+<div class="px-4 sm:px-6 lg:px-8 py-8">
+    <div class="md:flex md:items-center md:justify-between mb-8">
+        <div class="min-w-0 flex-1">
+            <h2 class="text-2xl font-bold leading-7 text-gray-900 dark:text-white sm:truncate sm:text-3xl sm:tracking-tight">
+                {% if object %}Edit {{ object.name }}{% else %}Add New Site{% endif %}
+            </h2>
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 shadow sm:rounded-lg">
+        <div class="px-4 py-5 sm:p-6">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+                
+                <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
+                    {% for field in form %}
+                    <div class="sm:col-span-{% if field.name == 'address' or field.name == 'connection_config' %}6{% else %}3{% endif %}">
+                        <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            {{ field.label }}
+                        </label>
+                        <div class="mt-1">
+                            {% if field.field.widget.input_type == 'select' %}
+                                <select name="{{ field.name }}" id="{{ field.id_for_label }}" class="block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm">
+                                    {% for choice in field.field.choices %}
+                                        <option value="{{ choice.0 }}" {% if choice.0 == field.value %}selected{% endif %}>{{ choice.1 }}</option>
+                                    {% endfor %}
+                                </select>
+                            {% elif field.field.widget.input_type == 'textarea' or field.name == 'connection_config' %}
+                                <textarea name="{{ field.name }}" id="{{ field.id_for_label }}" rows="3" class="block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm">{{ field.value|default:"" }}</textarea>
+                            {% else %}
+                                <input type="{{ field.field.widget.input_type|default:'text' }}" name="{{ field.name }}" id="{{ field.id_for_label }}" value="{{ field.value|default:'' }}"
+                                       class="block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm">
+                            {% endif %}
+                        </div>
+                        {% if field.help_text %}
+                            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ field.help_text }}</p>
+                        {% endif %}
+                        {% if field.errors %}
+                            <p class="mt-2 text-sm text-red-600 dark:text-red-400">{{ field.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="flex justify-end space-x-3 pt-5 border-t border-gray-200 dark:border-gray-700">
+                    <a href="javascript:history.back()" class="rounded-md border border-gray-300 bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
+                        Cancel
+                    </a>
+                    <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
+                        {% if object %}Update{% else %}Create{% endif %}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
