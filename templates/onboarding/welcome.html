@@ -1,0 +1,42 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+{% block app %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+    <div class="text-center mb-16">
+        <div class="inline-flex items-center justify-center p-4 bg-indigo-100 dark:bg-indigo-900/30 rounded-2xl mb-6">
+            <i class="fa fa-rocket text-indigo-600 dark:text-indigo-400 text-4xl"></i>
+        </div>
+        <h1 class="text-4xl font-extrabold text-gray-900 dark:text-white mb-4">Welcome to Nodeflow</h1>
+        <p class="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+            Let's get your IoT fleet up and running in just a few minutes. We'll guide you through setting up your first monitoring site and device.
+        </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+        <div class="bg-white dark:bg-gray-800 p-8 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition">
+            <div class="text-indigo-600 dark:text-indigo-400 font-bold text-2xl mb-4">01.</div>
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">Create a Site</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400">Define where your equipment is located (Factory, Cold Room, Building).</p>
+        </div>
+        
+        <div class="bg-white dark:bg-gray-800 p-8 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition">
+            <div class="text-indigo-600 dark:text-indigo-400 font-bold text-2xl mb-4">02.</div>
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">Connect Gateway</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400">Add an IoT gateway to bridge your real-world hardware to the cloud.</p>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 p-8 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition">
+            <div class="text-indigo-600 dark:text-indigo-400 font-bold text-2xl mb-4">03.</div>
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">Monitor Device</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400">Pick a template and start seeing live telemetry and AI insights.</p>
+        </div>
+    </div>
+
+    <div class="text-center">
+        <a href="{% url 'web_team:onboarding:step_1_site' request.team.slug %}" class="inline-flex items-center px-8 py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transform hover:scale-105 transition shadow-lg shadow-indigo-600/30">
+            Start Setup Wizard
+            <i class="fa fa-arrow-right ml-3"></i>
+        </a>
+    </div>
+</div>
+{% endblock %}

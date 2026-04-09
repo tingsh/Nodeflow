@@ -1,0 +1,39 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+{% block app %}
+<div class="max-w-xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
+    <div class="mb-10">
+        <div class="relative inline-block">
+            <div class="absolute inset-0 bg-green-500 rounded-full blur-2xl opacity-30 animate-pulse"></div>
+            <div class="relative inline-flex items-center justify-center p-8 bg-green-100 dark:bg-green-900/30 rounded-full">
+                <i class="fa fa-sparkles text-green-600 dark:text-green-400 text-6xl"></i>
+            </div>
+        </div>
+    </div>
+    
+    <h1 class="text-4xl font-extrabold text-gray-900 dark:text-white mb-4">You're all set!</h1>
+    <p class="text-xl text-gray-600 dark:text-gray-400 mb-12">
+        Configuration complete. Your IoT data pipeline is now active and monitoring for alerts.
+    </p>
+
+    <div class="bg-indigo-600 rounded-2xl p-8 mb-12 shadow-2xl shadow-indigo-600/20 text-left relative overflow-hidden">
+        <div class="absolute -right-8 -bottom-8 opacity-10">
+            <i class="fa fa-chart-line text-[160px] text-white"></i>
+        </div>
+        <div class="relative z-10">
+            <h3 class="text-white font-bold text-lg mb-4 uppercase tracking-wider">Next Step</h3>
+            <p class="text-indigo-100 mb-6">
+                Connect your physical <strong>gateway</strong> to the internet and point it to our broker. Data will start flowing into your dashboard immediately.
+            </p>
+            <div class="bg-indigo-700/50 p-4 rounded-xl border border-indigo-400/30 text-indigo-50 font-mono text-sm break-all">
+                MQTT Broker: {{ request.get_host }}:1883
+            </div>
+        </div>
+    </div>
+
+    <a href="{% url 'web_team:home' request.team.slug %}" class="inline-flex items-center px-10 py-4 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl font-bold text-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition shadow-xl">
+        Go to Dashboard
+        <i class="fa fa-arrow-right ml-3"></i>
+    </a>
+</div>
+{% endblock %}
