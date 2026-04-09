@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, include
 from django.views.generic import TemplateView
 
 from . import views
@@ -22,6 +22,11 @@ urlpatterns = [
 team_urlpatterns = (
     [
         path("", views.team_home, name="home"),
+        # IoT apps – must live here to get the web_team namespace
+        path("devices/", include("apps.devices.urls")),
+        path("telemetry/", include("apps.telemetry.urls")),
+        path("alerts/", include("apps.alerts.urls")),
+        path("onboarding/", include("apps.onboarding.urls")),
     ],
     "web_team",
 )

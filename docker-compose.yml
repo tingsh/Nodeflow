@@ -7,7 +7,23 @@ services:
     environment:
       - POSTGRES_DB=iot_platform
       - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=shouheng
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}
+      interval: 2s
+      retries: 10
+  timescale:
+    image: timescale/timescaledb:latest-pg17
+    volumes:
+      - timescale_data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_DB=iot_telemetry
+      - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5433:5432"
     healthcheck:
       test: pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}
       interval: 2s
@@ -22,6 +38,16 @@ services:
       test: bash -c 'exec 6<>/dev/tcp/redis/6379'
       interval: 2s
       retries: 10
+  mosquitto:
+    image: eclipse-mosquitto:2
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    restart: unless-stopped
   web:
     build:
       context: .
@@ -45,6 +71,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mosquitto:
+        condition: service_started
   vite:
     build:
       context: .
@@ -79,7 +107,27 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mosquitto:
+        condition: service_started
+  mqtt_consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: python manage.py mqtt_consumer
+    volumes:
+      - .:/code
+    env_file:
+      - ./.env
+    depends_on:
+      redis:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+  timescale_data:
   redis_data:
+  mosquitto_data:
+  mosquitto_log:

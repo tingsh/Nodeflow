@@ -107,9 +107,17 @@ PROJECT_APPS = [
     "apps.utils",
     "apps.web",
     "apps.teams.apps.TeamConfig",
-    "apps.teams_example.apps.TeamsExampleConfig",
     "apps.chat",
+    "apps.devices",
+    "apps.telemetry",
+    "apps.alerts",
+    "apps.onboarding",
 ]
+
+# MQTT Settings
+MQTT_BROKER_HOST = env("MQTT_BROKER_HOST", default="localhost")
+MQTT_BROKER_PORT = env.int("MQTT_BROKER_PORT", default=1883)
+MQTT_CONSUMER_CLIENT_ID = env("MQTT_CONSUMER_CLIENT_ID", default="iot-platform-consumer")
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS + WAGTAIL_APPS
 

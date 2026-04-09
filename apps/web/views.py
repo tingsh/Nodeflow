@@ -32,6 +32,24 @@ def home(request):
 @login_and_team_required
 def team_home(request, team_slug):
     assert request.team.slug == team_slug
+    
+    from apps.devices.models import Site, Gateway, Device
+    from apps.alerts.models import Alert
+    from django.db.models import Sum
+    
+    # IoT Stats
+    sites_count = Site.objects.filter(team=request.team).count()
+    if sites_count == 0:
+        return HttpResponseRedirect(reverse("web_team:onboarding:start", args=[team_slug]))
+        
+    gateways_count = Gateway.objects.filter(team=request.team).count()
+    devices_count = Device.objects.filter(team=request.team).count()
+    
+    # Recent Alerts
+    recent_alerts = Alert.objects.filter(team=request.team, status='active').order_by('-triggered_at')[:5]
+    
+    # We could calculate total demand across all devices if needed, but for MVP stats counts are good.
+    
     return render(
         request,
         "web/app_home.html",
@@ -39,6 +57,10 @@ def team_home(request, team_slug):
             "team": request.team,
             "active_tab": "dashboard",
             "page_title": _("{team} Dashboard").format(team=request.team),
+            "sites_count": sites_count,
+            "gateways_count": gateways_count,
+            "devices_count": devices_count,
+            "recent_alerts": recent_alerts,
         },
     )
 
