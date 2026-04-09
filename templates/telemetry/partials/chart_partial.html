@@ -1,0 +1,51 @@
+<div id="chart-container-{{ chart_data.key }}" class="relative h-64 w-full">
+    <canvas id="chart-{{ chart_data.key }}"></canvas>
+</div>
+
+<script>
+(function() {
+    const ctx = document.getElementById('chart-{{ chart_data.key }}').getContext('2d');
+    const data = {{ chart_data.values|safe }};
+    const labels = {{ chart_data.labels|safe }};
+    
+    // Check if chart already exists to avoid duplication errors
+    if (window.myCharts && window.myCharts['{{ chart_data.key }}']) {
+        window.myCharts['{{ chart_data.key }}'].destroy();
+    }
+    
+    window.myCharts = window.myCharts || {};
+    window.myCharts['{{ chart_data.key }}'] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: '{{ chart_data.key|title }}',
+                data: data,
+                borderColor: '#4f46e5',
+                backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.3,
+                pointRadius: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false, // Performance: off for high-freq updates
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(0,0,0,0.05)' }
+                },
+                x: {
+                    grid: { display: false }
+                }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+})();
+</script>

@@ -3,18 +3,46 @@
   <span>{% translate "Application" %}</span>
 </li>
 <li>
-  <a href="{% url 'web:home' %}" {% if active_tab == 'dashboard' %}class="menu-active"{% endif %}>
-    <i class="fa fa-home h-4 w-4"></i>
-    {% translate "Dashboard" %}
-  </a>
-</li>
-{% include "web/components/team_nav.html" %}
-<li>
   <a href="{% url 'chat:chat_home' %}" {% if active_tab == 'ai-chat' %}class="menu-active"{% endif %}>
     <i class="fa-solid fa-robot h-4 w-4"></i>
     {% translate "AI Chat" %}
   </a>
 </li>
+{% if team %}
+<li class="menu-title">
+  <span>{% translate "IoT Monitoring" %}</span>
+</li>
+<li>
+  <a href="{% url 'web:home' %}" {% if active_tab == 'dashboard' %}class="menu-active"{% endif %}>
+    <i class="fa fa-home h-4 w-4"></i>
+    {% translate "Dashboard" %}
+  </a>
+</li>
+<li>
+  <a href="{% url 'web_team:devices:site_list' team.slug %}" {% if active_tab == 'sites' %}class="menu-active"{% endif %}>
+    <i class="fa fa-map-marker-alt h-4 w-4"></i>
+    {% translate "Sites" %}
+  </a>
+</li>
+<li>
+  <a href="{% url 'web_team:devices:device_list' team.slug %}" {% if active_tab == 'devices' %}class="menu-active"{% endif %}>
+    <i class="fa fa-microchip h-4 w-4"></i>
+    {% translate "Devices" %}
+  </a>
+</li>
+<li>
+  <a href="{% url 'web_team:devices:gateway_list' team.slug %}" {% if active_tab == 'gateways' %}class="menu-active"{% endif %}>
+    <i class="fa fa-server h-4 w-4"></i>
+    {% translate "Gateways" %}
+  </a>
+</li>
+<li>
+  <a href="{% url 'web_team:alerts:alert_list' team.slug %}" {% if active_tab == 'alerts' %}class="menu-active"{% endif %}>
+    <i class="fa fa-bell h-4 w-4"></i>
+    {% translate "Alerts" %}
+  </a>
+</li>
+{% endif %}
 {% if not user.is_anonymous %}
 <li class="menu-title">
   <span>{% translate "My Account" %}</span>
@@ -40,6 +68,7 @@
       {% translate "Sign out" %}
     </a>
   </li>
+  {% include "web/components/team_nav.html" %}
 </ul>
 {% endif %}
 {% if user.is_superuser %}

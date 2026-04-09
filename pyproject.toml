@@ -61,6 +61,7 @@ dependencies = [
     "markdown",
     "nh3>=0.2.21",
     "openai",
+    "paho-mqtt>=2.0",
     "psycopg2-binary",
     "redis",
     "requests",

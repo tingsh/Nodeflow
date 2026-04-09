@@ -1,27 +1,155 @@
 {% extends "web/app/app_base.html" %}
 {% load i18n %}
 {% load static %}
+
 {% block app %}
-<section class="app-card">
-    <div class="pg-columns pg-columns-reversed pg-align-items-center">
-        <div class="pg-column-one-third">
-            <img class="img-fluid" src="{% static 'images/web/rocket-laptop.svg' %}" alt="{% translate "Fly Away!" %}">
+<div class="px-4 sm:px-6 lg:px-8 py-8 selection:bg-indigo-500/30">
+    <div class="mb-10 flex flex-col sm:flex-row sm:items-end justify-between">
+        <div>
+            <h1 class="text-3xl font-extrabold text-base-content font-heading tracking-tight">Fleet Overview</h1>
+            <p class="text-sm text-base-content/60 mt-1 font-light">Real-time telemetry and status of your energy monitoring network.</p>
         </div>
-        <div class="pg-column">
-            <h1 class="pg-title">{% translate "You're Signed In!" %}</h1>
-            <h2 class="pg-subtitle">
-                {% translate "This is your application's logged in home page." %}
-            </h2>
-            <p>
-              {% blocktranslate trimmed with team_name=team.name %}You're logged into the "{{ team_name }}" Team.{% endblocktranslate %}
-            </p>
+        <div class="mt-4 sm:mt-0 flex items-center space-x-2">
+            <span class="flex h-2 w-2 relative">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+            </span>
+            <span class="text-xs font-medium text-green-600 dark:text-green-400 font-mono tracking-wider uppercase">System Live</span>
         </div>
     </div>
-</section>
-<section class="app-card">
-    <div class="pg-content">
-        <p>To add more to this page you can make new sections like this one.</p>
-        <p>Tip: the source of this page can be found at <code>templates/web/app_home.html</code></p>
+
+    <!-- Quick Stats Bento Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="bg-base-100 p-6 rounded-3xl border border-base-content/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)] hover:-translate-y-1 hover:shadow-xl transition-all duration-300 group">
+            <div class="flex items-start justify-between mb-4">
+                <div class="p-3 bg-indigo-50 dark:bg-indigo-500/10 rounded-2xl group-hover:scale-110 transition-transform">
+                    <i class="fa fa-home text-indigo-600 dark:text-indigo-400 text-xl"></i>
+                </div>
+            </div>
+            <div>
+                <p class="text-xs font-semibold text-base-content/50 uppercase tracking-widest mb-1">Active Sites</p>
+                <div class="flex items-baseline">
+                    <p class="text-4xl font-extrabold text-base-content font-mono">{{ sites_count }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-base-100 p-6 rounded-3xl border border-base-content/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)] hover:-translate-y-1 hover:shadow-xl transition-all duration-300 group">
+            <div class="flex items-start justify-between mb-4">
+                <div class="p-3 bg-amber-50 dark:bg-amber-500/10 rounded-2xl group-hover:scale-110 transition-transform">
+                    <i class="fa fa-server text-amber-600 dark:text-amber-400 text-xl"></i>
+                </div>
+            </div>
+            <div>
+                <p class="text-xs font-semibold text-base-content/50 uppercase tracking-widest mb-1">Gateways</p>
+                <div class="flex items-baseline">
+                    <p class="text-4xl font-extrabold text-base-content font-mono">{{ gateways_count }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-base-100 p-6 rounded-3xl border border-base-content/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)] hover:-translate-y-1 hover:shadow-xl transition-all duration-300 group relative overflow-hidden">
+            <div class="absolute -right-6 -top-6 w-32 h-32 bg-green-400/10 rounded-full blur-3xl pointer-events-none"></div>
+            <div class="flex items-start justify-between mb-4 relative z-10">
+                <div class="p-3 bg-green-50 dark:bg-green-500/10 rounded-2xl group-hover:scale-110 transition-transform">
+                    <i class="fa fa-bolt text-green-600 dark:text-green-400 text-xl"></i>
+                </div>
+            </div>
+            <div class="relative z-10">
+                <p class="text-xs font-semibold text-base-content/50 uppercase tracking-widest mb-1">Total Devices</p>
+                <div class="flex items-baseline">
+                    <p class="text-4xl font-extrabold text-base-content font-mono">{{ devices_count }}</p>
+                </div>
+            </div>
+        </div>
     </div>
-</section>
+
+    <!-- Main Content Bento Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Site Map / List (Takes 2 Columns) -->
+        <div class="lg:col-span-2 bg-base-100 rounded-3xl border border-base-content/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)] overflow-hidden flex flex-col relative">
+            <div class="px-6 py-5 border-b border-base-content/5 flex justify-between items-center bg-base-100/50 backdrop-blur-sm z-10">
+                <h3 class="text-lg font-bold text-base-content font-heading tracking-tight">Your Sites</h3>
+                <a href="{% url 'web_team:devices:site_create' request.team.slug %}" class="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-full transition-colors flex items-center">
+                    <i class="fa fa-plus mr-1.5 text-xs"></i> New Site
+                </a>
+            </div>
+            <div class="flex-1 overflow-auto bg-base-200/20">
+                <ul class="divide-y divide-base-content/5">
+                    {% for site in team.site_set.all %}
+                    <li class="group px-6 py-4 hover:bg-base-100 transition-colors cursor-pointer" onclick="window.location.href='{% url 'web_team:devices:site_detail' request.team.slug site.pk %}'">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 rounded-xl bg-base-200 border border-base-content/5 flex items-center justify-center mr-4 group-hover:bg-indigo-50 dark:group-hover:bg-indigo-500/10 transition-colors">
+                                    <i class="fa fa-map-marker-alt text-base-content/40 group-hover:text-indigo-500 transition-colors"></i>
+                                </div>
+                                <div>
+                                    <h4 class="text-sm font-bold text-base-content group-hover:text-indigo-500 transition-colors">{{ site.name }}</h4>
+                                    <p class="text-xs text-base-content/50 font-mono mt-0.5">{{ site.devices.count }} devices</p>
+                                </div>
+                            </div>
+                            <i class="fa fa-chevron-right text-base-content/20 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all"></i>
+                        </div>
+                    </li>
+                    {% empty %}
+                    <li class="px-6 py-16 text-center">
+                        <div class="w-16 h-16 mx-auto bg-base-200 rounded-full flex items-center justify-center mb-4">
+                            <i class="fa fa-map text-base-content/30 text-2xl"></i>
+                        </div>
+                        <p class="text-base-content/60 font-medium font-heading">No sites setup yet</p>
+                        <p class="text-sm text-base-content/40 mt-1">Create your first site to start monitoring.</p>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <!-- Recent Alerts (Takes 1 Column) -->
+        <div class="bg-base-100 rounded-3xl border border-base-content/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)] overflow-hidden flex flex-col">
+            <div class="px-6 py-5 border-b border-base-content/5 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-base-content font-heading tracking-tight">Fleet Alerts</h3>
+                {% if recent_alerts %}
+                <span class="bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 text-xs font-bold px-2 py-0.5 rounded-full">{{ recent_alerts|length }} New</span>
+                {% endif %}
+            </div>
+            <div class="flex-1 overflow-auto bg-base-200/20 p-2">
+                 {% if recent_alerts %}
+                 <ul class="space-y-2">
+                    {% for alert in recent_alerts %}
+                    <li class="bg-base-100 rounded-2xl p-4 border border-base-content/5 hover:border-red-500/30 transition-colors">
+                        <div class="flex items-start">
+                            <div class="flex-shrink-0 mt-1">
+                                <span class="flex h-3 w-3 relative">
+                                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                  <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500 border-2 border-base-100"></span>
+                                </span>
+                            </div>
+                            <div class="ml-3 flex-1">
+                                <p class="text-sm font-bold text-base-content">{{ alert.rule.name }}</p>
+                                <p class="text-xs text-base-content/60 mt-0.5">{{ alert.device.name }}</p>
+                                <p class="text-[10px] text-base-content/40 uppercase tracking-wider mt-2 font-mono">{{ alert.triggered_at|timesince }} ago</p>
+                            </div>
+                            <div class="ml-2 bg-red-50 dark:bg-red-500/10 px-2 py-1 rounded border border-red-100 dark:border-red-500/20">
+                                <span class="text-xs font-mono font-bold text-red-600 dark:text-red-400">{{ alert.trigger_value|floatformat:1 }}</span>
+                            </div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                 </ul>
+                 {% else %}
+                 <div class="h-full flex flex-col items-center justify-center p-8 text-center text-base-content/50">
+                     <div class="relative mb-6">
+                         <div class="absolute inset-0 bg-green-400 blur-[20px] opacity-20 rounded-full"></div>
+                         <div class="w-20 h-20 bg-green-50 dark:bg-green-500/10 rounded-full flex items-center justify-center relative z-10 border border-green-200 dark:border-green-500/30">
+                             <i class="fa fa-shield-check text-green-500 text-3xl"></i>
+                         </div>
+                     </div>
+                     <p class="font-heading font-medium text-lg text-base-content">All Clear</p>
+                     <p class="text-xs mt-1">No anomalous telemetry detected across your fleet.</p>
+                 </div>
+                 {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}

@@ -1,0 +1,17 @@
+{% load i18n %}
+<div class="flex flex-col">
+    <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 font-mono uppercase tracking-wider">{{ label }}</dt>
+    <dd class="mt-1 flex items-baseline justify-between md:block lg:flex">
+        <div class="flex items-baseline text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+            {{ value|floatformat:1 }}
+            <span class="ml-1 text-sm font-medium text-gray-500">{{ unit }}</span>
+        </div>
+        
+        {% if trend %}
+        <div class="inline-flex items-baseline rounded-full px-2.5 py-0.5 text-sm font-medium {% if trend > 0 %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %} md:mt-2 lg:mt-0">
+            {% if trend > 0 %}<i class="fa fa-arrow-up mr-1 text-xs"></i>{% else %}<i class="fa fa-arrow-down mr-1 text-xs"></i>{% endif %}
+            {{ trend|abs }}%
+        </div>
+        {% endif %}
+    </dd>
+</div>
