@@ -1,0 +1,95 @@
+<div class="p-6">
+    <div class="flex items-center justify-between mb-8">
+        <div>
+            <h3 class="text-2xl font-black text-base-content font-heading tracking-tight">
+                {% if resolve %}Rectify Conflict{% else %}Quick Add Device{% endif %}
+            </h3>
+            <p class="text-[10px] text-base-content/40 uppercase tracking-widest font-bold mt-1">Port {{ port }} • {{ gateway.name }}</p>
+        </div>
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost text-base-content/40">✕</button>
+        </form>
+    </div>
+
+    {% if resolve %}
+    <div class="mb-6 p-4 bg-red-50 dark:bg-red-500/10 rounded-2xl border border-red-500/20 flex items-start gap-4">
+        <i class="fa fa-info-circle text-red-500 mt-1"></i>
+        <p class="text-xs text-red-700 dark:text-red-400 font-medium leading-relaxed">
+            By rectifying this conflict, the previously registered device will be <strong>removed</strong> and replaced with your new configuration.
+        </p>
+    </div>
+    {% endif %}
+
+    <form hx-post="{% url 'web_team:devices:htmx_device_create' request.team.slug %}?site_id={{ site_id }}&gateway_id={{ gateway_id }}&port={{ port }}{% if resolve %}&resolve=true{% endif %}" 
+          hx-swap="none"
+          onsubmit="document.getElementById('quick-add-modal').close()"
+          class="space-y-6">
+        {% csrf_token %}
+        
+        <div class="form-control w-full">
+            <label class="label">
+                <span class="label-text font-bold text-xs uppercase tracking-widest text-base-content/50">Device Name</span>
+            </label>
+            <input type="text" name="name" value="{{ prefill.name|default:'' }}" placeholder="e.g. Main Inverter" required
+                   class="input input-bordered w-full rounded-2xl bg-base-200 border-none focus:ring-2 focus:ring-primary-500/50 transition-all font-medium">
+        </div>
+
+        <div class="form-control w-full">
+            <label class="label">
+                <span class="label-text font-bold text-xs uppercase tracking-widest text-base-content/50">Hardware Template</span>
+            </label>
+            <div class="relative group">
+                <input type="text" name="template_search" placeholder="Search library (e.g. Eastron, Schneider)..." 
+                       hx-get="{% url 'web_team:devices:template_library_search' request.team.slug %}" 
+                       hx-trigger="keyup changed delay:300ms" 
+                       hx-target="#template-results"
+                       class="input input-bordered w-full rounded-2xl bg-base-200 border-none focus:ring-2 focus:ring-primary-500/50 transition-all font-medium pr-10">
+                <i class="fa fa-search absolute right-4 top-1/2 -translate-y-1/2 text-base-content/20 group-focus-within:text-primary-500 transition-colors"></i>
+            </div>
+            
+            <div id="template-results" class="mt-4 max-h-60 overflow-y-auto rounded-2xl border border-base-content/5 bg-base-200/30 p-2 space-y-1">
+                {% if prefill.template_id %}
+                    {# Pre-fill logic could go here but let's keep it simple and just show the search #}
+                    {% include "devices/partials/template_search_results.html" %}
+                {% else %}
+                    {% include "devices/partials/template_search_results.html" %}
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="pt-6">
+            <button type="submit" id="submit-button" {% if not prefill.template_id %}disabled{% endif %}
+                    class="btn btn-primary w-full rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-primary-500/20 group">
+                {% if resolve %}Confirm & Replace{% else %}Register Device{% endif %}
+                <i class="fa fa-check-circle ml-2 text-white/50 group-hover:text-white transition-colors"></i>
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+    {% if prefill.template_id %}
+    // Handle initial pre-fill
+    setTimeout(() => {
+        selectTemplate('{{ prefill.template_id }}');
+    }, 100);
+    {% endif %}
+
+    function selectTemplate(id) {
+        document.querySelectorAll('.template-item').forEach(el => el.classList.remove('active', 'border-primary-500', 'bg-primary-500/5'));
+        const selectedEl = document.getElementById('template-' + id);
+        if (selectedEl) {
+            selectedEl.classList.add('border-primary-500', 'bg-primary-500/5');
+            let input = document.getElementById('selected-template-id');
+            if (!input) {
+                input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'template_id';
+                input.id = 'selected-template-id';
+                selectedEl.closest('form').appendChild(input);
+            }
+            input.value = id;
+            document.getElementById('submit-button').disabled = false;
+        }
+    }
+</script>

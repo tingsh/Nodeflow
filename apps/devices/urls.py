@@ -24,4 +24,11 @@ urlpatterns = [
     path("<int:pk>/", views.DeviceDetailView.as_view(), name="device_detail"),
     path("<int:pk>/edit/", views.DeviceUpdateView.as_view(), name="device_edit"),
     path("<int:pk>/delete/", views.DeviceDeleteView.as_view(), name="device_delete"),
+
+    # HTMX endpoints
+    path("htmx/device/create/", views.htmx_device_create, name="htmx_device_create"),
+    path("htmx/templates/search/", views.template_library_search, name="template_library_search"),
+
+    # API endpoints for Edge Gateway
+    path("api/discovery/", views.gateway_discovery_api, name="gateway_discovery_api"),
 ]

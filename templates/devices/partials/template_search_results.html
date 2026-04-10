@@ -1,0 +1,23 @@
+{% for template in templates %}
+<div id="template-{{ template.id }}" 
+     onclick="selectTemplate('{{ template.id }}', '{{ template.name }}')"
+     class="template-item p-4 rounded-xl border border-transparent bg-base-100/50 hover:bg-base-200 cursor-pointer transition-all flex items-center justify-between group">
+    <div class="flex items-center">
+        <div class="w-10 h-10 bg-base-200 rounded-xl flex items-center justify-center mr-4 group-hover:bg-primary-500/10 transition-colors">
+            <i class="fa {% if template.device_type == 'power_meter' %}fa-bolt{% elif template.device_type == 'temp_sensor' %}fa-thermometer-half{% else %}fa-microchip{% endif %} text-base-content/20 group-hover:text-primary-500 transition-colors"></i>
+        </div>
+        <div>
+            <h5 class="text-sm font-bold text-base-content">{{ template.name }}</h5>
+            <p class="text-[10px] text-base-content/40 uppercase tracking-widest font-mono mt-0.5">{{ template.manufacturer }} • {{ template.get_protocol_display }}</p>
+        </div>
+    </div>
+    <div class="text-primary-500 opacity-0 group-hover:opacity-100 transition-opacity">
+        <i class="fa fa-plus-circle"></i>
+    </div>
+</div>
+{% empty %}
+<div class="p-8 text-center bg-base-100/30 rounded-xl">
+    <i class="fa fa-search text-base-content/10 text-2xl mb-2"></i>
+    <p class="text-xs text-base-content/40 font-medium">No hardware templates found</p>
+</div>
+{% endfor %}

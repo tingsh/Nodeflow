@@ -1,0 +1,115 @@
+{% load utils_tags %}
+<div id="gateway-section-{{ gateway.id }}" class="bg-base-100 rounded-[2.5rem] border border-base-content/5 shadow-[0_20px_50px_rgba(0,0,0,0.05)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.3)] overflow-hidden">
+    <!-- Header -->
+    <div class="px-8 py-6 bg-base-200/30 border-b border-base-content/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="flex items-center">
+            <div class="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center mr-5 shadow-lg shadow-primary-600/20">
+                <i class="fa fa-server text-white text-xl"></i>
+            </div>
+            <div>
+                <div class="flex items-center gap-3">
+                    <h4 class="text-xl font-black text-base-content font-heading tracking-tight">{{ gateway.name }}</h4>
+                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest {% if gateway.status == 'online' %}bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400{% else %}bg-base-200 text-base-content/40{% endif %}">
+                        {{ gateway.get_status_display }}
+                    </span>
+                </div>
+                <p class="text-xs text-base-content/40 font-mono mt-1">S/N: {{ gateway.serial_number }}</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <button hx-get="{% url 'web_team:devices:htmx_device_create' request.team.slug %}?site_id={{ gateway.site.id }}&gateway_id={{ gateway.id }}" 
+                    hx-target="#modal-content" 
+                    onclick="document.getElementById('quick-add-modal').showModal()"
+                    class="inline-flex items-center px-4 py-2 bg-base-100 border border-base-content/5 rounded-xl text-xs font-bold text-base-content hover:bg-base-200 transition-all">
+                <i class="fa fa-plus-circle mr-2 text-primary-500"></i>Add Device
+            </button>
+        </div>
+    </div>
+    
+    <!-- Discovery Status Bar -->
+    {% if gateway.discovery_data.devices %}
+    <div class="px-8 py-4 bg-primary-600/5 border-b border-base-content/5">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-2 h-2 rounded-full bg-primary-500 animate-pulse"></div>
+                <p class="text-xs font-bold text-primary-600 uppercase tracking-widest">Hardware Detection Active</p>
+                <span class="text-[10px] text-base-content/40 font-mono">Synced: {{ gateway.discovery_data.last_discovered_at|truncatechars:20 }}</span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Port Grid -->
+    <div class="p-8">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {% for port_num in gateway.port_range %}
+                {% with port_info=gateway.computed_port_map|get_item:port_num %}
+                
+                <div class="relative group h-40">
+                    <div class="absolute -top-2 -left-2 z-20 w-6 h-6 rounded-lg bg-base-300 border border-base-content/10 flex items-center justify-center text-[10px] font-bold text-base-content/40 shadow-sm">
+                        {{ port_num }}
+                    </div>
+
+                    {% if port_info.status == 'registered' %}
+                        {# REGISTERED STATE #}
+                        <a href="{% url 'web_team:devices:device_detail' request.team.slug port_info.device.pk %}" class="h-full bg-base-100 p-5 rounded-3xl border border-base-content/5 hover:border-primary-500/30 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
+                            <div class="flex items-center justify-between">
+                                <span class="h-2 w-2 rounded-full {% if port_info.device.status == 'online' %}bg-green-500{% else %}bg-base-300{% endif %}"></span>
+                                <i class="fa fa-arrow-right text-[10px] text-base-content/10 group-hover:text-primary-500 transition-colors"></i>
+                            </div>
+                            <div class="mt-2">
+                                <h5 class="text-sm font-bold text-base-content leading-tight group-hover:text-primary-600 transition-colors">{{ port_info.device.name }}</h5>
+                                <p class="text-[9px] text-base-content/40 uppercase tracking-widest font-mono mt-0.5">{{ port_info.device.get_device_type_display }}</p>
+                            </div>
+                        </a>
+
+                    {% elif port_info.status == 'conflict' %}
+                        {# CONFLICT STATE #}
+                        <div class="h-full bg-red-50 dark:bg-red-500/5 p-5 rounded-3xl border-2 border-red-500/20 flex flex-col justify-between group-hover:shadow-[0_0_20px_rgba(239,68,68,0.1)] transition-all">
+                            <i class="fa fa-exclamation-triangle text-red-500 text-lg"></i>
+                            <div>
+                                <h5 class="text-sm font-black text-red-600 dark:text-red-400">Conflict Detected</h5>
+                                <p class="text-[9px] text-red-600/60 uppercase font-mono mt-0.5">Reported: {{ port_info.discovered.signature }}</p>
+                                <button hx-get="{% url 'web_team:devices:htmx_device_create' request.team.slug %}?site_id={{ gateway.site.id }}&gateway_id={{ gateway.id }}&port={{ port_num }}&resolve=true" 
+                                        hx-target="#modal-content"
+                                        onclick="document.getElementById('quick-add-modal').showModal()"
+                                        class="mt-3 w-full py-1.5 bg-red-600 text-white text-[10px] uppercase font-black tracking-widest rounded-lg hover:bg-red-700 transition-colors">
+                                    Rectify
+                                </button>
+                            </div>
+                        </div>
+
+                    {% elif port_info.status == 'discovered' %}
+                        {# DISCOVERED STATE #}
+                        <div class="h-full bg-primary-500 p-5 rounded-3xl border-none flex flex-col justify-between shadow-lg shadow-primary-500/20 group-hover:scale-[1.02] transition-all">
+                            <div class="p-2 bg-white/20 rounded-xl w-fit">
+                                <i class="fa fa-search text-white text-sm"></i>
+                            </div>
+                            <div>
+                                <h5 class="text-sm font-black text-white leading-tight">Found: {{ port_info.discovered.signature|truncatechars:12 }}</h5>
+                                <button hx-get="{% url 'web_team:devices:htmx_device_create' request.team.slug %}?site_id={{ gateway.site.id }}&gateway_id={{ gateway.id }}&port={{ port_num }}&provision=true" 
+                                        hx-target="#modal-content"
+                                        onclick="document.getElementById('quick-add-modal').showModal()"
+                                        class="mt-3 w-full py-1.5 bg-white text-primary-600 text-[10px] uppercase font-black tracking-widest rounded-lg hover:bg-base-100 transition-colors">
+                                    Provision
+                                </button>
+                            </div>
+                        </div>
+
+                    {% else %}
+                        {# EMPTY STATE #}
+                        <div hx-get="{% url 'web_team:devices:htmx_device_create' request.team.slug %}?site_id={{ gateway.site.id }}&gateway_id={{ gateway.id }}&port={{ port_num }}" 
+                             hx-target="#modal-content" 
+                             onclick="document.getElementById('quick-add-modal').showModal()"
+                             class="h-full bg-base-200/30 border-2 border-dashed border-base-content/5 p-5 rounded-3xl flex flex-col items-center justify-center opacity-40 hover:opacity-100 hover:bg-base-200 transition-all cursor-pointer group">
+                            <i class="fa fa-plus text-base-content/20 group-hover:text-primary-500 mb-2"></i>
+                            <span class="text-[9px] font-black uppercase tracking-widest text-base-content/20 group-hover:text-base-content/60">Available</span>
+                        </div>
+                    {% endif %}
+                </div>
+                
+                {% endwith %}
+            {% endfor %}
+        </div>
+    </div>
+</div>

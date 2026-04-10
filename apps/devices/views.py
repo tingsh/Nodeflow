@@ -1,7 +1,10 @@
 from django.urls import reverse_lazy
+from django.utils import timezone
+from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.teams.decorators import login_and_team_required
 from .models import Site, Gateway, Device, DeviceTemplate
 
 class SiteListView(LoginAndTeamRequiredMixin, ListView):
@@ -26,6 +29,35 @@ class SiteDetailView(LoginAndTeamRequiredMixin, DetailView):
         from apps.alerts.models import Alert
         
         context["stats"] = get_site_summary_stats(self.object)
+        
+        # Process discovery and conflicts for UI
+        for gateway in self.object.gateways.all():
+            gateway.port_range = range(1, gateway.capacity + 1)
+            port_map = {}
+            # 1. Map registered devices
+            for device in gateway.devices.all():
+                if device.port:
+                    port_map[device.port] = {"status": "registered", "device": device}
+            
+            # 2. Layer discovery data
+            discovery_list = gateway.discovery_data.get('devices', [])
+            for disc in discovery_list:
+                port = disc.get('port')
+                if not port: continue
+                
+                if port in port_map:
+                    # Check for conflict
+                    reg_device = port_map[port]["device"]
+                    # Simplified signature check
+                    if disc.get('signature') not in reg_device.name and disc.get('signature') not in reg_device.device_type:
+                        port_map[port]["status"] = "conflict"
+                        port_map[port]["discovered"] = disc
+                else:
+                    # New device discovered
+                    port_map[port] = {"status": "discovered", "discovered": disc}
+            
+            # Attach to the gateway object for use in templates
+            gateway.computed_port_map = port_map
         
         # Aggregate insights for all devices in the site
         site_insights = []
@@ -172,3 +204,120 @@ class DeviceDeleteView(LoginAndTeamRequiredMixin, DeleteView):
 
     def get_success_url(self):
         return reverse_lazy("web_team:devices:device_list", args=[self.request.team.slug])
+
+# HTMX Views
+
+from apps.teams.decorators import login_and_team_required
+from django.http import HttpResponse
+
+@login_and_team_required
+def htmx_device_create(request, team_slug):
+    gateway_id = request.GET.get('gateway_id')
+    site_id = request.GET.get('site_id')
+    port = request.GET.get('port')
+    provision = request.GET.get('provision')
+    resolve = request.GET.get('resolve')
+    
+    prefill_data = {}
+    if provision == 'true' or resolve == 'true':
+        gateway = Gateway.objects.get(id=gateway_id)
+        # Find discovery info for this port
+        disc_devices = gateway.discovery_data.get('devices', [])
+        for d in disc_devices:
+            if str(d.get('port')) == str(port):
+                prefill_data['name'] = d.get('signature', 'New Device')
+                # Try to find a matching template
+                sig = d.get('signature', '').lower()
+                tpl = DeviceTemplate.objects.filter(name__icontains=sig).first()
+                if tpl:
+                    prefill_data['template_id'] = tpl.id
+                break
+
+    if request.method == "POST":
+        name = request.POST.get('name')
+        template_id = request.POST.get('template_id')
+        
+        template = DeviceTemplate.objects.get(id=template_id)
+        
+        # If resolving, delete the old device on this port first
+        if resolve == 'true':
+            Device.objects.filter(gateway_id=gateway_id, port=port).delete()
+
+        device = Device.objects.create(
+            team=request.team,
+            site_id=site_id,
+            gateway_id=gateway_id,
+            port=port,
+            name=name,
+            template=template,
+            device_type=template.device_type,
+            protocol=template.protocol,
+            connection_config=template.register_map,
+        )
+        
+        # Return the updated gateway section (Re-calculate the port map first)
+        gateway = Gateway.objects.get(id=gateway_id)
+        # We need to re-run the logic from SiteDetailView or extract it.
+        # For simplicity in this fragment render, we'll just re-map the specific gateway.
+        # (This logic is already in SiteDetailView, so a full page refresh via HX-Trigger might be cleaner, 
+        # but let's try to return the fragment).
+        
+        # ... Re-map logic here or just rely on the next SiteDetailView call ...
+        # Actually, let's use HX-Trigger to refresh the whole section or return the partial with mapped data.
+        return HttpResponse(status=204, headers={"HX-Trigger": "infrastructureChanged"})
+
+    templates = DeviceTemplate.objects.all()[:10]
+    context = {
+        "templates": templates,
+        "gateway_id": gateway_id,
+        "site_id": site_id,
+        "port": port,
+        "prefill": prefill_data,
+        "resolve": resolve
+    }
+    return render(request, "devices/partials/device_quick_add_form.html", context)
+
+@login_and_team_required
+def template_library_search(request, team_slug):
+    query = request.GET.get('q', '')
+    templates = DeviceTemplate.objects.filter(name__icontains=query) | DeviceTemplate.objects.filter(manufacturer__icontains=query)
+    return render(request, "devices/partials/template_search_results.html", {"templates": templates[:10]})
+
+from django.views.decorators.csrf import csrf_exempt
+import json
+
+@csrf_exempt
+def gateway_discovery_api(request):
+    """
+    API for the Edge Gateway to report discovered devices.
+    Expected payload: 
+    {
+        "serial_number": "NF-xxx",
+        "discovered_devices": [
+            {"port": 1, "protocol": "modbus", "slave_id": 5, "signature": "Eastron-SDM630"},
+            ...
+        ]
+    }
+    """
+    if request.method != "POST":
+        return HttpResponse("Method not allowed", status=405)
+
+    try:
+        data = json.loads(request.body)
+        serial = data.get('serial_number')
+        discovered = data.get('discovered_devices', [])
+        
+        gateway = Gateway.objects.get(serial_number=serial)
+        
+        # Store for the UI to display
+        gateway.discovery_data = {
+            "last_discovered_at": str(timezone.now()),
+            "devices": discovered
+        }
+        gateway.save()
+        
+        return HttpResponse(json.dumps({"status": "ok", "message": "Discovery report received"}), content_type="application/json")
+    except Gateway.DoesNotExist:
+        return HttpResponse("Gateway not found", status=404)
+    except Exception as e:
+        return HttpResponse(str(e), status=400)
