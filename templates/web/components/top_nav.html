@@ -38,6 +38,41 @@
   </div>
   <div class="navbar-end">
     {% if user.is_authenticated %}
+    <div class="tooltip tooltip-bottom" data-tip="{% translate 'AI Assistant' %}">
+      <a href="{% url 'chat:chat_home' %}" class="btn btn-ghost btn-sm btn-circle text-indigo-500 hover:text-indigo-600 transition-colors">
+        <i class="fa-solid fa-robot text-lg"></i>
+      </a>
+    </div>
+    {% include "web/components/notifications_dropdown.html" %}
+    <details class="dropdown dropdown-end mx-1">
+      <summary class="btn btn-ghost btn-sm btn-circle list-none cursor-pointer">
+        <i class="fa fa-user-circle text-lg text-base-content/70"></i>
+      </summary>
+      <ul class="menu dropdown-content bg-base-100 rounded-box z-50 w-52 p-2 shadow-lg border border-base-content/5 mt-4">
+        <li>
+          <a href="{% url 'users:user_profile' %}">
+            <i class="fa fa-user h-4 w-4"></i>
+            {% translate "Profile" %}
+          </a>
+        </li>
+        {% if user.has_usable_password %}
+        <li>
+          <a href="{% url 'account_change_password' %}">
+            <i class="fa fa-unlock-alt h-4 w-4"></i>
+            {% translate "Change Password" %}
+          </a>
+        </li>
+        {% endif %}
+        {% include "web/components/team_nav.html" %}
+        <div class="my-1 border-t border-base-content/10"></div>
+        <li>
+          <a href="{% url 'account_logout' %}" class="text-error/80 hover:text-error hover:bg-error/10 transition-colors">
+            <i class="fa fa-sign-out h-4 w-4"></i>
+            {% translate "Sign out" %}
+          </a>
+        </li>
+      </ul>
+    </details>
     {% else %}
     <a href="{% url 'account_signup' %}" class="btn btn-primary">
       {% translate "Sign Up" %}

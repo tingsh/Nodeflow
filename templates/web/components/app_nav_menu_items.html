@@ -1,16 +1,13 @@
 {% load i18n %}
-<li class="menu-title">
-  <span>{% translate "Application" %}</span>
-</li>
-<li>
-  <a href="{% url 'chat:chat_home' %}" {% if active_tab == 'ai-chat' %}class="menu-active"{% endif %}>
-    <i class="fa-solid fa-robot h-4 w-4"></i>
-    {% translate "AI Chat" %}
-  </a>
-</li>
 {% if team %}
 <li class="menu-title">
   <span>{% translate "IoT Monitoring" %}</span>
+</li>
+<li class="mb-4 px-2">
+  <a href="{% url 'web_team:onboarding:setup_start' team.slug %}" class="btn btn-primary btn-sm flex items-center justify-center gap-2 rounded-xl border-none shadow-lg shadow-primary-500/20 hover:scale-105 active:scale-95 transition-all">
+    <i class="fa fa-plus-circle"></i>
+    {% translate "Setup" %}
+  </a>
 </li>
 <li>
   <a href="{% url 'web:home' %}" {% if active_tab == 'dashboard' %}class="menu-active"{% endif %}>
@@ -42,35 +39,9 @@
     {% translate "Alerts" %}
   </a>
 </li>
+
 {% endif %}
-{% if not user.is_anonymous %}
-<li class="menu-title">
-  <span>{% translate "My Account" %}</span>
-</li>
-<ul class="menu-list">
-  <li>
-    <a href="{% url 'users:user_profile' %}" {% if active_tab == 'profile' %}class="menu-active"{% endif %}>
-      <i class="fa fa-user h-4 w-4"></i>
-      {% translate "Profile" %}
-    </a>
-  </li>
-  {% if user.has_usable_password %}
-  <li>
-    <a href="{% url 'account_change_password' %}" {% if 'accounts/password/change' in request.path %}class="menu-active"{% endif %}>
-      <i class="fa fa-unlock-alt h-4 w-4"></i>
-      {% translate "Change Password" %}
-    </a>
-  </li>
-  {% endif %}
-  <li>
-    <a href="{% url 'account_logout' %}" {% if 'accounts/logout' in request.path %}class="menu-active"{% endif %}>
-      <i class="fa fa-sign-out h-4 w-4"></i>
-      {% translate "Sign out" %}
-    </a>
-  </li>
-  {% include "web/components/team_nav.html" %}
-</ul>
-{% endif %}
+
 {% if user.is_superuser %}
 <li class="menu-title">
   <span>{% translate "Admin" %}</span>

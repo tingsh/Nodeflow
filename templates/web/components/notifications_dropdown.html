@@ -1,0 +1,78 @@
+{% load i18n %}
+{% load notification_tags %}
+{% get_unread_notifications team as notifications %}
+
+<details class="dropdown dropdown-end mx-1">
+    <summary class="btn btn-ghost btn-sm btn-circle relative list-none cursor-pointer">
+        <i class="fa-solid fa-bell text-lg text-base-content/70"></i>
+        {% if notifications.unread_count > 0 %}
+            <span class="absolute top-1 right-1 flex h-3 w-3">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-error opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-3 w-3 bg-error border-2 border-base-100"></span>
+            </span>
+        {% endif %}
+    </summary>
+    <div class="dropdown-content bg-base-100 rounded-box z-50 w-80 p-0 shadow-2xl border border-base-content/5 mt-4 overflow-hidden">
+        <div class="px-4 py-3 bg-base-200/50 border-b border-base-content/5 flex justify-between items-center">
+            <h3 class="text-xs font-black uppercase tracking-widest text-base-content/60">Notifications</h3>
+            {% if notifications.unread_count > 0 %}
+                <span class="badge badge-error badge-sm text-[10px] font-bold">{{ notifications.unread_count }}</span>
+            {% endif %}
+        </div>
+        
+        <div class="max-h-96 overflow-y-auto">
+            {% if notifications.unread_count == 0 %}
+                <div class="py-12 text-center">
+                    <div class="p-3 bg-base-200 rounded-full w-fit mx-auto mb-3">
+                        <i class="fa fa-check text-base-content/20"></i>
+                    </div>
+                    <p class="text-xs text-base-content/40 font-medium tracking-tight">You're all caught up!</p>
+                </div>
+            {% else %}
+                <ul class="divide-y divide-base-content/5">
+                    {# Hardware Discoveries #}
+                    {% for gateway in notifications.discoveries %}
+                    <li class="hover:bg-base-200/50 transition-colors">
+                        <a href="{% url 'web_team:devices:site_detail' request.team.slug gateway.site.id %}" class="flex p-4">
+                            <div class="flex-shrink-0 mt-1">
+                                <div class="bg-primary/10 p-2 rounded-xl">
+                                    <i class="fa fa-search text-primary text-xs"></i>
+                                </div>
+                            </div>
+                            <div class="ml-3 flex-1 overflow-hidden">
+                                <p class="text-sm font-bold text-base-content leading-tight">Hardware Found</p>
+                                <p class="text-[10px] text-base-content/50 mt-1 truncate">Gateway {{ gateway.serial_number }} detected new hardware.</p>
+                                <p class="text-[9px] text-primary font-black uppercase tracking-tighter mt-2">Provision Now →</p>
+                            </div>
+                        </a>
+                    </li>
+                    {% endfor %}
+
+                    {# Active Alerts #}
+                    {% for alert in notifications.alerts %}
+                    <li class="hover:bg-base-200/50 transition-colors">
+                        <a href="{% url 'web_team:alerts:alert_list' request.team.slug %}" class="flex p-4">
+                            <div class="flex-shrink-0 mt-1">
+                                <div class="bg-error/10 p-2 rounded-xl">
+                                    <i class="fa fa-exclamation-triangle text-error text-xs"></i>
+                                </div>
+                            </div>
+                            <div class="ml-3 flex-1 overflow-hidden">
+                                <p class="text-sm font-bold text-base-content leading-tight">{{ alert.rule.name }}</p>
+                                <p class="text-[10px] text-base-content/50 mt-1">{{ alert.device.name }}: {{ alert.trigger_value|floatformat:1 }}</p>
+                                <p class="text-[9px] text-base-content/30 uppercase font-mono mt-2">{{ alert.triggered_at|timesince }} ago</p>
+                            </div>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+        
+        <div class="p-2 border-t border-base-content/5">
+            <a href="{% url 'web_team:alerts:alert_list' request.team.slug %}" class="btn btn-ghost btn-xs w-full text-[10px] font-black uppercase tracking-widest text-base-content/40 hover:text-primary transition-colors">
+                View All Alerts
+            </a>
+        </div>
+    </div>
+</details>
