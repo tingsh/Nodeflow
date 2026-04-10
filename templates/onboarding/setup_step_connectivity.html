@@ -1,0 +1,55 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+{% block app %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    {% include "onboarding/partials/progress_bar.html" with current=2 %}
+
+    <div class="mt-12 text-center mb-10">
+        <h2 class="text-3xl font-extrabold text-base-content font-heading tracking-tight">Step 2: Connectivity</h2>
+        <p class="text-base-content/60 mt-2">How will your devices connect to the platform?</p>
+    </div>
+
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <label class="relative block rounded-3xl border border-base-content/10 bg-base-100 p-8 shadow-sm cursor-pointer hover:border-primary-500/50 hover:bg-base-200/50 transition-all group has-[:checked]:border-primary-500 has-[:checked]:ring-2 has-[:checked]:ring-primary-500/20">
+                <input type="radio" name="connectivity" value="gateway" class="hidden peer" checked>
+                <div class="w-14 h-14 bg-indigo-50 dark:bg-indigo-500/10 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-primary-500 group-hover:text-white transition-colors">
+                    <i class="fa fa-server text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-bold text-base-content font-heading mb-2">Nodeflow Gateway</h3>
+                <p class="text-sm text-base-content/50 leading-relaxed">
+                    Recommended for Modbus, OPC-UA, or legacy equipment. Use our forked IoT gateway hardware.
+                </p>
+                <div class="absolute top-4 right-4 text-primary-500 opacity-0 peer-checked:opacity-100 transition-opacity">
+                    <i class="fa fa-check-circle text-2xl"></i>
+                </div>
+            </label>
+
+            <label class="relative block rounded-3xl border border-base-content/10 bg-base-100 p-8 shadow-sm cursor-pointer hover:border-primary-500/50 hover:bg-base-200/50 transition-all group has-[:checked]:border-primary-500 has-[:checked]:ring-2 has-[:checked]:ring-primary-500/20">
+                <input type="radio" name="connectivity" value="direct" class="hidden peer">
+                <div class="w-14 h-14 bg-green-50 dark:bg-green-500/10 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-primary-500 group-hover:text-white transition-colors">
+                    <i class="fa fa-wifi text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-bold text-base-content font-heading mb-2">Direct / Native MQTT</h3>
+                <p class="text-sm text-base-content/50 leading-relaxed">
+                    For modern devices that can send data directly to our cloud via MQTT or through your own bridge.
+                </p>
+                <div class="absolute top-4 right-4 text-primary-500 opacity-0 peer-checked:opacity-100 transition-opacity">
+                    <i class="fa fa-check-circle text-2xl"></i>
+                </div>
+            </label>
+        </div>
+
+        <div class="flex items-center justify-between pt-10">
+            <a href="{% url 'web_team:onboarding:step_site' request.team.slug %}" class="text-sm font-medium text-base-content/60 hover:text-base-content">
+                <i class="fa fa-arrow-left mr-2"></i> Back
+            </a>
+            <button type="submit" class="inline-flex items-center px-8 py-3 bg-primary-600 text-white rounded-xl font-bold hover:bg-primary-700 transition shadow-lg shadow-primary-600/30">
+                Next Step
+                <i class="fa fa-chevron-right ml-3 text-xs"></i>
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

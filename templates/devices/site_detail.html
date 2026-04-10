@@ -1,191 +1,195 @@
 {% extends "web/app/app_base.html" %}
 {% load static %}
 {% block app %}
-<div class="px-4 sm:px-6 lg:px-8 py-8">
+<div class="px-4 sm:px-6 lg:px-8 py-8 selection:bg-primary-500/30">
     <nav class="flex mb-8" aria-label="Breadcrumb">
         <ol role="list" class="flex items-center space-x-4">
             <li>
-                <div>
-                    <a href="{% url 'web_team:devices:site_list' request.team.slug %}" class="text-gray-400 hover:text-gray-500">
-                        <i class="fa fa-home"></i>
-                        <span class="sr-only">Home</span>
-                    </a>
+                <a href="{% url 'web:home' %}" class="text-base-content/40 hover:text-primary-500 transition-colors">
+                    <i class="fa fa-home"></i>
+                </a>
+            </li>
+            <li>
+                <div class="flex items-center">
+                    <i class="fa fa-chevron-right text-base-content/20 text-[10px] mr-4"></i>
+                    <a href="{% url 'web_team:devices:site_list' request.team.slug %}" class="text-sm font-medium text-base-content/60 hover:text-base-content transition-colors">Sites</a>
                 </div>
             </li>
             <li>
                 <div class="flex items-center">
-                    <i class="fa fa-chevron-right text-gray-400 text-xs mr-4"></i>
-                    <a href="{% url 'web_team:devices:site_list' request.team.slug %}" class="text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">Sites</a>
-                </div>
-            </li>
-            <li>
-                <div class="flex items-center">
-                    <i class="fa fa-chevron-right text-gray-400 text-xs mr-4"></i>
-                    <span class="text-sm font-medium text-gray-900 dark:text-white" aria-current="page">{{ site.name }}</span>
+                    <i class="fa fa-chevron-right text-base-content/20 text-[10px] mr-4"></i>
+                    <span class="text-sm font-bold text-base-content" aria-current="page">{{ site.name }}</span>
                 </div>
             </li>
         </ol>
     </nav>
 
-    <div class="md:flex md:items-center md:justify-between mb-8">
+    <div class="md:flex md:items-end md:justify-between mb-10">
         <div class="min-w-0 flex-1">
-            <h2 class="text-2xl font-bold leading-7 text-gray-900 dark:text-white sm:truncate sm:text-3xl sm:tracking-tight">{{ site.name }}</h2>
-            <div class="mt-1 flex flex-col sm:mt-0 sm:flex-row sm:flex-wrap sm:space-x-6 text-sm text-gray-500 dark:text-gray-400">
-                <div class="mt-2 flex items-center"><i class="fa fa-map-marker-alt mr-1.5 flex-shrink-0"></i>{{ site.address|default:"No address" }}</div>
-                <div class="mt-2 flex items-center"><i class="fa fa-clock mr-1.5 flex-shrink-0 text-gray-400"></i>{{ site.timezone }}</div>
+            <h2 class="text-4xl font-extrabold leading-tight text-base-content font-heading tracking-tight sm:truncate">{{ site.name }}</h2>
+            <div class="mt-2 flex flex-col sm:mt-0 sm:flex-row sm:flex-wrap sm:space-x-6 text-sm text-base-content/50 font-light">
+                <div class="mt-2 flex items-center"><i class="fa fa-map-marker-alt mr-2 text-primary-500/70"></i>{{ site.address|default:"No address specified" }}</div>
+                <div class="mt-2 flex items-center"><i class="fa fa-clock mr-2 text-primary-500/70"></i>{{ site.timezone }}</div>
             </div>
         </div>
-        <div class="mt-5 flex lg:ml-4 lg:mt-0 space-x-3">
-            <a href="{% url 'web_team:devices:site_edit' request.team.slug site.pk %}" class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-2 text-sm font-semibold text-gray-900 dark:text-white shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600">
-                <i class="fa fa-edit mr-1.5 flex-shrink-0 text-gray-400"></i>Edit
+        <div class="mt-6 flex lg:ml-4 lg:mt-0 space-x-3">
+            <a href="{% url 'web_team:devices:site_edit' request.team.slug site.pk %}" class="inline-flex items-center rounded-2xl bg-base-100 px-5 py-2.5 text-sm font-bold text-base-content shadow-sm ring-1 ring-inset ring-base-content/10 hover:bg-base-200 transition-all">
+                <i class="fa fa-edit mr-2 text-base-content/40"></i>Edit Site
             </a>
-            <a href="{% url 'web_team:devices:device_create' request.team.slug %}?site={{ site.pk }}" class="inline-flex items-center rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">
-                <i class="fa fa-plus mr-1.5 flex-shrink-0 text-white/50"></i>Add Device
+            <a href="{% url 'web_team:onboarding:setup_start' request.team.slug %}?site_id={{ site.id }}" class="inline-flex items-center rounded-2xl bg-primary-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary-600/30 hover:bg-primary-700 hover:scale-105 active:scale-95 transition-all">
+                <i class="fa fa-plus-circle mr-2 text-white/70"></i>Add Infrastructure
             </a>
         </div>
     </div>
 
     <!-- Site Overview KPIs -->
-    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-100 dark:border-gray-700">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0 bg-blue-100 dark:bg-blue-900/30 rounded-md p-3">
-                        <i class="fa fa-bolt text-blue-600 dark:text-blue-400"></i>
-                    </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">Current Demand</dt>
-                            <dd class="flex items-baseline">
-                                <div class="text-2xl font-semibold text-gray-900 dark:text-white">{{ stats.current_power|floatformat:1 }} <span class="text-sm font-normal text-gray-500">W</span></div>
-                            </dd>
-                        </dl>
-                    </div>
+    <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-12" id="site-kpis">
+        <div class="bg-base-100 p-6 rounded-3xl border border-base-content/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)]">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-blue-50 dark:bg-blue-500/10 rounded-2xl p-4">
+                    <i class="fa fa-bolt text-blue-600 dark:text-blue-400 text-xl"></i>
+                </div>
+                <div class="ml-5">
+                    <dt class="text-xs font-bold text-base-content/40 uppercase tracking-widest mb-1">Current Demand</dt>
+                    <dd class="text-2xl font-black text-base-content font-mono">{{ stats.current_power|floatformat:1 }} <span class="text-sm font-normal text-base-content/50">W</span></dd>
                 </div>
             </div>
         </div>
 
-        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-100 dark:border-gray-700">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0 bg-green-100 dark:bg-green-900/30 rounded-md p-3">
-                        <i class="fa fa-plug text-green-600 dark:text-green-400"></i>
-                    </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">Today's Consumption</dt>
-                            <dd class="flex items-baseline">
-                                <div class="text-2xl font-semibold text-gray-900 dark:text-white">{{ stats.daily_kwh|floatformat:2 }} <span class="text-sm font-normal text-gray-500">kWh</span></div>
-                            </dd>
-                        </dl>
-                    </div>
+        <div class="bg-base-100 p-6 rounded-3xl border border-base-content/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)]">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-green-50 dark:bg-green-500/10 rounded-2xl p-4">
+                    <i class="fa fa-plug text-green-600 dark:text-green-400 text-xl"></i>
+                </div>
+                <div class="ml-5">
+                    <dt class="text-xs font-bold text-base-content/40 uppercase tracking-widest mb-1">Consumption Today</dt>
+                    <dd class="text-2xl font-black text-base-content font-mono">{{ stats.daily_kwh|floatformat:2 }} <span class="text-sm font-normal text-base-content/50">kWh</span></dd>
                 </div>
             </div>
         </div>
     </div>
 
-    {% if ai_insights %}
-    <div class="mb-8 p-4 bg-indigo-50 dark:bg-indigo-900/10 rounded-xl border border-indigo-100 dark:border-indigo-900/30">
-        <div class="flex items-center mb-3">
-            <i class="fa fa-sparkles text-indigo-600 dark:text-indigo-400 mr-2"></i>
-            <h3 class="text-xs font-bold uppercase tracking-wider text-indigo-800 dark:text-indigo-300">Site AI Diagnostics</h3>
+    {% if ai_insights or recent_alerts %}
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+        {% if ai_insights %}
+        <div class="lg:col-span-2">
+            <div class="bg-indigo-600 rounded-3xl p-6 text-white shadow-xl shadow-indigo-600/20 relative overflow-hidden group">
+                <div class="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl pointer-events-none group-hover:bg-white/20 transition-colors"></div>
+                <div class="flex items-center mb-6 relative z-10">
+                    <div class="p-2 bg-white/20 rounded-xl mr-3">
+                        <i class="fa fa-sparkles text-lg text-white"></i>
+                    </div>
+                    <h3 class="text-xs font-black uppercase tracking-[0.2em] text-white/80">Site Intelligence</h3>
+                </div>
+                <div class="grid grid-cols-1 gap-4 relative z-10">
+                    {% for insight in ai_insights %}
+                    <div class="bg-white/10 backdrop-blur-md p-4 rounded-2xl flex items-center border border-white/10 hover:bg-white/20 transition-colors">
+                        <i class="fa {% if insight.type == 'anomaly' %}fa-exclamation-circle text-amber-300{% else %}fa-info-circle text-blue-200{% endif %} mr-4 text-xl"></i>
+                        <span class="text-sm font-medium">{{ insight.message }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {% for insight in ai_insights %}
-            <div class="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm flex items-center">
-                <i class="fa {% if insight.type == 'anomaly' %}fa-exclamation-circle text-amber-500{% else %}fa-info-circle text-blue-500{% endif %} mr-3"></i>
-                <span class="text-xs text-gray-700 dark:text-gray-300 font-medium">{{ insight.message }}</span>
+        {% endif %}
+
+        {% if recent_alerts %}
+        <div>
+            <div class="bg-base-100 rounded-3xl border border-red-500/20 shadow-xl overflow-hidden flex flex-col h-full">
+                <div class="px-6 py-5 bg-red-500/5 border-b border-red-500/10 flex items-center">
+                    <i class="fa fa-exclamation-triangle text-red-500 mr-3"></i>
+                    <h3 class="text-xs font-black uppercase tracking-[0.2em] text-red-600 dark:text-red-400">Critical Alerts</h3>
+                </div>
+                <div class="flex-1 overflow-auto">
+                    <ul class="divide-y divide-base-content/5">
+                        {% for alert in recent_alerts %}
+                        <li class="px-6 py-4 hover:bg-red-500/5 transition-colors">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <p class="text-sm font-bold text-base-content">{{ alert.rule.name }}</p>
+                                    <p class="text-[10px] text-base-content/40 uppercase tracking-widest mt-1 font-mono">{{ alert.device.name }} • {{ alert.triggered_at|timesince }} ago</p>
+                                </div>
+                                <span class="text-sm font-black text-red-600 font-mono">{{ alert.trigger_value|floatformat:1 }}</span>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Infrastructure Hub -->
+    <div class="space-y-10">
+        <h3 class="text-2xl font-extrabold text-base-content font-heading tracking-tight flex items-center">
+            <i class="fa fa-network-wired mr-3 text-primary-500/50"></i>
+            Infrastructure Hub
+        </h3>
+
+        <div class="space-y-8" id="gateways-container" 
+             hx-get="{% url 'web_team:devices:site_detail' request.team.slug site.pk %}"
+             hx-trigger="infrastructureChanged from:body"
+             hx-select="#gateways-container">
+            {% for gateway in site.gateways.all %}
+                {% include "devices/partials/gateway_section.html" with gateway=gateway %}
+            {% empty %}
+            <div class="bg-base-100 rounded-[2.5rem] border-2 border-dashed border-base-content/10 p-16 text-center">
+                <div class="w-20 h-20 bg-base-200 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <i class="fa fa-hdd text-base-content/20 text-3xl"></i>
+                </div>
+                <h4 class="text-xl font-bold text-base-content font-heading mb-2">No Gateways Configured</h4>
+                <p class="text-base-content/50 max-w-sm mx-auto text-sm leading-relaxed mb-8">Deploy your first Nodeflow gateway to this site to start monitoring your industrial assets.</p>
+                <a href="{% url 'web_team:onboarding:setup_start' request.team.slug %}?site_id={{ site.id }}" class="inline-flex items-center px-6 py-3 bg-primary-600 text-white rounded-2xl font-bold text-sm hover:bg-primary-700 transition shadow-lg shadow-primary-600/30">
+                    <i class="fa fa-plus-circle mr-2"></i>Add Gateway
+                </a>
             </div>
             {% endfor %}
         </div>
-    </div>
-    {% endif %}
 
-    {% if recent_alerts %}
-    <!-- Recent Alerts -->
-    <div class="mb-8">
-        <div class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-red-100 dark:border-red-900/30">
-            <div class="px-6 py-4 bg-red-50 dark:bg-red-900/10 border-b border-red-100 dark:border-red-900/30 flex items-center justify-between">
-                <h3 class="text-sm font-bold uppercase tracking-wider text-red-800 dark:text-red-400">
-                    <i class="fa fa-exclamation-triangle mr-2"></i>Recent Active Alerts
+        <!-- Direct Connections (Handled in Phase 1 as promised) -->
+        {% with direct_devices=site.devices.all|dictsort:"gateway_id" %}
+        {% if direct_devices %}
+            <div class="pt-8" id="direct-connections-section">
+                <h3 class="text-xl font-extrabold text-base-content font-heading tracking-tight mb-6 flex items-center">
+                    <i class="fa fa-wifi mr-3 text-green-500/50"></i>
+                    Direct & Third-Party Connections
                 </h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {% for device in direct_devices %}
+                        {% if not device.gateway %}
+                        <a href="{% url 'web_team:devices:device_detail' request.team.slug device.pk %}" class="group bg-base-100 p-5 rounded-3xl border border-base-content/5 hover:shadow-xl transition-all">
+                             <div class="flex items-center justify-between mb-4">
+                                <span class="text-[10px] font-black uppercase tracking-widest text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-2 py-0.5 rounded-lg">Cloud-Native</span>
+                                <span class="h-2 w-2 rounded-full {% if device.status == 'online' %}bg-green-500{% else %}bg-base-300{% endif %}"></span>
+                             </div>
+                             <h5 class="text-sm font-bold text-base-content">{{ device.name }}</h5>
+                             <p class="text-[10px] text-base-content/40 uppercase tracking-widest font-mono mt-1">{{ device.protocol }}</p>
+                        </a>
+                        {% endif %}
+                    {% endfor %}
+                </div>
             </div>
-            <ul role="list" class="divide-y divide-gray-100 dark:divide-gray-700">
-                {% for alert in recent_alerts %}
-                <li class="px-6 py-4">
-                    <div class="flex items-center justify-between">
-                        <div class="flex flex-col">
-                            <span class="text-sm font-bold text-gray-900 dark:text-white">{{ alert.rule.name }}</span>
-                            <span class="text-xs text-gray-500">{{ alert.device.name }} • {{ alert.triggered_at|timesince }} ago</span>
-                        </div>
-                        <div class="flex items-center space-x-4">
-                            <span class="text-sm font-mono font-bold text-red-600">{{ alert.trigger_value|floatformat:1 }}</span>
-                            <span class="px-2 py-1 text-xs font-medium rounded bg-red-100 text-red-700 uppercase">{{ alert.rule.severity }}</span>
-                        </div>
-                    </div>
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-    </div>
-    {% endif %}
-
-    <div class="grid grid-cols-1 gap-8 lg:grid-cols-2">
-        <div class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
-            <div class="px-6 py-5 border-b border-gray-100 dark:border-gray-700">
-                <h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white">Devices at this Site</h3>
-            </div>
-            <ul role="list" class="divide-y divide-gray-200 dark:divide-gray-700">
-                {% for device in site.devices.all %}
-                <li class="px-6 py-4 flex items-center justify-between">
-                    <div class="flex items-center">
-                        <div class="flex-shrink-0 h-8 w-8 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs font-bold">
-                            {{ device.name|slice:":1"|upper }}
-                        </div>
-                        <div class="ml-4">
-                            <a href="{% url 'web_team:devices:device_detail' request.team.slug device.pk %}" class="text-sm font-medium text-gray-900 dark:text-white hover:text-primary-600 transition truncate">{{ device.name }}</a>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">{{ device.get_device_type_display }}</p>
-                        </div>
-                    </div>
-                    <div class="flex items-center">
-                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {% if device.status == 'online' %}bg-green-100 text-green-800{% else %}bg-gray-100 text-gray-800{% endif %}">
-                            {{ device.get_status_display }}
-                        </span>
-                    </div>
-                </li>
-                {% empty %}
-                <li class="px-6 py-8 text-center text-gray-500 dark:text-gray-400 italic">No devices configured for this site.</li>
-                {% endfor %}
-            </ul>
-        </div>
-
-        <div class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
-            <div class="px-6 py-5 border-b border-gray-100 dark:border-gray-700">
-                <h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white">Gateways</h3>
-            </div>
-            <ul role="list" class="divide-y divide-gray-200 dark:divide-gray-700">
-                {% for gateway in site.gateways.all %}
-                <li class="px-6 py-4 flex items-center justify-between">
-                    <div class="flex items-center">
-                        <div class="flex-shrink-0 h-8 w-8 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-500 text-xs font-bold">
-                            <i class="fa fa-server"></i>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-900 dark:text-white">{{ gateway.name }}</p>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">SN: {{ gateway.serial_number }}</p>
-                        </div>
-                    </div>
-                    <div class="flex items-center">
-                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {% if gateway.status == 'online' %}bg-green-100 text-green-800{% else %}bg-gray-100 text-gray-800{% endif %}">
-                            {{ gateway.get_status_display }}
-                        </span>
-                    </div>
-                </li>
-                {% empty %}
-                <li class="px-6 py-8 text-center text-gray-500 dark:text-gray-400 italic">No gateways configured for this site.</li>
-                {% endfor %}
-            </ul>
-        </div>
+        {% endif %}
+        {% endwith %}
     </div>
 </div>
+
+<!-- Quick Add Modal (DaisyUI) -->
+<dialog id="quick-add-modal" class="modal modal-bottom sm:modal-middle">
+  <div class="modal-box p-0 bg-base-100 rounded-3xl overflow-hidden max-w-2xl border border-base-content/5 shadow-2xl">
+    <div id="modal-content">
+        <!-- Loaded via HTMX -->
+        <div class="p-12 text-center">
+            <span class="loading loading-ring loading-lg text-primary-500"></span>
+            <p class="text-xs font-bold uppercase tracking-widest text-base-content/40 mt-4">Preparing Device Library...</p>
+        </div>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop bg-base-content/20 backdrop-blur-sm">
+    <button>close</button>
+  </form>
+</dialog>
+
 {% endblock %}

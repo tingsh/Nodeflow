@@ -28,6 +28,8 @@ class Gateway(BaseTeamModel):
     last_seen = models.DateTimeField(null=True, blank=True)
     firmware_version = models.CharField(max_length=50, blank=True)
     config = models.JSONField(default=dict, blank=True)
+    capacity = models.PositiveIntegerField(default=8, help_text=_("Maximum number of devices this gateway can support"))
+    discovery_data = models.JSONField(default=dict, blank=True, help_text=_("Most recent discovery report from the edge"))
 
     def __str__(self):
         return f"{self.name} ({self.serial_number})"
@@ -64,6 +66,7 @@ class DeviceTemplate(models.Model):
     register_map = models.JSONField(help_text=_("Definition of Modbus registers or OPC-UA nodes"))
     default_polling_interval = models.IntegerField(default=5, help_text=_("Seconds between data reads"))
     category = models.CharField(max_length=20, choices=VERTICAL_CHOICES, default='energy')
+    alert_presets = models.JSONField(default=list, blank=True, help_text=_("List of default alert rules for this template"))
     is_verified = models.BooleanField(default=False)
 
     def __str__(self):
@@ -84,13 +87,14 @@ class Device(BaseTeamModel):
         ('none', _('None / Not Applicable')),
     )
 
-    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name='devices')
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name='devices', null=True, blank=True)
     site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name='devices')
     template = models.ForeignKey(DeviceTemplate, null=True, blank=True, on_delete=models.SET_NULL)
     
     name = models.CharField(max_length=200)
     device_type = models.CharField(max_length=30, choices=DeviceTemplate.DEVICE_TYPE_CHOICES)
     protocol = models.CharField(max_length=20, choices=DeviceTemplate.PROTOCOL_CHOICES)
+    port = models.PositiveIntegerField(null=True, blank=True, help_text=_("Physical port or address on the gateway"))
     energy_category = models.CharField(max_length=20, choices=ENERGY_CATEGORY_CHOICES, default='none')
     
     connection_config = models.JSONField(default=dict, help_text=_("Modbus slave ID, IP address, port, etc."))

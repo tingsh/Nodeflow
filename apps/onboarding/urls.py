@@ -10,4 +10,9 @@ urlpatterns = [
     path("device/", views.step_3_device, name="step_3_device"),
     path("alert/", views.step_4_alert, name="step_4_alert"),
     path("complete/", views.complete, name="complete"),
+
+    # Setup Wizard for existing customers
+    path("setup/", views.setup_start, name="setup_start"),
+    path("setup/site/", views.setup_step_site, name="step_site"),
+    path("setup/connectivity/", views.setup_step_connectivity, name="step_connectivity"),
 ]

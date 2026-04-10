@@ -1,0 +1,57 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+{% block app %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    {% include "onboarding/partials/progress_bar.html" with current=1 %}
+
+    <div class="mt-12 text-center mb-10">
+        <h2 class="text-3xl font-extrabold text-base-content font-heading tracking-tight">Step 1: Choose Location</h2>
+        <p class="text-base-content/60 mt-2">Where is this new hardware being installed?</p>
+    </div>
+
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {% for site in sites %}
+            <label class="relative block rounded-3xl border border-base-content/10 bg-base-100 p-6 shadow-sm cursor-pointer hover:border-primary-500/50 hover:bg-base-200/50 transition-all group has-[:checked]:border-primary-500 has-[:checked]:ring-2 has-[:checked]:ring-primary-500/20">
+                <input type="radio" name="site_id" value="{{ site.id }}" class="hidden peer">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="p-2 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl group-hover:bg-primary-500 group-hover:text-white transition-colors">
+                        <i class="fa fa-map-marker-alt"></i>
+                    </div>
+                </div>
+                <h3 class="text-lg font-bold text-base-content font-heading">{{ site.name }}</h3>
+                <p class="text-xs text-base-content/50 mt-1 line-clamp-1">{{ site.address|default:"No address" }}</p>
+                <div class="absolute top-4 right-4 text-primary-500 opacity-0 peer-checked:opacity-100 transition-opacity">
+                    <i class="fa fa-check-circle text-xl"></i>
+                </div>
+            </label>
+            {% endfor %}
+
+            <label class="relative block rounded-3xl border-2 border-dashed border-base-content/10 bg-base-200/20 p-6 shadow-sm cursor-pointer hover:border-primary-500/50 hover:bg-base-200/50 transition-all group has-[:checked]:border-primary-500">
+                <input type="radio" name="site_id" value="new" class="hidden peer">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="p-2 bg-base-content/5 rounded-xl group-hover:bg-primary-500 group-hover:text-white transition-colors">
+                        <i class="fa fa-plus-circle"></i>
+                    </div>
+                </div>
+                <h3 class="text-lg font-bold text-base-content font-heading">New Site</h3>
+                <p class="text-xs text-base-content/50 mt-1">Register a brand new location</p>
+                <div class="absolute top-4 right-4 text-primary-500 opacity-0 peer-checked:opacity-100 transition-opacity">
+                    <i class="fa fa-check-circle text-xl"></i>
+                </div>
+            </label>
+        </div>
+
+        <div class="flex items-center justify-between pt-10">
+            <a href="{% url 'web_team:onboarding:setup_start' request.team.slug %}" class="text-sm font-medium text-base-content/60 hover:text-base-content">
+                <i class="fa fa-arrow-left mr-2"></i> Back
+            </a>
+            <button type="submit" class="inline-flex items-center px-8 py-3 bg-primary-600 text-white rounded-xl font-bold hover:bg-primary-700 transition shadow-lg shadow-primary-600/30">
+                Next: Connectivity
+                <i class="fa fa-chevron-right ml-3 text-xs"></i>
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -150,6 +150,25 @@
                  {% endif %}
             </div>
         </div>
+
+        <!-- Setup Workflow CTA -->
+        <div class="mt-6 bg-primary-600 rounded-3xl p-8 text-white shadow-xl shadow-primary-600/30 flex flex-col justify-between relative overflow-hidden group">
+            <div class="absolute -right-6 -top-6 w-32 h-32 bg-white/10 rounded-full blur-3xl pointer-events-none group-hover:bg-white/20 transition-all duration-500"></div>
+            <div class="relative z-10">
+                <div class="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center mb-6">
+                    <i class="fa fa-plus-circle text-white text-xl"></i>
+                </div>
+                <h3 class="text-2xl font-black font-heading tracking-tight mb-2 leading-tight">Add More Hardware</h3>
+                <p class="text-white/70 text-sm font-light leading-relaxed">
+                    Expanding your operations? Register a new gateway or connect direct sensors in minutes.
+                </p>
+            </div>
+            <div class="mt-8 relative z-10">
+                <a href="{% url 'web_team:onboarding:setup_start' request.team.slug %}" class="inline-flex items-center justify-center w-full py-4 bg-white text-primary-600 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-base-100 transform hover:scale-[1.02] active:scale-95 transition-all shadow-lg">
+                    Launch Setup Wizard
+                </a>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

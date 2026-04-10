@@ -34,6 +34,8 @@ def step_1_site(request, team_slug):
             else:
                 site = Site.objects.create(team=request.team, name=name, address=address)
             request.session['onboarding_site_id'] = site.id
+            if request.session.get('setup_mode'):
+                return redirect('web_team:onboarding:step_connectivity', team_slug=team_slug)
             return redirect('web_team:onboarding:step_2_gateway', team_slug=team_slug)
             
     context = {"steps": ONBOARDING_STEPS, "current_step": 1, "site": site}
@@ -162,7 +164,44 @@ def step_4_alert(request, team_slug):
 
 @login_and_team_required
 def complete(request, team_slug):
-    for key in ['onboarding_site_id', 'onboarding_gateway_id', 'onboarding_device_id']:
+    for key in ['onboarding_site_id', 'onboarding_gateway_id', 'onboarding_device_id', 'setup_mode', 'connectivity_type']:
         if key in request.session:
             del request.session[key]
     return render(request, "onboarding/complete.html")
+
+# Setup Wizard Views for Existing Customers
+
+@login_and_team_required
+def setup_start(request, team_slug):
+    request.session['setup_mode'] = True
+    return render(request, "onboarding/setup_start.html")
+
+@login_and_team_required
+def setup_step_site(request, team_slug):
+    sites = Site.objects.filter(team=request.team)
+    
+    if request.method == "POST":
+        site_id = request.POST.get("site_id")
+        if site_id == "new":
+            return redirect('web_team:onboarding:step_1_site', team_slug=team_slug)
+        elif site_id:
+            request.session['onboarding_site_id'] = int(site_id)
+            return redirect('web_team:onboarding:step_connectivity', team_slug=team_slug)
+            
+    context = {"steps": ONBOARDING_STEPS, "current_step": 1, "sites": sites}
+    return render(request, "onboarding/setup_step_site.html", context)
+
+@login_and_team_required
+def setup_step_connectivity(request, team_slug):
+    if request.method == "POST":
+        connectivity = request.POST.get("connectivity")
+        request.session['connectivity_type'] = connectivity
+        if connectivity == "gateway":
+            return redirect('web_team:onboarding:step_2_gateway', team_slug=team_slug)
+        else:
+            # Direct connection skips gateway step
+            request.session['onboarding_gateway_id'] = None
+            return redirect('web_team:onboarding:step_3_device', team_slug=team_slug)
+            
+    context = {"steps": ONBOARDING_STEPS, "current_step": 2} # We'll reuse the progress bar
+    return render(request, "onboarding/setup_step_connectivity.html", context)
