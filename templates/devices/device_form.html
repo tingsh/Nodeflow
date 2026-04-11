@@ -15,13 +15,13 @@
             <form method="post" class="space-y-6">
                 {% csrf_token %}
                 
-                <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
+                <div class="grid grid-cols-1 gap-y-6 sm:grid-cols-2 gap-x-6 max-w-4xl">
                     {% for field in form %}
-                    <div class="sm:col-span-{% if field.name == 'address' or field.name == 'connection_config' %}6{% else %}3{% endif %}">
-                        <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <div class="{% if field.name == 'address' or field.name == 'connection_config' or field.name == 'timezone' %}sm:col-span-2{% else %}sm:col-span-1{% endif %}">
+                        <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                             {{ field.label }}
                         </label>
-                        <div class="mt-1">
+                        <div class="mt-1 shadow-sm">
                             {% if field.field.widget.input_type == 'select' %}
                                 <select name="{{ field.name }}" id="{{ field.id_for_label }}" class="block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm">
                                     {% for choice in field.field.choices %}

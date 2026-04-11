@@ -1,0 +1,247 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+{% load static %}
+
+{% block app %}
+<div class="px-4 sm:px-6 lg:px-8 py-8 selection:bg-indigo-500/30">
+    <!-- Breadcrumbs -->
+    <nav class="flex mb-8" aria-label="Breadcrumb">
+      <ol class="inline-flex items-center space-x-1 md:space-x-3 text-[10px] font-black uppercase tracking-widest text-base-content/40">
+        <li><a href="{% url 'web_team:devices:device_list' request.team.slug %}" class="hover:text-indigo-500">Devices</a></li>
+        <li><i class="fa fa-chevron-right text-[8px] mx-2"></i></li>
+        <li><a href="{% url 'web_team:devices:device_detail' request.team.slug device.pk %}" class="hover:text-indigo-500">{{ device.name }}</a></li>
+        <li><i class="fa fa-chevron-right text-[8px] mx-2"></i></li>
+        <li class="text-indigo-500">History Analyzer</li>
+      </ol>
+    </nav>
+
+    <!-- Header & Controls -->
+    <div class="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+            <h1 class="text-4xl font-black text-base-content font-heading tracking-tighter">History Analyzer</h1>
+            <p class="text-sm text-base-content/50 mt-1 font-light">Deep probe into time-series telemetry for <span class="font-bold">{{ device.name }}</span>.</p>
+        </div>
+        <div class="flex items-center space-x-4">
+            <div class="bg-base-100 p-1.5 rounded-2xl border border-base-content/5 shadow-sm flex space-x-1">
+                <button onclick="setRange(24)" class="range-btn active text-[10px] font-black px-4 py-2 rounded-xl transition-all" data-hours="24">24H</button>
+                <button onclick="setRange(168)" class="range-btn text-[10px] font-black px-4 py-2 rounded-xl transition-all" data-hours="168">7D</button>
+                <button onclick="setRange(720)" class="range-btn text-[10px] font-black px-4 py-2 rounded-xl transition-all" data-hours="720">30D</button>
+            </div>
+            <button onclick="exportCSV()" class="btn btn-primary rounded-2xl font-black shadow-lg shadow-indigo-500/30">
+                <i class="fa fa-download mr-2"></i> EXPORT CSV
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        <!-- Sidebar: Metric Selection -->
+        <div class="lg:col-span-1 space-y-6">
+            <div class="bg-base-100 rounded-3xl border border-base-content/5 shadow-sm overflow-hidden p-6">
+                <h3 class="text-[10px] font-black uppercase tracking-widest text-base-content/30 mb-6">Select Metric</h3>
+                <div id="metric-list" class="space-y-2">
+                    <!-- Loaded via JS -->
+                    <div class="animate-pulse space-y-3">
+                        <div class="h-10 bg-base-200 rounded-xl"></div>
+                        <div class="h-10 bg-base-200 rounded-xl"></div>
+                        <div class="h-10 bg-base-200 rounded-xl"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-indigo-600 rounded-3xl p-6 text-white shadow-xl shadow-indigo-600/20">
+                <i class="fa fa-info-circle mb-4 text-xl opacity-50"></i>
+                <h4 class="font-black text-sm mb-2">Compliance Reporting</h4>
+                <p class="text-xs text-white/70 font-light leading-relaxed">This tool provides the raw data required for SG Green Mark and enterprise sustainability audits.</p>
+            </div>
+        </div>
+
+        <!-- Main Chart -->
+        <div class="lg:col-span-3 bg-base-100 rounded-3xl border border-base-content/5 shadow-sm p-8 flex flex-col min-h-[500px]">
+            <div class="flex items-center justify-between mb-8">
+                <div class="flex items-center space-x-3">
+                    <div id="active-metric-icon" class="w-10 h-10 rounded-2xl bg-indigo-500 text-white flex items-center justify-center">
+                        <i class="fa fa-chart-line"></i>
+                    </div>
+                    <div>
+                        <h2 id="active-metric-label" class="text-xl font-black text-base-content">Initializing...</h2>
+                        <p id="active-metric-sub" class="text-[10px] font-black text-base-content/30 uppercase tracking-widest">Time-Series Stream</p>
+                    </div>
+                </div>
+                <div id="chart-stats" class="hidden md:flex space-x-8">
+                    <!-- Dynamic Stats -->
+                </div>
+            </div>
+
+            <div class="flex-1 relative">
+                <canvas id="analyzer-chart"></canvas>
+                <div id="chart-loader" class="absolute inset-0 bg-base-100/80 backdrop-blur-sm z-20 flex items-center justify-center hidden">
+                    <div class="flex flex-col items-center">
+                        <span class="loading loading-spinner loading-lg text-indigo-500"></span>
+                        <p class="text-[10px] font-black uppercase tracking-widest mt-4 opacity-40">Fetching Historical Nodes</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .range-btn.active {
+        background: #6366f1;
+        color: white;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+    }
+    .metric-btn.active {
+        background: rgba(99, 102, 241, 0.05);
+        border-color: rgba(99, 102, 241, 0.2);
+        color: #6366f1;
+    }
+    .dark .range-btn.active {
+        background: #818cf8;
+    }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    let currentHours = 24;
+    let currentMetric = null;
+    let chart = null;
+
+    async function loadMetrics() {
+        const response = await fetch('{% url "web_team:telemetry:device_metrics_api" request.team.slug device.id %}');
+        const data = await response.json();
+        const container = document.getElementById('metric-list');
+        container.innerHTML = '';
+
+        data.metrics.forEach((m, idx) => {
+            if (idx === 0) currentMetric = m;
+            const btn = document.createElement('button');
+            btn.className = `metric-btn w-full text-left px-4 py-3 rounded-2xl border border-transparent hover:bg-base-200 transition-all flex items-center justify-between group ${idx === 0 ? 'active' : ''}`;
+            btn.onclick = () => selectMetric(m, btn);
+            btn.innerHTML = `
+                <span class="text-sm font-bold text-base-content group-hover:text-indigo-500">${m.label}</span>
+                <span class="text-[10px] font-black opacity-30 uppercase">${m.unit}</span>
+            `;
+            container.appendChild(btn);
+        });
+
+        if (currentMetric) refreshChart();
+    }
+
+    function selectMetric(metric, btn) {
+        currentMetric = metric;
+        document.querySelectorAll('.metric-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        refreshChart();
+    }
+
+    function setRange(hours) {
+        currentHours = hours;
+        document.querySelectorAll('.range-btn').forEach(b => {
+            b.classList.toggle('active', parseInt(b.dataset.hours) === hours);
+        });
+        refreshChart();
+    }
+
+    async function refreshChart() {
+        if (!currentMetric) return;
+        
+        const loader = document.getElementById('chart-loader');
+        loader.classList.remove('hidden');
+        
+        const labelEl = document.getElementById('active-metric-label');
+        labelEl.textContent = currentMetric.label;
+
+        try {
+            const url = `{% url "web_team:telemetry:device_telemetry_history_api" request.team.slug device.id %}?key=${currentMetric.key}&hours=${currentHours}`;
+            const response = await fetch(url);
+            const data = await response.json();
+
+            updateChart(data.labels, data.values, currentMetric.unit);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            loader.classList.add('hidden');
+        }
+    }
+
+    function updateChart(labels, values, unit) {
+        const ctx = document.getElementById('analyzer-chart').getContext('2d');
+        
+        if (chart) chart.destroy();
+
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels.map(l => new Date(l).toLocaleString()),
+                datasets: [{
+                    label: currentMetric.label,
+                    data: values,
+                    borderColor: '#6366f1',
+                    backgroundColor: 'rgba(99, 102, 241, 0.05)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.2,
+                    pointRadius: 2,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: '#6366f1'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        padding: 12,
+                        backgroundColor: '#1e293b',
+                        titleFont: { size: 10, weight: '900' },
+                        bodyFont: { size: 14, weight: '700' },
+                        callbacks: {
+                            label: function(context) {
+                                return ` ${context.parsed.y} ${unit}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 6, font: { size: 9, weight: '700' }, color: '#94a3b8' }
+                    },
+                    y: {
+                        beginAtZero: false,
+                        grid: { color: 'rgba(0,0,0,0.03)' },
+                        ticks: { font: { size: 9, weight: '700' }, color: '#94a3b8' }
+                    }
+                }
+            }
+        });
+
+        // Update Stats
+        if (values.length > 0) {
+            const sum = values.reduce((a, b) => a + b, 0);
+            const avg = sum / values.length;
+            const max = Math.max(...values);
+            const min = Math.min(...values);
+
+            document.getElementById('chart-stats').innerHTML = `
+                <div><p class="text-[9px] font-black text-base-content/30 uppercase tracking-widest">Average</p><p class="text-sm font-bold text-base-content">${avg.toFixed(2)} ${unit}</p></div>
+                <div><p class="text-[9px] font-black text-base-content/30 uppercase tracking-widest">Peak</p><p class="text-sm font-bold text-base-content">${max.toFixed(2)} ${unit}</p></div>
+                <div><p class="text-[9px] font-black text-base-content/30 uppercase tracking-widest">Base</p><p class="text-sm font-bold text-base-content">${min.toFixed(2)} ${unit}</p></div>
+            `;
+        }
+    }
+
+    function exportCSV() {
+        if (!currentMetric) return;
+        const days = Math.ceil(currentHours / 24);
+        window.location.href = `{% url "web_team:telemetry:export_telemetry_csv" request.team.slug device.id %}?days=${days}`;
+    }
+
+    document.addEventListener('DOMContentLoaded', loadMetrics);
+</script>
+{% endblock %}
+ stone

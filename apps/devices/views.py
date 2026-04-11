@@ -255,6 +255,16 @@ def htmx_device_create(request, team_slug):
             connection_config=template.register_map,
         )
         
+        from apps.events.services import log_event
+        log_event(
+            category='audit',
+            message=f"Created device {device.name} via Intelligent Port Grid.",
+            team=request.team,
+            device=device,
+            site=device.site,
+            user=request.user
+        )
+        
         # Return the updated gateway section (Re-calculate the port map first)
         gateway = Gateway.objects.get(id=gateway_id)
         # We need to re-run the logic from SiteDetailView or extract it.
@@ -315,6 +325,15 @@ def gateway_discovery_api(request):
             "devices": discovered
         }
         gateway.save()
+        
+        from apps.events.services import log_event
+        log_event(
+            category='infrastructure',
+            message=f"Gateway {gateway.serial_number} discovered {len(discovered)} new devices.",
+            team=gateway.team,
+            site=gateway.site,
+            metadata={"discovered_count": len(discovered), "serial": serial}
+        )
         
         return HttpResponse(json.dumps({"status": "ok", "message": "Discovery report received"}), content_type="application/json")
     except Gateway.DoesNotExist:

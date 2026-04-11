@@ -79,79 +79,203 @@
     </div>
     {% endif %}
 
-    <!-- Active Power Chart -->
-    <div class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden p-6 mb-8 border border-gray-100 dark:border-gray-700">
-        <div class="flex items-center justify-between mb-6">
-            <h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white">Active Power (Watts)</h3>
-            <span class="flex items-center text-xs text-gray-400 animate-pulse">
-                <i class="fa fa-circle text-green-500 mr-2"></i> Live Polling (5s)
-            </span>
+    <!-- AI Insights Section (Preserved) -->
+    {% if ai_insights %}
+    <div class="mb-8 p-6 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-3xl shadow-lg border border-indigo-500/30 relative overflow-hidden">
+        <div class="absolute -right-4 -bottom-4 opacity-10">
+            <i class="fa fa-brain text-8xl text-white"></i>
         </div>
-        
-        <!-- HTMX Polling Target -->
-        <div hx-get="{% url 'web_team:telemetry:chart_partial' request.team.slug device.pk 'active_power' %}"
-             hx-trigger="load, every 5s"
-             hx-swap="innerHTML"
-             class="min-h-[256px]">
-            <div class="flex items-center justify-center h-64 border-2 border-dashed border-gray-100 dark:border-gray-700 rounded">
-                <i class="fa fa-spinner fa-spin text-gray-300 mr-3"></i>
-                <span class="text-sm text-gray-400">Connecting to telemetry stream...</span>
+        <div class="relative z-10">
+            <div class="flex items-center mb-4 text-white">
+                <i class="fa fa-sparkles mr-2 text-indigo-300"></i>
+                <h3 class="text-xs font-black uppercase tracking-widest opacity-80">AI Fleet Insights</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for insight in ai_insights %}
+                <div class="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 flex items-start group hover:bg-white/20 transition-all">
+                    <div class="mr-3 mt-0.5">
+                        {% if insight.type == 'anomaly' %}
+                        <i class="fa fa-exclamation-triangle text-amber-300 animate-pulse"></i>
+                        {% else %}
+                        <i class="fa fa-chart-line text-green-300"></i>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-white leading-snug">{{ insight.message }}</p>
+                    </div>
+                </div>
+                {% endfor %}
             </div>
         </div>
+    </div>
+    {% endif %}
+
+    <!-- Live Controls Bar -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
+        <div class="flex items-center space-x-3">
+             <div class="p-2 bg-green-500/10 rounded-lg">
+                <i class="fa fa-tower-broadcast text-green-500 animate-pulse"></i>
+             </div>
+             <div>
+                <h3 class="text-sm font-bold text-base-content">Sensor Live View</h3>
+                <p class="text-[10px] text-base-content/50 uppercase tracking-tighter font-black">Streaming telemetry from Gateway {{ device.gateway.serial_number }}</p>
+             </div>
+        </div>
+        
+        <div class="flex items-center space-x-3">
+            <a href="{% url 'web_team:telemetry:telemetry_analyzer' request.team.slug device.id %}" class="btn btn-ghost btn-sm rounded-xl text-indigo-500 font-black text-xs uppercase tracking-widest bg-indigo-500/5 hover:bg-indigo-500/10 transition-all border border-indigo-500/10">
+                <i class="fa fa-history mr-2"></i> History & Export
+            </a>
+
+            <div class="flex items-center space-x-2 bg-base-100 p-1.5 rounded-2xl border border-base-content/5 shadow-sm">
+                <span class="text-[10px] font-black uppercase tracking-widest text-base-content/40 ml-2 mr-1">Polling:</span>
+                <div class="dropdown dropdown-end">
+                    <label id="polling-label" tabindex="0" class="btn btn-ghost btn-xs normal-case font-bold text-primary">10s</label>
+                    <ul tabindex="0" class="dropdown-content z-[20] menu p-2 shadow-2xl bg-base-100 rounded-xl w-32 border border-base-content/5 mt-2">
+                        <li><a onclick="updatePolling(2000, '2s')">2s (Fast)</a></li>
+                        <li><a onclick="updatePolling(5000, '5s')">5s (Std)</a></li>
+                        <li><a onclick="updatePolling(10000, '10s')">10s (Eco)</a></li>
+                        <li><a onclick="updatePolling(0, 'Paused')" class="text-error">Pause</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dynamic Metrics Container -->
+    <div id="metrics-container" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <!-- Skeleton Loaders -->
+        <div class="bg-base-100 rounded-3xl p-6 border border-base-content/5 animate-pulse h-64"></div>
+        <div class="bg-base-100 rounded-3xl p-6 border border-base-content/5 animate-pulse h-64"></div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        let charts = {};
+        let pollingInterval = 10000;
+        let pollingTimer = null;
+        const deviceId = "{{ device.id }}";
+        const teamSlug = "{{ request.team.slug }}";
 
-    <!-- KPI Dashboard -->
-    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-        <!-- Active Power KPI -->
-        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-100 dark:border-gray-700 p-5"
-             hx-get="{% url 'web_team:telemetry:kpi_partial' request.team.slug device.pk 'active_power' %}"
-             hx-trigger="load, every 5s">
-            <div class="animate-pulse flex space-x-4">
-                <div class="flex-1 space-y-4 py-1">
-                    <div class="h-4 bg-gray-100 rounded w-3/4"></div>
-                    <div class="h-8 bg-gray-100 rounded w-1/2"></div>
-                </div>
-            </div>
-        </div>
+        async function initDashboard() {
+            try {
+                const response = await fetch(`/a/${teamSlug}/telemetry/api/metrics/${deviceId}/`);
+                const data = await response.json();
+                
+                const container = document.getElementById('metrics-container');
+                container.innerHTML = ''; // Clear skeletons
 
-        <!-- Voltage KPI -->
-        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-100 dark:border-gray-700 p-5"
-             hx-get="{% url 'web_team:telemetry:kpi_partial' request.team.slug device.pk 'voltage' %}"
-             hx-trigger="load, every 5s">
-            <div class="animate-pulse flex space-x-4">
-                <div class="flex-1 space-y-4 py-1">
-                    <div class="h-4 bg-gray-100 rounded w-3/4"></div>
-                    <div class="h-8 bg-gray-100 rounded w-1/2"></div>
-                </div>
-            </div>
-        </div>
+                if (data.metrics.length === 0) {
+                    container.innerHTML = `
+                        <div class="col-span-full py-20 text-center bg-base-100 rounded-3xl border border-dashed border-base-content/10">
+                            <i class="fa fa-database text-4xl text-base-content/10 mb-4"></i>
+                            <h3 class="text-lg font-bold text-base-content/40">No Telemetry Recorded</h3>
+                            <p class="text-sm text-base-content/30 mt-1">Once the sensors start transmitting, charts will appear here automatically.</p>
+                        </div>
+                    `;
+                    return;
+                }
 
-        <!-- Frequency KPI -->
-        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-100 dark:border-gray-700 p-5"
-             hx-get="{% url 'web_team:telemetry:kpi_partial' request.team.slug device.pk 'frequency' %}"
-             hx-trigger="load, every 5s">
-            <div class="animate-pulse flex space-x-4">
-                <div class="flex-1 space-y-4 py-1">
-                    <div class="h-4 bg-gray-100 rounded w-3/4"></div>
-                    <div class="h-8 bg-gray-100 rounded w-1/2"></div>
-                </div>
-            </div>
-        </div>
+                data.metrics.forEach(metric => {
+                    createMetricCard(metric);
+                });
 
-        <!-- Solar Gen KPI -->
-        <div class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-100 dark:border-gray-700 p-5"
-             hx-get="{% url 'web_team:telemetry:kpi_partial' request.team.slug device.pk 'solar_generation' %}"
-             hx-trigger="load, every 5s">
-            <div class="animate-pulse flex space-x-4">
-                <div class="flex-1 space-y-4 py-1">
-                    <div class="h-4 bg-gray-100 rounded w-3/4"></div>
-                    <div class="h-8 bg-gray-100 rounded w-1/2"></div>
+                startPolling();
+            } catch (e) {
+                console.error("Failed to init dashboard", e);
+            }
+        }
+
+        function createMetricCard(metric) {
+            const container = document.getElementById('metrics-container');
+            const card = document.createElement('div');
+            card.className = "bg-base-100 rounded-3xl p-6 border border-base-content/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)]";
+            card.innerHTML = `
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h4 class="text-sm font-black uppercase tracking-widest text-base-content/40">${metric.label}</h4>
+                        <div class="flex items-baseline space-x-1 mt-1">
+                            <span id="value-${metric.key}" class="text-2xl font-mono font-black text-base-content">--</span>
+                            <span class="text-xs font-bold text-base-content/30 uppercase tracking-tighter">${metric.unit}</span>
+                        </div>
+                    </div>
+                    <div class="p-2 bg-base-200 rounded-xl">
+                         <i class="fa fa-chart-area text-base-content/20 text-sm"></i>
+                    </div>
                 </div>
-            </div>
-        </div>
-    </div>
+                <div class="h-48">
+                    <canvas id="chart-${metric.key}"></canvas>
+                </div>
+            `;
+            container.appendChild(card);
+
+            const ctx = document.getElementById(`chart-${metric.key}`).getContext('2d');
+            charts[metric.key] = new Chart(ctx, {
+                type: 'line',
+                data: { labels: [], datasets: [{ 
+                    label: metric.label,
+                    data: [], 
+                    borderColor: '#6366f1', 
+                    backgroundColor: 'rgba(99, 102, 241, 0.05)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0
+                }]},
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { display: false },
+                        y: { 
+                            grid: { color: 'rgba(0,0,0,0.02)' },
+                            ticks: { font: { size: 10, weight: '700' }, color: '#94a3b8' }
+                        }
+                    }
+                }
+            });
+            
+            // Initial data pull
+            updateMetric(metric.key);
+        }
+
+        async function updateMetric(key) {
+            try {
+                const response = await fetch(`/a/${teamSlug}/telemetry/api/history/${deviceId}/?key=${key}&hours=1`);
+                const data = await response.json();
+                
+                if (data.values.length > 0) {
+                    const latestValue = data.values[data.values.length - 1];
+                    document.getElementById(`value-${key}`).innerText = latestValue.toFixed(1);
+                    
+                    const chart = charts[key];
+                    chart.data.labels = data.labels;
+                    chart.data.datasets[0].data = data.values;
+                    chart.update('none'); // Update without animation for performance
+                }
+            } catch (e) {
+                console.warn(`Update failed for ${key}`, e);
+            }
+        }
+
+        function startPolling() {
+            if (pollingTimer) clearInterval(pollingTimer);
+            if (pollingInterval === 0) return;
+            
+            pollingTimer = setInterval(() => {
+                Object.keys(charts).forEach(key => updateMetric(key));
+            }, pollingInterval);
+        }
+
+        function updatePolling(ms, label) {
+            pollingInterval = ms;
+            document.getElementById('polling-label').innerText = label;
+            startPolling();
+        }
+
+        document.addEventListener('DOMContentLoaded', initDashboard);
+    </script>
 
     <div class="grid grid-cols-1 gap-8 lg:grid-cols-3">
         <div class="lg:col-span-1 bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700">

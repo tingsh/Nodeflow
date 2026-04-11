@@ -49,3 +49,37 @@
   --danger: var(--color-error);
   --success: var(--color-success);
 }
+
+/* HTMX Loading Indicator */
+.htmx-indicator {
+  opacity: 0;
+  transition: opacity 200ms ease-in;
+  pointer-events: none;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  opacity: 1;
+}
+
+/* Global loading bar at top of screen */
+#loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 9999;
+}
+
+#loading-bar .bar {
+  background: var(--color-primary, #4f46e5);
+  height: 100%;
+  width: 0%;
+  transition: width 400ms ease;
+  box-shadow: 0 0 10px var(--color-primary, #4f46e5);
+}
+
+body.htmx-request {
+  cursor: wait;
+}

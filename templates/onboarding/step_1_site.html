@@ -28,9 +28,12 @@
                     </div>
 
                     <div class="pt-6">
-                        <button type="submit" class="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-600/30 transition transform hover:-translate-y-0.5">
-                            Continue to Gateway
-                            <i class="fa fa-arrow-right ml-2"></i>
+                        <button type="submit" class="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-600/30 transition transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed group relative overflow-hidden">
+                            <span class="group-[.htmx-request]:opacity-0 transition-opacity">Continue to Gateway</span>
+                            <i class="fa fa-arrow-right ml-2 group-[.htmx-request]:opacity-0 transition-opacity"></i>
+                            <div class="absolute inset-0 items-center justify-center hidden group-[.htmx-request]:flex">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
                         </button>
                     </div>
                 </div>

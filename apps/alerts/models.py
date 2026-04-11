@@ -32,6 +32,7 @@ class AlertRule(BaseTeamModel):
     
     is_active = models.BooleanField(default=True)
     notify_email = models.BooleanField(default=True)
+    notify_whatsapp = models.BooleanField(default=False, help_text=_("Send out real-time alerts via WhatsApp. Requires a configured WhatsApp provider."))
     notify_webhook = models.URLField(blank=True)
     cooldown_minutes = models.IntegerField(default=15, help_text=_("Minutes to wait before re-triggering notifications for the same alert"))
 

@@ -7,6 +7,11 @@
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Alerts</h1>
             <p class="text-sm text-gray-500 mt-1">All triggered threshold alerts across your fleet.</p>
         </div>
+        <div class="flex items-center space-x-3">
+            <a href="{% url 'web_team:alerts:rule_list' request.team.slug %}" class="btn btn-ghost btn-sm rounded-xl border border-gray-200 dark:border-gray-700">
+                <i class="fa fa-cog mr-2"></i> Manage Rules
+            </a>
+        </div>
     </div>
 
     <div class="bg-white dark:bg-gray-800 shadow rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
@@ -35,7 +40,10 @@
                 <i class="fa fa-check-circle text-green-600 dark:text-green-400 text-2xl"></i>
             </div>
             <h3 class="text-base font-semibold text-gray-900 dark:text-white mb-1">No alerts triggered</h3>
-            <p class="text-sm text-gray-500">All devices are within their configured thresholds. Create alert rules in the Admin panel.</p>
+            <p class="text-sm text-gray-500 mb-8">All devices are within their configured thresholds.</p>
+            <a href="{% url 'web_team:alerts:rule_create' request.team.slug %}" class="btn btn-primary btn-sm rounded-xl px-6">
+                <i class="fa fa-plus-circle mr-2"></i> Configure Alert Rules
+            </a>
         </div>
         {% endif %}
     </div>

@@ -45,10 +45,22 @@ def team_home(request, team_slug):
     gateways_count = Gateway.objects.filter(team=request.team).count()
     devices_count = Device.objects.filter(team=request.team).count()
     
-    # Recent Alerts
-    recent_alerts = Alert.objects.filter(team=request.team, status='active').order_by('-triggered_at')[:5]
+    # Energy Aggregates (24h)
+    from apps.telemetry.models import TelemetryData
+    from django.utils import timezone
+    from datetime import timedelta
+    yesterday = timezone.now() - timedelta(days=1)
     
-    # We could calculate total demand across all devices if needed, but for MVP stats counts are good.
+    # Sum unique energy values (assuming kWh key)
+    total_energy = TelemetryData.objects.filter(
+        device__team=request.team,
+        key='energy',
+        timestamp__gte=yesterday
+    ).aggregate(Sum('value_numeric'))['value_numeric__sum'] or 0
+    
+    # Activity Logs
+    from apps.events.models import ActivityLog
+    logs = ActivityLog.objects.filter(team=request.team).order_by('-timestamp')[:20]
     
     return render(
         request,
@@ -60,7 +72,8 @@ def team_home(request, team_slug):
             "sites_count": sites_count,
             "gateways_count": gateways_count,
             "devices_count": devices_count,
-            "recent_alerts": recent_alerts,
+            "total_energy": round(total_energy, 1),
+            "logs": logs,
         },
     )
 

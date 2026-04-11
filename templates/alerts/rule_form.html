@@ -1,0 +1,166 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+{% load static %}
+
+{% block app %}
+<div class="px-4 sm:px-6 lg:px-8 py-8 selection:bg-indigo-500/30 max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="mb-10 flex items-center justify-between">
+        <div class="flex items-center space-x-4">
+            <a href="{% url 'web_team:alerts:rule_list' request.team.slug %}" class="btn btn-ghost btn-circle btn-sm">
+                <i class="fa fa-arrow-left text-base-content/50"></i>
+            </a>
+            <div>
+                <h1 class="text-3xl font-black text-base-content font-heading tracking-tight">{% if form.instance.pk %}Update{% else %}Build{% endif %} Rule</h1>
+                <p class="text-sm text-base-content/50 mt-1 font-light">Define the logic that triggers an automated alert.</p>
+            </div>
+        </div>
+    </div>
+
+    <form method="post" class="space-y-8">
+        {% csrf_token %}
+        
+        <!-- Step 1: Identification -->
+        <div class="bg-base-100 rounded-3xl border border-base-content/5 shadow-sm p-8">
+            <div class="flex items-center space-x-3 mb-8">
+                <div class="w-8 h-8 rounded-full bg-indigo-500 text-white flex items-center justify-center font-black text-xs">1</div>
+                <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">Rule Narrative</h3>
+            </div>
+            
+            <div class="space-y-6">
+                <!-- Name -->
+                <div>
+                    <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Rule Name</label>
+                    {{ form.name.errors }}
+                    <input type="text" name="name" value="{{ form.name.value|default:'' }}" class="input input-bordered w-full rounded-2xl font-bold" placeholder="e.g., Critical Boiler Temp" required>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                    <!-- Severity -->
+                    <div>
+                        <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Severity</label>
+                        <select name="severity" class="select select-bordered w-full rounded-2xl font-bold">
+                            {% for choice in form.severity.field.choices %}
+                                <option value="{{ choice.0 }}" {% if form.severity.value == choice.0 %}selected{% endif %}>{{ choice.1 }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <!-- Is Active -->
+                    <div class="flex items-center space-x-3 pt-6">
+                        <input type="checkbox" name="is_active" class="checkbox checkbox-primary" {% if form.is_active.value %}checked{% endif %}>
+                        <label class="text-xs font-black uppercase tracking-widest text-base-content/40">Enable Rule</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Target & Condition -->
+        <div class="bg-base-100 rounded-3xl border border-base-content/5 shadow-sm p-8">
+            <div class="flex items-center space-x-3 mb-8">
+                <div class="w-8 h-8 rounded-full bg-indigo-500 text-white flex items-center justify-center font-black text-xs">2</div>
+                <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">Detection Logic</h3>
+            </div>
+            
+            <div class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-base-200/50 rounded-2xl border border-base-content/5">
+                    <!-- Site -->
+                    <div>
+                        <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Filter by Site</label>
+                        <select name="site" class="select select-bordered w-full rounded-2xl font-bold">
+                            {% for choice in form.site.field.choices %}
+                                <option value="{{ choice.0 }}" {% if form.site.value|slugify == choice.0|slugify %}selected{% endif %}>{{ choice.1 }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <!-- Device -->
+                    <div>
+                        <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Filter by Device</label>
+                        <select name="device" class="select select-bordered w-full rounded-2xl font-bold">
+                            {% for choice in form.device.field.choices %}
+                                <option value="{{ choice.0 }}" {% if form.device.value|slugify == choice.0|slugify %}selected{% endif %}>{{ choice.1 }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+                    <!-- Telemetry Key -->
+                    <div>
+                        <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Telemetry Key</label>
+                        <input type="text" name="telemetry_key" value="{{ form.telemetry_key.value|default:'' }}" class="input input-bordered w-full rounded-2xl font-bold font-mono text-sm" placeholder="e.g., active_power" required>
+                    </div>
+                    <!-- Condition -->
+                    <div>
+                        <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Condition</label>
+                        <select name="condition" class="select select-bordered w-full rounded-2xl font-bold">
+                            {% for choice in form.condition.field.choices %}
+                                <option value="{{ choice.0 }}" {% if form.condition.value == choice.0 %}selected{% endif %}>{{ choice.1 }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <!-- Threshold -->
+                    <div>
+                        <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Threshold Value</label>
+                        <input type="number" step="any" name="threshold" value="{{ form.threshold.value|default:'' }}" class="input input-bordered w-full rounded-2xl font-bold" required>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Notifications -->
+        <div class="bg-base-100 rounded-3xl border border-base-content/5 shadow-sm p-8">
+            <div class="flex items-center space-x-3 mb-8">
+                <div class="w-8 h-8 rounded-full bg-indigo-500 text-white flex items-center justify-center font-black text-xs">3</div>
+                <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">Response Actions</h3>
+            </div>
+            
+            <div class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label class="flex items-center justify-between p-4 bg-base-100 border border-base-content/5 rounded-2xl hover:border-indigo-500/30 transition-all cursor-pointer group">
+                        <div class="flex items-center space-x-4">
+                            <div class="p-3 bg-base-200 rounded-xl group-hover:bg-indigo-500/10 transition-all">
+                                <i class="fa-solid fa-envelope text-base-content/40 group-hover:text-indigo-500"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-sm font-bold text-base-content">Email Dashboard</h4>
+                                <p class="text-[10px] text-base-content/40 uppercase font-black">Standard Notifications</p>
+                            </div>
+                        </div>
+                        <input type="checkbox" name="notify_email" class="checkbox checkbox-primary" {% if form.notify_email.value %}checked{% endif %}>
+                    </label>
+
+                    <label class="flex items-center justify-between p-4 bg-base-100 border border-base-content/5 rounded-2xl hover:border-green-500/30 transition-all cursor-pointer group">
+                        <div class="flex items-center space-x-4">
+                            <div class="p-3 bg-base-200 rounded-xl group-hover:bg-green-500/10 transition-all">
+                                <i class="fa-brands fa-whatsapp text-base-content/40 group-hover:text-green-500"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-sm font-bold text-base-content">WhatsApp Push</h4>
+                                <p class="text-[10px] text-base-content/40 uppercase font-black">Industrial Mobile Delivery</p>
+                            </div>
+                        </div>
+                        <input type="checkbox" name="notify_whatsapp" class="checkbox checkbox-success" {% if form.notify_whatsapp.value %}checked{% endif %}>
+                    </label>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Cooldown (Minutes)</label>
+                    <input type="number" name="cooldown_minutes" value="{{ form.cooldown_minutes.value|default:60 }}" class="input input-bordered w-full rounded-2xl font-bold">
+                    <p class="text-[10px] text-base-content/30 mt-2">Wait period before re-triggering the same alert.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sticky Actions -->
+        <div class="sticky bottom-0 bg-white dark:bg-gray-800 p-6 border-t border-gray-100 dark:border-gray-700 -mx-8 sm:-mx-8 mt-8 z-20 flex items-center justify-end space-x-4 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] rounded-b-3xl">
+            <a href="{% url 'web_team:alerts:rule_list' request.team.slug %}" class="btn btn-ghost rounded-2xl font-black text-xs uppercase tracking-widest">Cancel</a>
+            <button type="submit" class="btn btn-primary px-10 rounded-2xl font-black shadow-xl shadow-indigo-500/30 uppercase font-mono tracking-widest text-xs relative overflow-hidden group">
+                <span class="group-[.htmx-request]:opacity-0 transition-opacity">{% if form.instance.pk %}Update Rule{% else %}Activate Rule{% endif %}</span>
+                <div class="absolute inset-0 items-center justify-center hidden group-[.htmx-request]:flex">
+                    <i class="fa fa-spinner fa-spin"></i>
+                </div>
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

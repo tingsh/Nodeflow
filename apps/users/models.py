@@ -22,6 +22,7 @@ class CustomUser(AbstractUser):
     avatar = models.FileField(upload_to=_get_avatar_filename, blank=True, validators=[validate_profile_picture])
     language = models.CharField(max_length=10, blank=True, null=True)
     timezone = models.CharField(max_length=100, blank=True, default="")
+    phone_number = models.CharField(max_length=20, blank=True, help_text="Format: +65XXXXXXXX for Singapore numbers.")
 
     def __str__(self):
         return f"{self.get_full_name()} <{self.email or self.username}>"

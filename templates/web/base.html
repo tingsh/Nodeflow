@@ -58,6 +58,7 @@
     {% endblock %}
 </head>
 <body class="bg-base-100 font-sans antialiased text-base-content selection:bg-indigo-500/30" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}' hx-boost="true">
+<div id="loading-bar" class="htmx-indicator"><div class="bar"></div></div>
 {% block body_wrapper %}
 {% block top_nav %}
   {% include 'web/components/top_nav.html' %}
@@ -106,6 +107,33 @@
         if (event.key === 'theme') {
           syncDarkMode();
         }
+      });
+
+      // HTMX Loading Bar Logic
+      const loadingBar = document.querySelector('#loading-bar .bar');
+      let progress = 0;
+      let interval;
+
+      document.body.addEventListener('htmx:beforeRequest', () => {
+        progress = 20;
+        loadingBar.style.width = progress + '%';
+        loadingBar.style.display = 'block';
+        
+        interval = setInterval(() => {
+          if (progress < 90) {
+            progress += (95 - progress) * 0.1;
+            loadingBar.style.width = progress + '%';
+          }
+        }, 200);
+      });
+
+      document.body.addEventListener('htmx:afterRequest', () => {
+        clearInterval(interval);
+        progress = 100;
+        loadingBar.style.width = progress + '%';
+        setTimeout(() => {
+          loadingBar.style.width = '0%';
+        }, 300);
       });
     });
   </script>

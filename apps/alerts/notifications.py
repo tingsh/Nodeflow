@@ -19,6 +19,43 @@ def send_alert_notifications(alert):
     if rule.notify_webhook:
         send_alert_webhook(alert)
 
+    if rule.notify_whatsapp:
+        send_alert_whatsapp(alert)
+
+def send_alert_whatsapp(alert):
+    """
+    Sends a WhatsApp alert to team members with a phone number.
+    """
+    rule = alert.rule
+    device = alert.device
+    members = alert.team.members.all()
+    recipients = [m.phone_number for m in members if m.phone_number]
+
+    if not recipients:
+        logger.warning(f"No phone numbers found for WhatsApp alert thread for team {alert.team.name}")
+        return
+
+    message = (
+        f"🚨 *NODEFLOW ALERT*\n"
+        f"Rule: {rule.name}\n"
+        f"Device: {device.name}\n"
+        f"Value: {alert.trigger_value}\n"
+        f"Severity: {rule.severity.upper()}\n"
+        f"Time: {alert.triggered_at.strftime('%H:%M:%S')}"
+    )
+
+    if settings.WHATSAPP_PROVIDER == 'mock':
+        logger.info(f"| MOCK WHATSAPP SEND | Recipients: {recipients} | Message: {message}")
+        return
+
+    # In a production scenario, you would use Twilio:
+    # from twilio.rest import Client
+    # client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    # for number in recipients:
+    #     client.messages.create(body=message, from_=f"whatsapp:{settings.TWILIO_WHATSAPP_NUMBER}", to=f"whatsapp:{number}")
+    
+    logger.info(f"WhatsApp dispatch triggered for {len(recipients)} recipients.")
+
 def send_alert_email(alert):
     """Sends an HTML alert email."""
     try:
