@@ -20,6 +20,7 @@ class AlertListView(LoginAndTeamRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "alerts"
+        context["rules"] = AlertRule.objects.filter(team=self.request.team)
         return context
 
 # Alert Rule CRUD
@@ -47,7 +48,7 @@ class AlertRuleCreateView(LoginAndTeamRequiredMixin, CreateView):
         return super().form_valid(form)
 
     def get_success_url(self):
-        return reverse_lazy("web_team:alerts:rule_list", args=[self.request.team.slug])
+        return reverse_lazy("web_team:alerts:alert_list", args=[self.request.team.slug])
 
 class AlertRuleUpdateView(LoginAndTeamRequiredMixin, UpdateView):
     model = AlertRule
@@ -55,14 +56,14 @@ class AlertRuleUpdateView(LoginAndTeamRequiredMixin, UpdateView):
     template_name = "alerts/rule_form.html"
 
     def get_success_url(self):
-        return reverse_lazy("web_team:alerts:rule_list", args=[self.request.team.slug])
+        return reverse_lazy("web_team:alerts:alert_list", args=[self.request.team.slug])
 
 class AlertRuleDeleteView(LoginAndTeamRequiredMixin, DeleteView):
     model = AlertRule
     template_name = "alerts/rule_confirm_delete.html"
 
     def get_success_url(self):
-        return reverse_lazy("web_team:alerts:rule_list", args=[self.request.team.slug])
+        return reverse_lazy("web_team:alerts:alert_list", args=[self.request.team.slug])
 
 @login_and_team_required
 @require_POST

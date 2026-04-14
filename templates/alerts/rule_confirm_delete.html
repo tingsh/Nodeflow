@@ -18,7 +18,7 @@
             <button type="submit" class="btn btn-error btn-block rounded-2xl font-black uppercase tracking-widest text-xs py-4">
                 Confirm Deletion
             </button>
-            <a href="{% url 'web_team:alerts:rule_list' request.team.slug %}" class="btn btn-ghost rounded-2xl font-black text-[10px] uppercase tracking-widest text-base-content/40">
+            <a href="{% url 'web_team:alerts:alert_list' request.team.slug %}" class="btn btn-ghost rounded-2xl font-black text-[10px] uppercase tracking-widest text-base-content/40">
                 Cancel and Go Back
             </a>
         </form>
