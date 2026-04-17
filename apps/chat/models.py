@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.utils.models import BaseModel
@@ -23,6 +24,10 @@ class Chat(BaseModel):
 
     def __str__(self):
         return f"{self.name} ({self.user})"
+
+    team = models.ForeignKey(
+        "teams.Team", on_delete=models.CASCADE, null=True, blank=True, related_name="chats"
+    )
 
     def get_openai_messages(self) -> list[dict]:
         """
@@ -64,3 +69,33 @@ class ChatMessage(BaseModel):
             return "assistant"
         else:
             return "system"
+
+
+class ChatUsage(BaseModel):
+    """
+    Track chat usage per team.
+    """
+
+    team = models.ForeignKey("teams.Team", on_delete=models.CASCADE, related_name="chat_usage")
+    year = models.IntegerField()
+    month = models.IntegerField()
+    count = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = ("team", "year", "month")
+
+    def __str__(self):
+        return f"{self.team.name} - {self.year}/{self.month}: {self.count}"
+
+    @classmethod
+    def get_count_for_team(cls, team):
+        now = timezone.now()
+        usage, _ = cls.objects.get_or_create(team=team, year=now.year, month=now.month)
+        return usage.count
+
+    @classmethod
+    def increment_count_for_team(cls, team):
+        now = timezone.now()
+        usage, _ = cls.objects.get_or_create(team=team, year=now.year, month=now.month)
+        usage.count += 1
+        usage.save()

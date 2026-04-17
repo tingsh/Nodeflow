@@ -5,23 +5,64 @@
   <script src="https://unpkg.com/htmx-ext-ws@2.0.0/ws.js" defer></script>
 {% endblock %}
 {% block chat_ui %}
-<div class="pg-chat-wrapper" hx-ext="ws" ws-connect="{{ websocket_url }}" x-data="{message: ''}">
-  <div id="message-list" class="pg-chat-pane" hx-swap-oob="beforeend">
-    <div class="pg-chat-message-system">
-      {% include "chat/components/system_icon.html" %}
-      <div class="pg-message-contents">
-        <p>{% translate "Hello, what can I help you with today?" %}</p>
+<div class="pg-chat-wrapper bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden flex flex-col h-[700px]" 
+     hx-ext="ws" ws-connect="{{ websocket_url }}" 
+     x-data="{ 
+        message: '',
+        suggestions: [
+            'What is the current status of all my devices?',
+            'Analyze active power consumption for the last 24 hours.',
+            'Give me a summary of critical alerts in the past week.',
+            'Are there any energy anomalies in the factory site?'
+        ],
+        sendSuggestion(text) {
+            this.message = text;
+            this.$refs.chatForm.dispatchEvent(new Event('submit'));
+        }
+     }">
+  
+  <!-- Chat Header -->
+  <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-800 bg-white/50 dark:bg-gray-800/50 backdrop-blur-md flex items-center justify-between">
+    <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
+            <i class="fa fa-robot"></i>
+        </div>
+        <div>
+            <h3 class="font-bold text-gray-900 dark:text-white leading-none">Antigravity AI</h3>
+            <p class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mt-1">Nodeflow Tool Executor Enabled</p>
+        </div>
+    </div>
+    <div class="flex items-center space-x-4 text-xs font-bold px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-500 dark:text-gray-400">
+        <i class="fa fa-chart-line text-indigo-500"></i>
+        <span>Monthly Queries: {{ usage_count|default:0 }}</span>
+    </div>
+  </div>
+
+  <div id="message-list" class="flex-1 overflow-y-auto px-6 py-8 space-y-6 scroll-smooth" hx-swap-oob="beforeend">
+    <div class="flex items-start space-x-4">
+      <div class="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 shrink-0">
+          <i class="fa fa-comment-dots"></i>
+      </div>
+      <div class="bg-gray-100 dark:bg-gray-800 rounded-2xl p-4 text-sm text-gray-800 dark:text-gray-200 shadow-sm border border-gray-200/50 dark:border-gray-700/50">
+        <p>{% translate "Hello! I'm your Nodeflow data assistant. You can ask me about device status, energy trends, or recent alerts. How can I help you today?" %}</p>
       </div>
     </div>
+
   {% if chat %}
     {% for message in chat.messages.all %}
     {% with message.content as message_text %}
       {% if message.is_human_message %}
-        {% include 'chat/components/user_message.html' %}
+        <div class="flex items-start justify-end space-x-4">
+            <div class="bg-indigo-600 text-white rounded-2xl p-4 text-sm shadow-md shadow-indigo-500/20 max-w-[80%]">
+                {{ message_text }}
+            </div>
+        </div>
       {% else %}
-        <div class="pg-chat-message-system">
-          {% include "chat/components/system_icon.html" %}
-          <div class="pg-message-contents">
+        <div class="flex items-start space-x-4">
+          <div class="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 shrink-0">
+              <i class="fa fa-robot"></i>
+          </div>
+          <div class="bg-white dark:bg-gray-800 rounded-2xl p-4 text-sm text-gray-800 dark:text-gray-200 shadow-sm border border-gray-100 dark:border-gray-700 max-w-[85%] prose prose-sm dark:prose-invert">
             {{ message_text|render_markdown }}
           </div>
         </div>
@@ -30,10 +71,36 @@
     {% endfor %}
   {% endif %}
   </div>
-  <form class="pg-chat-input-bar" ws-send @submit.prevent="message === ''" @submit="message = ''">
-    <input id="chat-message-input" name="message" type="text" x-model="message" placeholder="{% translate 'Type your message...' %}" aria-label="Message" class="pg-control">
-    <button type="submit" class="pg-button-primary mx-2" :disabled="!message">{% translate "Send" %}</button>
-  </form>
+
+  <!-- Suggested Questions -->
+  <div class="px-6 py-3 overflow-x-auto no-scrollbar border-t border-gray-50 dark:border-gray-800/50 bg-gray-50/50 dark:bg-gray-900/50">
+    <div class="flex items-center space-x-2 whitespace-nowrap">
+        <template x-for="suggestion in suggestions" :key="suggestion">
+            <button @click="sendSuggestion(suggestion)" 
+                    class="px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-[11px] font-bold text-gray-500 hover:text-indigo-600 hover:border-indigo-400 dark:hover:text-indigo-400 dark:hover:border-indigo-500 transition-all shadow-sm">
+                <span x-text="suggestion"></span>
+            </button>
+        </template>
+    </div>
+  </div>
+
+  <!-- Input Area -->
+  <div class="p-6 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700">
+      <form class="flex items-center space-x-4" x-ref="chatForm" ws-send @submit.prevent="message === ''" @submit="message = ''">
+        <div class="relative flex-1 group">
+            <input id="chat-message-input" name="message" type="text" x-model="message" 
+                   placeholder="{% translate 'Ask a question about your IoT data...' %}" 
+                   class="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all outline-none">
+            <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center space-x-2 text-gray-400 opacity-0 group-focus-within:opacity-100 transition-opacity">
+                <span class="text-[10px] font-black uppercase tracking-widest">Enter to send</span>
+                <i class="fa fa-paper-plane text-xs text-indigo-500"></i>
+            </div>
+        </div>
+        <button type="submit" class="h-11 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50" :disabled="!message">
+            {% translate "Send" %}
+        </button>
+      </form>
+  </div>
 </div>
 {% endblock %}
 {% block page_js %}
