@@ -1,0 +1,95 @@
+{% extends "web/base.html" %}
+
+{% block head %}
+    {{ block.super }}
+    <!-- Auto-refresh every 60 seconds -->
+    <meta http-equiv="refresh" content="60">
+{% endblock %}
+
+{% block body %}
+<div class="min-h-screen bg-gray-50 dark:bg-gray-900 font-sans flex flex-col">
+    {% if not kiosk_mode %}
+    <!-- Public Header -->
+    <header class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="h-8 w-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">
+                    {{ team.name|make_list|first|upper }}
+                </div>
+                <h1 class="text-xl font-bold text-gray-900 dark:text-white">{{ team.name }} - {{ link.name }}</h1>
+            </div>
+            <div class="text-sm text-gray-500">
+                <i class="fa fa-sync animate-spin-slow text-indigo-500 mr-2"></i> Live Data
+            </div>
+        </div>
+    </header>
+    {% endif %}
+
+    <!-- Main Content -->
+    <main class="flex-grow {% if kiosk_mode %}p-4{% else %}max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full{% endif %}">
+        
+        <!-- Active Alerts Alert Banner (if any) -->
+        {% if active_alerts %}
+        <div class="mb-8 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 rounded-r-lg shadow-sm">
+            <div class="flex items-start">
+                <i class="fa fa-triangle-exclamation text-red-500 mt-0.5 text-xl"></i>
+                <div class="ml-3">
+                    <h3 class="text-sm font-bold text-red-800 dark:text-red-200 uppercase tracking-wider">Active Alerts</h3>
+                    <div class="mt-2 space-y-2">
+                        {% for alert in active_alerts %}
+                        <p class="text-xs text-red-700 dark:text-red-300">
+                            <strong>{{ alert.device.name }}</strong>: {{ alert.rule.name }} 
+                            <span class="text-red-500 ml-2">{{ alert.triggered_value }}</span> 
+                            <span class="text-red-400/70 ml-2">({{ alert.triggered_at|timesince }} ago)</span>
+                        </p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Site Stats Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for item in site_stats %}
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
+                    <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center">
+                        <i class="fa fa-building text-indigo-500 mr-2"></i> {{ item.site.name }}
+                    </h2>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {% if item.stats.active_alerts > 0 %}bg-red-100 text-red-800{% else %}bg-green-100 text-green-800{% endif %}">
+                        {% if item.stats.active_alerts > 0 %}{{ item.stats.active_alerts }} Alerts{% else %}Healthy{% endif %}
+                    </span>
+                </div>
+                <div class="p-6">
+                    <dl class="grid grid-cols-2 gap-x-4 gap-y-6">
+                        <div>
+                            <dt class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Active Devices</dt>
+                            <dd class="mt-1 text-3xl font-black tracking-tight text-gray-900 dark:text-white">{{ item.stats.total_devices }}</dd>
+                        </div>
+                        <div>
+                           <dt class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Est. Energy (24h)</dt>
+                           <dd class="mt-1 text-3xl font-black tracking-tight text-indigo-600 dark:text-indigo-400">{{ item.stats.total_kwh|default:"0" }} <span class="text-sm font-medium text-gray-500">kWh</span></dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+            {% empty %}
+            <div class="col-span-full py-12 text-center bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-300 dark:border-gray-600">
+                <i class="fa fa-chart-bar text-gray-400 text-4xl mb-3"></i>
+                <h3 class="text-sm font-bold text-gray-900 dark:text-white">No Sites Configuration</h3>
+                <p class="text-xs text-gray-500 mt-1">This team has not configured any monitored sites yet.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </main>
+
+    <!-- Nodeflow Branding Footer -->
+    <footer class="bg-gray-900 py-6 text-center mt-auto">
+        <p class="text-xs text-gray-400">
+            Powered by <a href="#" class="font-bold text-white hover:text-indigo-400 transition-colors">Nodeflow IIoT</a>
+        </p>
+        <p class="text-[10px] text-gray-500 mt-1 uppercase tracking-widest">Industrial Intelligence Platform</p>
+    </footer>
+</div>
+{% endblock %}

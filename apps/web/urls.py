@@ -27,6 +27,8 @@ team_urlpatterns = (
         path("telemetry/", include("apps.telemetry.urls")),
         path("alerts/", include("apps.alerts.urls")),
         path("onboarding/", include("apps.onboarding.urls")),
+        path("shared-links/", include("apps.dashboard.team_urls")),
+        path("maintenance/", include("apps.maintenance.urls")),
     ],
     "web_team",
 )
