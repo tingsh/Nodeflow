@@ -5,7 +5,7 @@ from django.urls import reverse
 
 from apps.teams import roles
 from apps.teams.models import Membership, Team
-from apps.teams.roles import ROLE_ADMIN, ROLE_MEMBER
+from apps.teams.roles import ROLE_ADMIN, ROLE_MANAGER
 from apps.users.models import CustomUser
 
 
@@ -18,15 +18,15 @@ class TeamMemberManagementViewTest(MessagesTestMixin, TestCase):
     def setUp(self):
         super().setUp()
         self.team = Team.objects.create(name="Red Sox", slug="sox")
-        self.admin = CustomUser.objects.create(username="tito@redsox.com")
-        self.admin2 = CustomUser.objects.create(username="alex@redsox.com")
-        self.member = CustomUser.objects.create(username="papi@redsox.com")
-        self.member2 = CustomUser.objects.create(username="manny@redsox.com")
+        self.admin = CustomUser.objects.create(username="tito@redsox.com", email="tito@redsox.com")
+        self.admin2 = CustomUser.objects.create(username="alex@redsox.com", email="alex@redsox.com")
+        self.member = CustomUser.objects.create(username="papi@redsox.com", email="papi@redsox.com")
+        self.member2 = CustomUser.objects.create(username="manny@redsox.com", email="manny@redsox.com")
 
         self.team.members.add(self.admin, through_defaults={"role": ROLE_ADMIN})
         self.team.members.add(self.admin2, through_defaults={"role": ROLE_ADMIN})
-        self.team.members.add(self.member, through_defaults={"role": ROLE_MEMBER})
-        self.team.members.add(self.member2, through_defaults={"role": ROLE_MEMBER})
+        self.team.members.add(self.member, through_defaults={"role": ROLE_MANAGER})
+        self.team.members.add(self.member2, through_defaults={"role": ROLE_MANAGER})
 
         self.admin_membership = Membership.objects.get(user=self.admin, team=self.team)
         self.admin_membership2 = Membership.objects.get(user=self.admin2, team=self.team)
@@ -64,11 +64,11 @@ class TeamMemberManagementViewTest(MessagesTestMixin, TestCase):
         self.normal_membership.refresh_from_db()
         self.assertEqual(roles.ROLE_ADMIN, self.normal_membership.role)
         # change back
-        response = self._change_role(c, self.normal_membership, roles.ROLE_MEMBER)
+        response = self._change_role(c, self.normal_membership, roles.ROLE_MANAGER)
         self.assertEqual(200, response.status_code)
         # confirm updated
         self.normal_membership.refresh_from_db()
-        self.assertEqual(roles.ROLE_MEMBER, self.normal_membership.role)
+        self.assertEqual(roles.ROLE_MANAGER, self.normal_membership.role)
 
     def test_admins_can_remove_members(self):
         c = Client()
@@ -114,17 +114,17 @@ class TeamMemberManagementViewTest(MessagesTestMixin, TestCase):
         self.assertNotEqual(200, response.status_code)
         # confirm not changed
         self.normal_membership2.refresh_from_db()
-        self.assertEqual(roles.ROLE_MEMBER, self.normal_membership2.role)
+        self.assertEqual(roles.ROLE_MANAGER, self.normal_membership2.role)
 
     def test_members_cant_change_own_role(self):
         for membership in [self.normal_membership, self.admin_membership]:
             original_role = membership.role
-            new_role = roles.ROLE_ADMIN if original_role == roles.ROLE_MEMBER else roles.ROLE_MEMBER
+            new_role = roles.ROLE_ADMIN if original_role == roles.ROLE_MANAGER else roles.ROLE_MANAGER
             c = Client()
             c.force_login(membership.user)
 
             response = self._change_role(c, membership, new_role)
-            if original_role == roles.ROLE_MEMBER:
+            if original_role == roles.ROLE_MANAGER:
                 self.assertEqual(response.status_code, 403)
             else:
                 self.assertEqual(response.status_code, 200)
@@ -139,7 +139,7 @@ class TeamMemberManagementViewTest(MessagesTestMixin, TestCase):
         c.force_login(self.admin)
 
         # demote other admin
-        self._change_role(c, self.admin_membership2, roles.ROLE_MEMBER)
+        self._change_role(c, self.admin_membership2, roles.ROLE_MANAGER)
 
         # confirm it doesn't work
         response = self._remove_member(c, self.admin_membership)

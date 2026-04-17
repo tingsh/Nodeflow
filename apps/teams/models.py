@@ -59,7 +59,7 @@ class Membership(BaseModel):
         return f"{self.user}: {self.team}"
 
     def is_admin(self) -> bool:
-        return self.role == roles.ROLE_ADMIN
+        return self.role in [roles.ROLE_OWNER, roles.ROLE_ADMIN]
 
     class Meta:
         # Ensure a user can only be associated with a team once.
@@ -74,7 +74,7 @@ class Invitation(BaseModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="invitations")
     email = models.EmailField()
-    role = models.CharField(max_length=100, choices=roles.ROLE_CHOICES, default=roles.ROLE_MEMBER)
+    role = models.CharField(max_length=100, choices=roles.ROLE_CHOICES, default=roles.ROLE_VIEWER)
     invited_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sent_invitations")
     is_accepted = models.BooleanField(default=False)
     accepted_by = models.ForeignKey(

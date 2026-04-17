@@ -1,6 +1,9 @@
 from django.utils.decorators import method_decorator
+from django.core.exceptions import ImproperlyConfigured
+from django.http import HttpResponseForbidden
 
-from apps.teams.decorators import login_and_team_required, team_admin_required
+from apps.teams.decorators import login_and_team_required, team_admin_required, require_permission
+from apps.teams.roles import has_permission
 
 
 class TeamObjectViewMixin:
@@ -31,3 +34,26 @@ class TeamAdminRequiredMixin(TeamObjectViewMixin):
     @method_decorator(team_admin_required)
     def dispatch(self, request, *args, **kwargs):
         return super().dispatch(request, *args, **kwargs)
+
+
+class PermissionRequiredMixin(TeamObjectViewMixin):
+    """
+    Verify that the current user has a specific permission within the team.
+    """
+    permission_required = None
+
+    def get_permission_required(self):
+        if self.permission_required is None:
+            raise ImproperlyConfigured(
+                "PermissionRequiredMixin requires a 'permission_required' attribute."
+            )
+        return self.permission_required
+
+    def dispatch(self, request, *args, **kwargs):
+        permission = self.get_permission_required()
+
+        @require_permission(permission)
+        def _dispatch(inner_request, *inner_args, **inner_kwargs):
+            return super(PermissionRequiredMixin, self).dispatch(inner_request, *inner_args, **inner_kwargs)
+
+        return _dispatch(request, *args, **kwargs)

@@ -2,7 +2,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from apps.teams.models import Invitation, Team
-from apps.teams.roles import ROLE_ADMIN, ROLE_MEMBER
+from apps.teams.roles import ROLE_ADMIN, ROLE_MANAGER, ROLE_OWNER
 from apps.users.models import CustomUser
 
 PASSWORD = "123"
@@ -15,11 +15,11 @@ class TeamsAuthTest(TestCase):
         cls.sox = Team.objects.create(name="Red Sox", slug="sox")
         cls.yanks = Team.objects.create(name="Yankees", slug="yanks")
 
-        cls.sox_admin = _create_user("tito@redsox.com")
-        cls.sox.members.add(cls.sox_admin, through_defaults={"role": ROLE_ADMIN})
+        cls.sox_admin = _create_user("tito@redsox.com", "tito@redsox.com")
+        cls.sox.members.add(cls.sox_admin, through_defaults={"role": ROLE_OWNER})
 
-        cls.yanks_member = _create_user("derek.jeter@yankees.com")
-        cls.yanks.members.add(cls.yanks_member, through_defaults={"role": ROLE_MEMBER})
+        cls.yanks_member = _create_user("derek.jeter@yankees.com", "derek.jeter@yankees.com")
+        cls.yanks.members.add(cls.yanks_member, through_defaults={"role": ROLE_MANAGER})
 
     def test_unauthenticated_view(self):
         response = self.client.get(reverse("web:home"))
@@ -30,13 +30,13 @@ class TeamsAuthTest(TestCase):
         self._login(self.sox_admin)
         response = self.client.get(reverse("users:user_profile"))
         self.assertEqual(200, response.status_code, response)
-        self._assertRequestHasTeam(response, self.sox, self.sox_admin, ROLE_ADMIN)
+        self._assertRequestHasTeam(response, self.sox, self.sox_admin, ROLE_OWNER)
 
     def test_team_view(self):
         self._login(self.sox_admin)
         response = self.client.get(reverse("single_team:manage_team", args=[self.sox.slug]))
         self.assertEqual(200, response.status_code)
-        self._assertRequestHasTeam(response, self.sox, self.sox_admin, ROLE_ADMIN)
+        self._assertRequestHasTeam(response, self.sox, self.sox_admin, ROLE_OWNER)
 
     def test_team_view_no_membership(self):
         self._login(self.sox_admin)
@@ -49,14 +49,14 @@ class TeamsAuthTest(TestCase):
         invite = self._create_invitation()
         response = self.client.post(reverse("single_team:resend_invitation", args=[self.sox.slug, invite.id]))
         self.assertEqual(200, response.status_code)
-        self._assertRequestHasTeam(response, self.sox, self.sox_admin, ROLE_ADMIN)
+        self._assertRequestHasTeam(response, self.sox, self.sox_admin, ROLE_OWNER)
 
     def test_team_admin_view_denied(self):
         self._login(self.yanks_member)
         invite = self._create_invitation()
         response = self.client.post(reverse("single_team:resend_invitation", args=[self.yanks.slug, invite.id]))
         self.assertEqual(404, response.status_code)
-        self._assertRequestHasTeam(response, self.yanks, self.yanks_member, ROLE_MEMBER)
+        self._assertRequestHasTeam(response, self.yanks, self.yanks_member, ROLE_MANAGER)
 
     def test_delete_team_not_allowed_by_member(self):
         self._login(self.yanks_member)
@@ -76,7 +76,7 @@ class TeamsAuthTest(TestCase):
 
     def _create_invitation(self):
         return Invitation.objects.create(
-            team=self.sox, email="dj@yankees.com", role=ROLE_MEMBER, invited_by=self.sox_admin
+            team=self.sox, email="dj@yankees.com", role=ROLE_MANAGER, invited_by=self.sox_admin
         )
 
     def _assertRequestHasTeam(self, response, team, user=None, role=None):
@@ -93,8 +93,8 @@ class TeamsAuthTest(TestCase):
             self.assertEqual(membership, None)
 
 
-def _create_user(username):
-    user = CustomUser.objects.create(username=username)
+def _create_user(username, email=None):
+    user = CustomUser.objects.create(username=username, email=email or username)
     user.set_password(PASSWORD)
     user.save()
     return user

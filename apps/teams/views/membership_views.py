@@ -8,7 +8,7 @@ from django.views.decorators.http import require_POST
 from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import MembershipForm
 from apps.teams.models import Membership
-from apps.teams.roles import ROLE_ADMIN
+from apps.teams.roles import ROLE_ADMIN, ROLE_OWNER, has_permission
 from apps.web.forms import set_form_fields_disabled
 
 
@@ -16,14 +16,14 @@ from apps.web.forms import set_form_fields_disabled
 def team_membership_details(request, team_slug, membership_id):
     membership = get_object_or_404(Membership, team=request.team, pk=membership_id)
     editing_self = membership.user == request.user
-    can_edit_team_members = request.team_membership.is_admin()
-    if not can_edit_team_members and not editing_self:
+    can_manage_team = has_permission(request.user, request.team, "manage_team")
+    if not can_manage_team and not editing_self:
         messages.error(request, _("Sorry, you don't have permission to access that page."))
         return HttpResponseRedirect(reverse("single_team:manage_team", args=[request.team.slug]))
 
     if request.method == "POST":
         # these conditions should not be possible in the UI, but we still need to check to prevent malicious behavior
-        if not can_edit_team_members:
+        if not can_manage_team:
             return HttpResponseForbidden(_("You don't have permission to edit team members in that team."))
 
         if editing_self:
@@ -57,11 +57,11 @@ def team_membership_details(request, team_slug, membership_id):
 def remove_team_membership(request, team_slug, membership_id):
     membership = get_object_or_404(Membership, team=request.team, pk=membership_id)
     removing_self = membership.user == request.user
-    can_edit_team_members = request.team_membership.is_admin()
-    if not can_edit_team_members and not removing_self:
+    can_manage_team = has_permission(request.user, request.team, "manage_team")
+    if not can_manage_team and not removing_self:
         return HttpResponseForbidden(_("You don't have permission to remove others from that team."))
-    if membership.role == ROLE_ADMIN:
-        admin_count = Membership.objects.filter(team=request.team, role=ROLE_ADMIN).count()
+    if membership.role in [ROLE_OWNER, ROLE_ADMIN]:
+        admin_count = Membership.objects.filter(team=request.team, role__in=[ROLE_OWNER, ROLE_ADMIN]).count()
         if admin_count == 1:
             # trying to remove the last admin. this will get us in trouble.
             messages.error(

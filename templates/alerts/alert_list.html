@@ -1,6 +1,7 @@
 {% extends "web/app/app_base.html" %}
-{% load i18n %}
+{% load i18n team_permissions %}
 {% block app %}
+{% has_perm 'manage_alerts' as can_manage %}
 <div class="px-4 sm:px-6 lg:px-8 py-8">
     <div class="mb-8 flex items-center justify-between">
         <div>
@@ -36,9 +37,11 @@
             </div>
             <h3 class="text-base font-semibold text-gray-900 dark:text-white mb-1">No alerts triggered</h3>
             <p class="text-sm text-gray-500 mb-8">All devices are within their configured thresholds.</p>
+            {% if can_manage %}
             <a href="{% url 'web_team:alerts:rule_create' request.team.slug %}" class="btn btn-primary btn-sm rounded-xl px-6">
                 <i class="fa fa-plus-circle mr-2"></i> Configure Alert Rules
             </a>
+            {% endif %}
         </div>
         {% endif %}
     </div>
@@ -57,9 +60,11 @@
                         class="bg-gray-100 dark:bg-gray-900 border-none rounded-xl py-2 pl-10 pr-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 w-48 transition-all focus:w-64 outline-none"
                         onkeyup="filterRules()">
                 </div>
+                {% if can_manage %}
                 <a href="{% url 'web_team:alerts:rule_create' request.team.slug %}" class="btn btn-primary btn-sm rounded-xl font-bold shadow-lg shadow-indigo-500/20 px-6">
                     <i class="fa fa-plus mr-2"></i> CREATE RULE
                 </a>
+                {% endif %}
             </div>
         </div>
 
@@ -80,7 +85,7 @@
                     <div>
                         <h3 class="font-bold text-gray-900 dark:text-white leading-tight">{{ rule.name }}</h3>
                         <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                            {{ rule.device.name|default:rule.site.name }}
+                            {% if rule.device %}{{ rule.device.name }}{% elif rule.site %}{{ rule.site.name }}{% else %}—{% endif %}
                         </p>
                     </div>
                 </div>
@@ -107,6 +112,7 @@
                         </span>
                     </div>
 
+                    {% if can_manage %}
                     <div class="flex items-center space-x-1">
                         <a href="{% url 'web_team:alerts:rule_update' request.team.slug rule.pk %}" class="btn btn-ghost btn-sm btn-square text-gray-400 hover:text-indigo-500">
                             <i class="fa fa-edit"></i>
@@ -115,6 +121,7 @@
                             <i class="fa fa-trash"></i>
                         </a>
                     </div>
+                    {% endif %}
                 </div>
             </div>
             {% empty %}

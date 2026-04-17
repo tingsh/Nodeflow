@@ -1,9 +1,9 @@
 from functools import wraps
 
-from django.http import Http404, HttpResponseRedirect
+from django.http import Http404, HttpResponseRedirect, HttpResponseForbidden
 from django.urls import reverse
 
-from .roles import is_admin, is_member
+from .roles import is_admin, is_member, has_permission
 
 
 def login_and_team_required(view_func):
@@ -12,6 +12,29 @@ def login_and_team_required(view_func):
 
 def team_admin_required(view_func):
     return _get_decorated_function(view_func, is_admin)
+
+
+def require_permission(permission):
+    """
+    Decorator for views that checks if the user has a specific permission within the team.
+    """
+    def decorator(view_func):
+        @wraps(view_func)
+        def _inner(request, *args, **kwargs):
+            user = request.user
+            if not user.is_authenticated:
+                return HttpResponseRedirect("{}?next={}".format(reverse("account_login"), request.path))
+
+            team = getattr(request, "team", None)
+            if not team:
+                raise Http404
+
+            if not has_permission(user, team, permission):
+                return HttpResponseForbidden("You do not have permission to perform this action.")
+
+            return view_func(request, *args, **kwargs)
+        return _inner
+    return decorator
 
 
 def _get_decorated_function(view_func, permission_test_function):

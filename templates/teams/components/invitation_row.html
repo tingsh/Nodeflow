@@ -1,9 +1,14 @@
-{% load i18n %}
+{% load i18n team_permissions %}
 <tr>
   <td>{{ invitation.email }}</td>
   <td>{{ invitation.created_at }}</td>
-  <td>{{ invitation.get_role_display }}</td>
-{% if request.team_membership.role == 'admin' %}
+  <td>
+    <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-700 dark:text-gray-300">
+      {{ invitation.get_role_display }}
+    </span>
+  </td>
+{% has_perm 'manage_team' as can_manage_team %}
+{% if can_manage_team %}
   <td class="pg-inline-buttons pg-justify-content-end">
     <form hx-post="{% url 'single_team:resend_invitation' request.team.slug invitation.id %}" hx-target="this" hx-swap="outerHTML">
       {% csrf_token %}

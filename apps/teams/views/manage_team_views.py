@@ -12,7 +12,7 @@ from apps.teams.forms import InvitationForm, TeamChangeForm
 from apps.teams.helpers import get_open_invitations_for_user
 from apps.teams.invitations import send_invitation
 from apps.teams.models import Invitation
-from apps.teams.roles import is_admin
+from apps.teams.roles import is_admin, has_permission, ROLE_OWNER, ROLE_DESCRIPTIONS
 from apps.web.forms import set_form_fields_disabled
 
 
@@ -34,8 +34,9 @@ def manage_teams(request):
 def manage_team(request, team_slug):
     team = request.team
     team_form = None
+    can_manage_team = has_permission(request.user, team, "manage_team")
     if request.method == "POST":
-        if is_admin(request.user, team):
+        if can_manage_team:
             team_form = TeamChangeForm(request.POST, instance=team)
             if team_form.is_valid():
                 messages.success(request, _("Team details saved!"))
@@ -46,7 +47,7 @@ def manage_team(request, team_slug):
             messages.error(request, "Sorry you don't have permission to do that.")
     if team_form is None:
         team_form = TeamChangeForm(instance=team)
-    if request.team_membership.role != "admin":
+    if not can_manage_team:
         set_form_fields_disabled(team_form, True)
 
     return render(
@@ -59,6 +60,7 @@ def manage_team(request, team_slug):
             "team_form": team_form,
             "invitation_form": InvitationForm(team=request.team),
             "pending_invitations": Invitation.objects.filter(team=team, is_accepted=False).order_by("-created_at"),
+            "role_descriptions": ROLE_DESCRIPTIONS,
         },
     )
 
@@ -69,7 +71,7 @@ def create_team(request):
         form = TeamChangeForm(request.POST)
         if form.is_valid():
             team = form.save()
-            team.members.add(request.user, through_defaults={"role": "admin"})
+            team.members.add(request.user, through_defaults={"role": ROLE_OWNER})
             team.save()
             return HttpResponseRedirect(reverse("teams:manage_teams"))
     else:

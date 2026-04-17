@@ -1,7 +1,7 @@
 from django.test import TestCase
 
 from apps.teams.models import Team
-from apps.teams.roles import ROLE_ADMIN, ROLE_MEMBER, is_admin, is_member
+from apps.teams.roles import ROLE_ADMIN, ROLE_MANAGER, is_admin, is_member
 from apps.users.models import CustomUser
 
 
@@ -22,7 +22,7 @@ class RoleTest(TestCase):
 
     def test_non_admin_role(self):
         user = CustomUser.objects.create(email="user@example.com")
-        self.team1.members.add(user, through_defaults={"role": ROLE_MEMBER})
+        self.team1.members.add(user, through_defaults={"role": ROLE_MANAGER})
         self.assertFalse(is_admin(user, self.team1))
         self.assertFalse(is_admin(user, self.team2))
         self.assertTrue(is_member(user, self.team1))

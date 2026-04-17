@@ -1,3 +1,4 @@
+{% load team_permissions %}
 <tr id="alert-row-{{ alert.id }}" class="hover:bg-gray-50 dark:hover:bg-gray-900/50 transition">
     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{{ alert.rule.name }}</td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ alert.device.name }}</td>
@@ -20,15 +21,20 @@
         </span>
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+        {% has_perm 'acknowledge_alerts' as can_ack %}
         {% if alert.status == 'active' %}
-        <button 
-            hx-post="{% url 'web_team:alerts:acknowledge_alert' request.team.slug alert.id %}"
-            hx-target="#alert-row-{{ alert.id }}"
-            hx-swap="outerHTML"
-            class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 font-semibold"
-        >
-            Acknowledge
-        </button>
+            {% if can_ack %}
+            <button 
+                hx-post="{% url 'web_team:alerts:acknowledge_alert' request.team.slug alert.id %}"
+                hx-target="#alert-row-{{ alert.id }}"
+                hx-swap="outerHTML"
+                class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 font-semibold"
+            >
+                Acknowledge
+            </button>
+            {% else %}
+            <span class="text-xs text-gray-400 italic">Pending Ack</span>
+            {% endif %}
         {% elif alert.status == 'acknowledged' %}
         <span class="text-xs text-gray-400">
             Ack by {{ alert.acknowledged_by.get_full_name|default:alert.acknowledged_by.username }}
