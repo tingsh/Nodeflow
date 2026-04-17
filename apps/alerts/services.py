@@ -66,3 +66,7 @@ def trigger_alert(rule, device, value):
         # Send email/webhook notifications
         from .notifications import send_alert_notifications
         send_alert_notifications(alert)
+        
+        # Auto-create maintenance ticket if applicable
+        from apps.maintenance.services import auto_create_ticket
+        auto_create_ticket(alert)

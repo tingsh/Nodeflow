@@ -29,7 +29,10 @@ def home(request):
         return render(request, "web/landing_page.html")
 
 
-@login_and_team_required
+from apps.teams.decorators import login_and_team_required, require_permission
+
+
+@require_permission("view_dashboard")
 def team_home(request, team_slug):
     assert request.team.slug == team_slug
     
@@ -62,6 +65,18 @@ def team_home(request, team_slug):
     from apps.events.models import ActivityLog
     logs = ActivityLog.objects.filter(team=request.team).order_by('-timestamp')[:20]
     
+    # Maintenance Stats
+    from apps.maintenance.models import MaintenanceTicket, PreventiveSchedule
+    open_tickets = MaintenanceTicket.objects.filter(
+        team=request.team, 
+        status__in=['open', 'in_progress', 'waiting']
+    ).count()
+    overdue_pms = PreventiveSchedule.objects.filter(
+        team=request.team,
+        is_active=True,
+        next_due_at__lt=timezone.now()
+    ).count()
+
     return render(
         request,
         "web/app_home.html",
@@ -74,6 +89,8 @@ def team_home(request, team_slug):
             "devices_count": devices_count,
             "total_energy": round(total_energy, 1),
             "logs": logs,
+            "open_tickets": open_tickets,
+            "overdue_pms": overdue_pms,
         },
     )
 

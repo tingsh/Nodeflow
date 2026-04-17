@@ -1,0 +1,156 @@
+{% extends "web/app/app_base.html" %}
+{% load form_tags %}
+
+{% block app %}
+<div class="px-4 sm:px-6 lg:px-8 py-8 max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="md:flex md:items-center md:justify-between border-b border-gray-200 dark:border-gray-700 pb-5 mb-6">
+        <div class="min-w-0 flex-1">
+            <h2 class="text-2xl font-bold leading-7 text-gray-900 dark:text-white sm:truncate sm:text-3xl sm:tracking-tight">
+                TKT-{{ ticket.id }}: {{ ticket.title }}
+            </h2>
+            <div class="mt-1 flex flex-col sm:mt-0 sm:flex-row sm:flex-wrap sm:space-x-6">
+                <div class="mt-2 flex items-center text-sm text-gray-500">
+                    <i class="fa fa-microchip mr-1.5 text-gray-400"></i>
+                    {{ ticket.device.name }}
+                </div>
+                <div class="mt-2 flex items-center text-sm text-gray-500">
+                    <i class="fa fa-calendar mr-1.5 text-gray-400"></i>
+                    Created on {{ ticket.created_at|date:"M d, Y" }}
+                </div>
+                <div class="mt-2 flex items-center text-sm text-gray-500">
+                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold
+                        {% if ticket.status == 'open' %}bg-yellow-100 text-yellow-800
+                        {% elif ticket.status == 'in_progress' %}bg-blue-100 text-blue-800
+                        {% elif ticket.status == 'resolved' %}bg-green-100 text-green-800
+                        {% else %}bg-gray-100 text-gray-800{% endif %}">
+                        {{ ticket.get_status_display }}
+                    </span>
+                </div>
+            </div>
+        </div>
+        <div class="mt-4 flex md:ml-4 md:mt-0 space-x-3">
+            <a href="{% url 'web_team:maintenance:ticket_list' request.team.slug %}" class="btn btn-outline">Back</a>
+            <a href="{% url 'web_team:maintenance:ticket_edit' request.team.slug ticket.id %}" class="btn btn-primary">
+                <i class="fa fa-edit mr-2"></i> Edit
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Main Content Column -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Details Card -->
+            <div class="bg-white dark:bg-gray-800 shadow sm:rounded-lg border border-gray-100 dark:border-gray-700">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                    <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">Issue Description</h3>
+                </div>
+                <div class="px-4 py-5 sm:p-6 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-gray-50/30 dark:bg-gray-900/30">
+{{ ticket.description|default:"No description provided." }}
+                </div>
+            </div>
+
+            <!-- Threaded Comments -->
+            <div class="bg-white dark:bg-gray-800 shadow sm:rounded-lg border border-gray-100 dark:border-gray-700">
+                <div class="px-4 py-5 sm:px-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                    <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">Activity & Comments</h3>
+                </div>
+                <div class="px-4 py-5 sm:p-6">
+                    <ul role="list" class="space-y-6">
+                        {% for comment in ticket.comments.all %}
+                        <li class="relative flex gap-x-4">
+                            <div class="absolute left-0 top-0 flex w-6 justify-center -bottom-6">
+                                <div class="w-px bg-gray-200 dark:bg-gray-700"></div>
+                            </div>
+                            <div class="relative flex h-6 w-6 flex-none items-center justify-center bg-white dark:bg-gray-800">
+                                {% if comment.is_system_generated %}
+                                    <div class="h-1.5 w-1.5 rounded-full bg-gray-300 ring-1 ring-gray-300"></div>
+                                {% else %}
+                                    <div class="h-6 w-6 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-600">
+                                        {{ comment.author.get_display_name|make_list|first|upper|default:"?" }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div class="flex-auto rounded-md p-3 ring-1 ring-inset ring-gray-200 dark:ring-gray-700 {% if not comment.is_system_generated %}bg-gray-50 dark:bg-gray-900/50{% endif %}">
+                                <div class="flex justify-between gap-x-4">
+                                    <div class="py-0.5 text-xs leading-5 text-gray-500">
+                                        <span class="font-medium text-gray-900 dark:text-white">{{ comment.author.get_display_name|default:"System" }}</span> commented
+                                    </div>
+                                    <time class="flex-none py-0.5 text-xs leading-5 text-gray-500">{{ comment.created_at|timesince }} ago</time>
+                                </div>
+                                <p class="text-sm leading-6 text-gray-700 dark:text-gray-300 mt-2 whitespace-pre-wrap">{{ comment.content }}</p>
+                            </div>
+                        </li>
+                        {% empty %}
+                        <p class="text-sm text-gray-500 italic">No activity recorded yet.</p>
+                        {% endfor %}
+                    </ul>
+
+                    <!-- Add Comment Form -->
+                    <div class="mt-8 relative flex gap-x-4">
+                        <div class="relative flex h-6 w-6 flex-none items-center justify-center bg-white dark:bg-gray-800">
+                            <div class="h-6 w-6 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">
+                                {{ request.user.get_display_name|make_list|first|upper }}
+                            </div>
+                        </div>
+                        <div class="flex-auto">
+                            <form method="post" action="{% url 'web_team:maintenance:ticket_comment' request.team.slug ticket.id %}">
+                                {% csrf_token %}
+                                {% render_field comment_form.content %}
+                                <div class="mt-2 flex justify-end">
+                                    <button type="submit" class="btn btn-primary btn-sm">Add Update</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar / Metadata -->
+        <div class="space-y-6">
+            <div class="bg-white dark:bg-gray-800 shadow sm:rounded-lg py-5 px-4 sm:px-6 border border-gray-100 dark:border-gray-700">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wider mb-4">Properties</h3>
+                <dl class="space-y-4">
+                    <div>
+                        <dt class="text-xs font-medium text-gray-500">Assigned To</dt>
+                        <dd class="mt-1 text-sm text-gray-900 dark:text-white font-medium">
+                            {% if ticket.assigned_to %}
+                                {{ ticket.assigned_to.get_display_name }}
+                            {% else %}
+                                <span class="text-gray-400 italic">Unassigned</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-gray-500">Priority</dt>
+                        <dd class="mt-1 text-sm text-gray-900 dark:text-white">{{ ticket.get_priority_display }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-gray-500">Ticket Type</dt>
+                        <dd class="mt-1 text-sm text-gray-900 dark:text-white">{{ ticket.get_ticket_type_display }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-gray-500">Reported By</dt>
+                        <dd class="mt-1 text-sm text-gray-900 dark:text-white">{{ ticket.reported_by.get_display_name|default:"Auto-Generated" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-medium text-gray-500">Due Date</dt>
+                        <dd class="mt-1 text-sm text-gray-900 dark:text-white">{{ ticket.due_date|date:"F j, Y H:i"|default:"Not set" }}</dd>
+                    </div>
+                    
+                    {% if ticket.alert_reference %}
+                    <div class="pt-4 border-t border-gray-100 dark:border-gray-700">
+                        <dt class="text-xs font-medium text-red-500"><i class="fa fa-bell text-red-400 mr-1"></i> Triggered By Alert</dt>
+                        <dd class="mt-1 text-xs font-mono text-gray-500 truncate" title="{{ ticket.alert_reference }}">
+                            {{ ticket.alert_reference }}
+                        </dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+            
+        </div>
+    </div>
+</div>
+{% endblock %}

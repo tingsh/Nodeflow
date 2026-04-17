@@ -43,6 +43,19 @@
                     </div>
                 </div>
             </div>
+            <div class="bg-base-100 p-6 rounded-3xl border border-base-content/5 shadow-sm group hover:border-indigo-500/20 transition-all cursor-pointer" onclick="window.location.href='{% url 'web_team:maintenance:ticket_list' request.team.slug %}'">
+                <p class="text-[10px] font-black text-base-content/30 uppercase tracking-widest mb-3">Maintenance</p>
+                <div class="flex items-baseline space-x-4">
+                    <div>
+                        <span class="text-2xl font-black text-base-content font-mono">{{ open_tickets }}</span>
+                        <span class="text-[9px] font-bold text-base-content/40 block">OPEN TKTS</span>
+                    </div>
+                    <div>
+                        <span class="text-2xl font-black text-{% if overdue_pms > 0 %}red-500{% else %}base-content{% endif %} font-mono">{{ overdue_pms }}</span>
+                        <span class="text-[9px] font-bold text-{% if overdue_pms > 0 %}red-500/70{% else %}base-content/40{% endif %} block">OVERDUE PMS</span>
+                    </div>
+                </div>
+            </div>
             <a href="{% url 'web_team:onboarding:setup_start' request.team.slug %}" class="block bg-indigo-600 p-6 rounded-3xl shadow-lg shadow-indigo-600/20 group hover:scale-[1.02] transition-all relative overflow-hidden">
                 <div class="absolute -right-4 -bottom-4 opacity-20 group-hover:scale-110 transition-transform">
                     <i class="fa fa-plus-circle text-6xl text-white"></i>

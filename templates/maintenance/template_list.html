@@ -1,0 +1,47 @@
+{% extends "web/app/app_base.html" %}
+
+{% block app %}
+<div class="px-4 sm:px-6 lg:px-8 py-8">
+    <div class="sm:flex sm:items-center">
+        <div class="sm:flex-auto">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Ticket Templates</h1>
+            <p class="mt-2 text-sm text-gray-500">Standardized procedures for scheduled tasks.</p>
+        </div>
+        <div class="mt-4 sm:ml-16 sm:mt-0 flex space-x-3">
+            <a href="{% url 'web_team:maintenance:schedule_list' request.team.slug %}" class="btn btn-outline">
+                <i class="fa fa-calendar-alt mr-2"></i> Schedules
+            </a>
+            <a href="{% url 'web_team:maintenance:template_create' request.team.slug %}" class="btn btn-primary">
+                <i class="fa fa-plus mr-2"></i> New Template
+            </a>
+        </div>
+    </div>
+    
+    <div class="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for template in templates %}
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden flex flex-col">
+            <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
+                <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center">
+                    <i class="fa fa-file-alt text-indigo-500 mr-2"></i> {{ template.name }}
+                </h2>
+            </div>
+            <div class="p-6 flex-grow">
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-4 line-clamp-3">{{ template.description|default:"No description provided." }}</p>
+                <div class="flex items-center text-xs font-medium text-gray-500">
+                    <i class="fa fa-clock text-gray-400 mr-1.5"></i> Est: {{ template.estimated_duration_minutes }} min
+                </div>
+            </div>
+            <div class="px-6 py-3 bg-gray-50 dark:bg-gray-800/80 border-t border-gray-100 dark:border-gray-700">
+                <button class="text-sm text-indigo-600 hover:text-indigo-900 font-medium w-full text-center">Edit Template</button>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-span-full py-12 text-center bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-300 dark:border-gray-600">
+            <i class="fa fa-file-signature text-gray-300 text-4xl mb-3"></i>
+            <h3 class="text-sm font-bold text-gray-900 dark:text-white">No templates found</h3>
+            <p class="text-xs text-gray-500 mt-1">Create a template to standardize your maintenance checklists.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
