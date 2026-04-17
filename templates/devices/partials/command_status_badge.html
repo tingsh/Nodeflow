@@ -1,0 +1,30 @@
+<div class="flex items-center space-x-2" 
+     id="command-status-{{ command.transaction_id }}"
+     {% if command.status == 'pending' or command.status == 'sent' %}
+     hx-get="{% url 'web_team:devices:device_command_status' request.team.slug command.device.id command.transaction_id %}"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML"
+     {% endif %}>
+    
+    {% if command.status == 'executed' %}
+        <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-bold text-green-700">
+            <i class="fa fa-check-circle mr-1"></i> Success
+        </span>
+    {% elif command.status == 'failed' %}
+        <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-1 text-xs font-bold text-red-700" title="{{ command.error_message }}">
+            <i class="fa fa-times-circle mr-1"></i> Failed
+        </span>
+    {% elif command.status == 'sent' %}
+        <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-bold text-blue-700">
+            <i class="fa fa-paper-plane mr-1 animate-pulse"></i> Sent...
+        </span>
+    {% elif command.status == 'timed_out' %}
+        <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-bold text-gray-700">
+            <i class="fa fa-clock mr-1"></i> Timeout
+        </span>
+    {% else %}
+        <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-bold text-gray-700 animate-pulse">
+            <i class="fa fa-sync mr-1"></i> Pending...
+        </span>
+    {% endif %}
+</div>

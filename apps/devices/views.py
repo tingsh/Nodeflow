@@ -3,11 +3,12 @@ from django.utils import timezone
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
-from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.teams.decorators import login_and_team_required
+from apps.teams.mixins import LoginAndTeamRequiredMixin, PermissionRequiredMixin
+from apps.teams.decorators import login_and_team_required, require_permission
 from .models import Site, Gateway, Device, DeviceTemplate
 
-class SiteListView(LoginAndTeamRequiredMixin, ListView):
+class SiteListView(PermissionRequiredMixin, ListView):
+    permission_required = "view_devices"
     model = Site
     template_name = "devices/site_list.html"
     context_object_name = "sites"
@@ -17,7 +18,8 @@ class SiteListView(LoginAndTeamRequiredMixin, ListView):
         context["active_tab"] = "sites"
         return context
 
-class SiteDetailView(LoginAndTeamRequiredMixin, DetailView):
+class SiteDetailView(PermissionRequiredMixin, DetailView):
+    permission_required = "view_devices"
     model = Site
     template_name = "devices/site_detail.html"
     context_object_name = "site"
@@ -71,7 +73,8 @@ class SiteDetailView(LoginAndTeamRequiredMixin, DetailView):
         ).order_by('-triggered_at')[:5]
         return context
 
-class SiteCreateView(LoginAndTeamRequiredMixin, CreateView):
+class SiteCreateView(PermissionRequiredMixin, CreateView):
+    permission_required = "manage_devices"
     model = Site
     fields = ["name", "address", "latitude", "longitude", "timezone"]
     template_name = "devices/site_form.html"
@@ -83,7 +86,8 @@ class SiteCreateView(LoginAndTeamRequiredMixin, CreateView):
     def get_success_url(self):
         return reverse_lazy("web_team:devices:site_list", args=[self.request.team.slug])
 
-class SiteUpdateView(LoginAndTeamRequiredMixin, UpdateView):
+class SiteUpdateView(PermissionRequiredMixin, UpdateView):
+    permission_required = "manage_devices"
     model = Site
     fields = ["name", "address", "latitude", "longitude", "timezone"]
     template_name = "devices/site_form.html"
@@ -91,7 +95,8 @@ class SiteUpdateView(LoginAndTeamRequiredMixin, UpdateView):
     def get_success_url(self):
         return reverse_lazy("web_team:devices:site_list", args=[self.request.team.slug])
 
-class SiteDeleteView(LoginAndTeamRequiredMixin, DeleteView):
+class SiteDeleteView(PermissionRequiredMixin, DeleteView):
+    permission_required = "manage_devices"
     model = Site
     template_name = "devices/site_confirm_delete.html"
 
@@ -99,7 +104,8 @@ class SiteDeleteView(LoginAndTeamRequiredMixin, DeleteView):
         return reverse_lazy("web_team:devices:site_list", args=[self.request.team.slug])
 
 
-class GatewayListView(LoginAndTeamRequiredMixin, ListView):
+class GatewayListView(PermissionRequiredMixin, ListView):
+    permission_required = "view_devices"
     model = Gateway
     template_name = "devices/gateway_list.html"
     context_object_name = "gateways"
@@ -109,12 +115,14 @@ class GatewayListView(LoginAndTeamRequiredMixin, ListView):
         context["active_tab"] = "gateways"
         return context
 
-class GatewayDetailView(LoginAndTeamRequiredMixin, DetailView):
+class GatewayDetailView(PermissionRequiredMixin, DetailView):
+    permission_required = "view_devices"
     model = Gateway
     template_name = "devices/gateway_detail.html"
     context_object_name = "gateway"
 
-class GatewayCreateView(LoginAndTeamRequiredMixin, CreateView):
+class GatewayCreateView(PermissionRequiredMixin, CreateView):
+    permission_required = "manage_devices"
     model = Gateway
     fields = ["site", "name", "serial_number"]
     template_name = "devices/gateway_form.html"
@@ -129,7 +137,8 @@ class GatewayCreateView(LoginAndTeamRequiredMixin, CreateView):
     def get_success_url(self):
         return reverse_lazy("web_team:devices:gateway_list", args=[self.request.team.slug])
 
-class GatewayUpdateView(LoginAndTeamRequiredMixin, UpdateView):
+class GatewayUpdateView(PermissionRequiredMixin, UpdateView):
+    permission_required = "manage_devices"
     model = Gateway
     fields = ["site", "name", "serial_number", "status"]
     template_name = "devices/gateway_form.html"
@@ -137,7 +146,8 @@ class GatewayUpdateView(LoginAndTeamRequiredMixin, UpdateView):
     def get_success_url(self):
         return reverse_lazy("web_team:devices:gateway_list", args=[self.request.team.slug])
 
-class GatewayDeleteView(LoginAndTeamRequiredMixin, DeleteView):
+class GatewayDeleteView(PermissionRequiredMixin, DeleteView):
+    permission_required = "manage_devices"
     model = Gateway
     template_name = "devices/gateway_confirm_delete.html"
 
@@ -145,7 +155,8 @@ class GatewayDeleteView(LoginAndTeamRequiredMixin, DeleteView):
         return reverse_lazy("web_team:devices:gateway_list", args=[self.request.team.slug])
 
 
-class DeviceListView(LoginAndTeamRequiredMixin, ListView):
+class DeviceListView(PermissionRequiredMixin, ListView):
+    permission_required = "view_devices"
     model = Device
     template_name = "devices/device_list.html"
     context_object_name = "devices"
@@ -155,7 +166,8 @@ class DeviceListView(LoginAndTeamRequiredMixin, ListView):
         context["active_tab"] = "devices"
         return context
 
-class DeviceDetailView(LoginAndTeamRequiredMixin, DetailView):
+class DeviceDetailView(PermissionRequiredMixin, DetailView):
+    permission_required = "view_devices"
     model = Device
     template_name = "devices/device_detail.html"
     context_object_name = "device"
@@ -164,9 +176,55 @@ class DeviceDetailView(LoginAndTeamRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         from apps.telemetry.anomaly import get_ai_insights
         context["ai_insights"] = get_ai_insights(self.object)
+        context["recent_commands"] = self.object.commands.all().order_by('-requested_at')[:10]
+        
+        # Check for writable keys in template
+        writable_keys = []
+        if self.object.template and self.object.template.register_map:
+            for key, config in self.object.template.register_map.items():
+                if isinstance(config, dict) and config.get('writable'):
+                    writable_keys.append({
+                        "key": key,
+                        "label": key.replace('_', ' ').title(),
+                        "type": config.get('type', 'toggle') # toggle or slider
+                    })
+        context["writable_keys"] = writable_keys
         return context
 
-class DeviceCreateView(LoginAndTeamRequiredMixin, CreateView):
+# ... existing views ...
+
+@require_permission("manage_devices")
+def device_send_command(request, team_slug, pk):
+    from django.shortcuts import get_object_or_404
+    device = get_object_or_404(Device, pk=pk, team=request.team)
+    key = request.POST.get('key')
+    value = request.POST.get('value')
+    
+    # Handle value types
+    if value.lower() == 'true': value = True
+    elif value.lower() == 'false': value = False
+    else:
+        try:
+            value = float(value)
+        except ValueError:
+            pass # Keep as string
+    
+    try:
+        from .services import send_device_command
+        command = send_device_command(device, request.user, key, value)
+        return render(request, "devices/partials/command_status_badge.html", {"command": command})
+    except Exception as e:
+        return HttpResponse(f'<span class="text-error text-xs font-bold">{str(e)}</span>', status=400)
+
+@require_permission("view_devices")
+def device_command_status(request, team_slug, pk, tx_id):
+    from django.shortcuts import get_object_or_404
+    from .models import DeviceCommand
+    command = get_object_or_404(DeviceCommand, transaction_id=tx_id, team=request.team)
+    return render(request, "devices/partials/command_status_badge.html", {"command": command})
+
+class DeviceCreateView(PermissionRequiredMixin, CreateView):
+    permission_required = "manage_devices"
     model = Device
     fields = ["gateway", "site", "template", "name", "device_type", "protocol", "energy_category", "connection_config"]
     template_name = "devices/device_form.html"
@@ -190,7 +248,8 @@ class DeviceCreateView(LoginAndTeamRequiredMixin, CreateView):
     def get_success_url(self):
         return reverse_lazy("web_team:devices:device_list", args=[self.request.team.slug])
 
-class DeviceUpdateView(LoginAndTeamRequiredMixin, UpdateView):
+class DeviceUpdateView(PermissionRequiredMixin, UpdateView):
+    permission_required = "manage_devices"
     model = Device
     fields = ["name", "device_type", "protocol", "energy_category", "connection_config", "status"]
     template_name = "devices/device_form.html"
@@ -198,7 +257,8 @@ class DeviceUpdateView(LoginAndTeamRequiredMixin, UpdateView):
     def get_success_url(self):
         return reverse_lazy("web_team:devices:device_list", args=[self.request.team.slug])
 
-class DeviceDeleteView(LoginAndTeamRequiredMixin, DeleteView):
+class DeviceDeleteView(PermissionRequiredMixin, DeleteView):
+    permission_required = "manage_devices"
     model = Device
     template_name = "devices/device_confirm_delete.html"
 
@@ -210,7 +270,7 @@ class DeviceDeleteView(LoginAndTeamRequiredMixin, DeleteView):
 from apps.teams.decorators import login_and_team_required
 from django.http import HttpResponse
 
-@login_and_team_required
+@require_permission("manage_devices")
 def htmx_device_create(request, team_slug):
     gateway_id = request.GET.get('gateway_id')
     site_id = request.GET.get('site_id')
@@ -287,7 +347,7 @@ def htmx_device_create(request, team_slug):
     }
     return render(request, "devices/partials/device_quick_add_form.html", context)
 
-@login_and_team_required
+@require_permission("view_devices")
 def template_library_search(request, team_slug):
     query = request.GET.get('q', '')
     templates = DeviceTemplate.objects.filter(name__icontains=query) | DeviceTemplate.objects.filter(manufacturer__icontains=query)
@@ -297,7 +357,7 @@ from django.views.decorators.csrf import csrf_exempt
 import json
 
 @csrf_exempt
-def gateway_discovery_api(request):
+def gateway_discovery_api(request, team_slug):
     """
     API for the Edge Gateway to report discovered devices.
     Expected payload: 

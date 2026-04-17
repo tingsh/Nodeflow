@@ -28,6 +28,9 @@ urlpatterns = [
     # HTMX endpoints
     path("htmx/device/create/", views.htmx_device_create, name="htmx_device_create"),
     path("htmx/templates/search/", views.template_library_search, name="template_library_search"),
+    # Remote Control Command URLs
+    path("<int:pk>/command/", views.device_send_command, name="device_send_command"),
+    path("<int:pk>/command/status/<uuid:tx_id>/", views.device_command_status, name="device_command_status"),
 
     # API endpoints for Edge Gateway
     path("api/discovery/", views.gateway_discovery_api, name="gateway_discovery_api"),

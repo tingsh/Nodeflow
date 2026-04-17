@@ -36,21 +36,25 @@ class Command(BaseCommand):
     def on_connect(self, client, userdata, flags, reason_code, properties):
         if reason_code == 0:
             self.stdout.write(self.style.SUCCESS(f'Connected to MQTT Broker successfully.'))
-            # Subscribe to gateway telemetry topic (Compatible with TB Gateway)
+            # Subscribe to topics
             client.subscribe("v1/gateway/telemetry")
-            self.stdout.write(self.style.NOTICE('Subscribed to v1/gateway/telemetry'))
+            client.subscribe("v1/gateway/rpc") # Listen for command responses
+            self.stdout.write(self.style.NOTICE('Subscribed to telemetry and RPC response topics'))
         else:
             self.stdout.write(self.style.ERROR(f'Connection failed with code {reason_code}'))
 
     def on_message(self, client, userdata, msg):
         try:
-            from apps.telemetry.mqtt_parser import parse_mqtt_payload
-            
             payload_str = msg.payload.decode()
-            events = parse_mqtt_payload(msg.topic, payload_str)
             
-            if not events:
+            # Route based on topic
+            if msg.topic == "v1/gateway/rpc":
+                from apps.devices.services import process_command_response
+                process_command_response(payload_str)
                 return
+
+            from apps.telemetry.mqtt_parser import parse_mqtt_payload
+            events = parse_mqtt_payload(msg.topic, payload_str)
 
             for event in events:
                 gateway_sn = event.get('gateway_sn')

@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from apps.teams.models import BaseTeamModel
 
@@ -35,7 +36,7 @@ class Gateway(BaseTeamModel):
         return f"{self.name} ({self.serial_number})"
 
 class DeviceTemplate(models.Model):
-    """Pre-configured register maps for known equipment (e.g., 'Eastron SDM630')."""
+    """Pre-configured register maps for known equipment."""
     DEVICE_TYPE_CHOICES = (
         ('power_meter', _('Power Meter')),
         ('solar_inverter', _('Solar Inverter')),
@@ -63,23 +64,22 @@ class DeviceTemplate(models.Model):
     model_number = models.CharField(max_length=200, blank=True)
     device_type = models.CharField(max_length=30, choices=DEVICE_TYPE_CHOICES)
     protocol = models.CharField(max_length=20, choices=PROTOCOL_CHOICES)
-    register_map = models.JSONField(help_text=_("Definition of Modbus registers or OPC-UA nodes"))
-    default_polling_interval = models.IntegerField(default=5, help_text=_("Seconds between data reads"))
+    register_map = models.JSONField(help_text=_("Definition of registers. Keys can have 'writable': true."))
+    default_polling_interval = models.IntegerField(default=5)
     category = models.CharField(max_length=20, choices=VERTICAL_CHOICES, default='energy')
-    alert_presets = models.JSONField(default=list, blank=True, help_text=_("List of default alert rules for this template"))
+    alert_presets = models.JSONField(default=list, blank=True)
     is_verified = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
 
 class Device(BaseTeamModel):
-    """A monitored device (sensor, PLC, VFD, power meter, inverter etc.)."""
+    """A monitored device (sensor, PLC, VFD, etc.)."""
     STATUS_CHOICES = (
         ('online', _('Online')),
         ('offline', _('Offline')),
         ('alarm', _('Alarm')),
     )
-    # Categories for Energy Monitoring vertical (Generation vs Consumption)
     ENERGY_CATEGORY_CHOICES = (
         ('generation', _('Generation (Solar, Wind, etc.)')),
         ('utility', _('Utility (Main Grid)')),
@@ -94,13 +94,42 @@ class Device(BaseTeamModel):
     name = models.CharField(max_length=200)
     device_type = models.CharField(max_length=30, choices=DeviceTemplate.DEVICE_TYPE_CHOICES)
     protocol = models.CharField(max_length=20, choices=DeviceTemplate.PROTOCOL_CHOICES)
-    port = models.PositiveIntegerField(null=True, blank=True, help_text=_("Physical port or address on the gateway"))
+    port = models.PositiveIntegerField(null=True, blank=True)
     energy_category = models.CharField(max_length=20, choices=ENERGY_CATEGORY_CHOICES, default='none')
     
-    connection_config = models.JSONField(default=dict, help_text=_("Modbus slave ID, IP address, port, etc."))
+    connection_config = models.JSONField(default=dict)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='offline')
     last_telemetry_at = models.DateTimeField(null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
         return f"{self.name} ({self.site.name})"
+
+class DeviceCommand(BaseTeamModel):
+    """A control command sent to a device (write-back)."""
+    STATUS_CHOICES = (
+        ('pending', _('Pending')),
+        ('sent', _('Sent to Gateway')),
+        ('executed', _('Executed Successfully')),
+        ('failed', _('Failed')),
+        ('timed_out', _('Timed Out')),
+    )
+    
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name='commands')
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    
+    command_key = models.CharField(max_length=100)  # e.g., 'motor_speed'
+    value = models.JSONField()  # The value to write
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    transaction_id = models.CharField(max_length=100, unique=True, null=True, blank=True)
+    
+    payload = models.JSONField(default=dict, blank=True, help_text=_("The exact payload sent to the gateway"))
+    response_payload = models.JSONField(default=dict, blank=True)
+    
+    requested_at = models.DateTimeField(auto_now_add=True)
+    executed_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(blank=True)
+
+    def __str__(self):
+        return f"CMD: {self.command_key}={self.value} on {self.device.name} ({self.status})"

@@ -1,0 +1,90 @@
+import json
+from unittest.mock import patch
+from django.test import TestCase
+from apps.teams.models import Team
+from apps.users.models import CustomUser
+from apps.devices.models import Site, Device, Gateway, DeviceCommand
+from apps.devices.services import send_device_command, process_command_response
+
+class DeviceCommandTest(TestCase):
+    def setUp(self):
+        self.user = CustomUser.objects.create(email="test@example.com", username="testuser")
+        self.team = Team.objects.create(name="Test Team", slug="test-team")
+        self.site = Site.objects.create(team=self.team, name="Main Plant")
+        self.gateway = Gateway.objects.create(
+            team=self.team, 
+            site=self.site, 
+            name="GW-001", 
+            serial_number="SN123",
+            access_token="token123"
+        )
+        self.device = Device.objects.create(
+            team=self.team,
+            site=self.site,
+            gateway=self.gateway,
+            name="Motor 1",
+            device_type="vfd",
+            protocol="modbus_tcp"
+        )
+
+    @patch('paho.mqtt.publish.single')
+    def test_send_command_creates_record_and_publishes(self, mock_publish):
+        command = send_device_command(self.device, self.user, 'toggle_switch', True)
+        
+        # Verify DB record
+        self.assertEqual(command.status, 'sent')
+        self.assertEqual(command.command_key, 'toggle_switch')
+        self.assertEqual(command.value, True)
+        
+        # Verify MQTT call
+        self.assertTrue(mock_publish.called)
+        args, kwargs = mock_publish.call_args
+        payload = json.loads(kwargs['payload'])
+        self.assertEqual(payload['device'], self.device.name)
+        self.assertEqual(payload['data']['method'], 'toggle_switch')
+        self.assertEqual(payload['data']['params'], True)
+
+    def test_process_command_response_success(self):
+        # Setup a pending command
+        command = DeviceCommand.objects.create(
+            team=self.team,
+            device=self.device,
+            command_key='set_speed',
+            value=50,
+            transaction_id='test-tx-123',
+            status='sent'
+        )
+        
+        response_payload = json.dumps({
+            "device": self.device.name,
+            "id": "test-tx-123",
+            "data": {"success": True}
+        })
+        
+        process_command_response(response_payload)
+        
+        command.refresh_from_db()
+        self.assertEqual(command.status, 'executed')
+        self.assertIsNotNone(command.executed_at)
+
+    def test_process_command_response_failure(self):
+        command = DeviceCommand.objects.create(
+            team=self.team,
+            device=self.device,
+            command_key='set_speed',
+            value=100,
+            transaction_id='test-tx-456',
+            status='sent'
+        )
+        
+        response_payload = json.dumps({
+            "device": self.device.name,
+            "id": "test-tx-456",
+            "data": {"success": False, "error": "Hardware failure"}
+        })
+        
+        process_command_response(response_payload)
+        
+        command.refresh_from_db()
+        self.assertEqual(command.status, 'failed')
+        self.assertEqual(command.error_message, "Hardware failure")
