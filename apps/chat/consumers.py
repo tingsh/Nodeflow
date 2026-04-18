@@ -8,12 +8,12 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
-from apps.chat.models import Chat, ChatMessage, MessageTypes, ChatUsage
-from apps.chat.tasks import set_chat_name
-from apps.chat.utils import get_llm_kwargs
+from apps.chat.models import Chat, ChatMessage, ChatUsage, MessageTypes
 from apps.chat.system_prompt import get_system_prompt
-from apps.chat.tools import get_tools_definition
+from apps.chat.tasks import set_chat_name
 from apps.chat.tool_executor import NodeflowToolExecutor
+from apps.chat.tools import get_tools_definition
+from apps.chat.utils import get_llm_kwargs
 from apps.teams.models import Team
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return
 
         chat_id = self.scope["url_route"]["kwargs"].get("chat_id", None)
-        
+
         # Resolve Team
         team_id = self.scope.get("session", {}).get("team")
         if team_id:
@@ -85,9 +85,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=system_message_html)
 
         # Full context with System Prompt
-        context_messages = [
-            {"role": "system", "content": get_system_prompt(self.team, self.user)}
-        ] + self.messages
+        context_messages = [{"role": "system", "content": get_system_prompt(self.team, self.user)}] + self.messages
 
         try:
             await self._process_completion(contents_div_id, context_messages)
@@ -105,39 +103,40 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def _process_completion(self, contents_div_id, context_messages):
         executor = NodeflowToolExecutor(self.team)
         tools = get_tools_definition()
-        
+
         # Tool-calling loop
         while True:
             response = await litellm.acompletion(
-                messages=context_messages,
-                tools=tools,
-                tool_choice="auto",
-                **get_llm_kwargs()
+                messages=context_messages, tools=tools, tool_choice="auto", **get_llm_kwargs()
             )
-            
+
             response_message = response.choices[0].message
             tool_calls = response_message.get("tool_calls")
 
             if tool_calls:
                 # Add assistant message with tool calls to context
                 context_messages.append(response_message)
-                
+
                 # Execute tools
                 for tool_call in tool_calls:
                     function_name = tool_call.function.name
                     function_args = json.loads(tool_call.function.arguments)
-                    
+
                     # Update UI that we're searching data
-                    await self.send(text_data=f'<div hx-swap-oob="beforeend:#{contents_div_id}"><i>(Querying {function_name.replace("_", " ")}...)</i><br></div>')
-                    
+                    await self.send(
+                        text_data=f'<div hx-swap-oob="beforeend:#{contents_div_id}"><i>(Querying {function_name.replace("_", " ")}...)</i><br></div>'
+                    )
+
                     result = await database_sync_to_async(executor.execute)(function_name, function_args)
-                    
-                    context_messages.append({
-                        "tool_call_id": tool_call.id,
-                        "role": "tool",
-                        "name": function_name,
-                        "content": json.dumps(result),
-                    })
+
+                    context_messages.append(
+                        {
+                            "tool_call_id": tool_call.id,
+                            "role": "tool",
+                            "name": function_name,
+                            "content": json.dumps(result),
+                        }
+                    )
                 # Continue loop to get final answer
                 continue
             else:
@@ -147,11 +146,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 break
 
     async def _stream_final_response(self, contents_div_id, context_messages):
-        response = await litellm.acompletion(
-            messages=context_messages,
-            stream=True,
-            **get_llm_kwargs()
-        )
+        response = await litellm.acompletion(messages=context_messages, stream=True, **get_llm_kwargs())
         chunks = []
         async for chunk in response:
             content = chunk.choices[0].delta.content
@@ -159,7 +154,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 chunks.append(content)
                 html = f'<div hx-swap-oob="beforeend:#{contents_div_id}">{_format_token(content)}</div>'
                 await self.send(text_data=html)
-        
+
         full_text = "".join(chunks)
         # Final replacement for markdown rendering
         final_html = render_to_string(

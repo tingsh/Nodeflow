@@ -1,8 +1,10 @@
 from django.core.management.base import BaseCommand
+
 from apps.devices.models import DeviceTemplate
 
+
 class Command(BaseCommand):
-    help = 'Seed the database with professional device templates for common industrial equipment.'
+    help = "Seed the database with professional device templates for common industrial equipment."
 
     def handle(self, *args, **options):
         templates = [
@@ -18,12 +20,24 @@ class Command(BaseCommand):
                     "active_power": {"address": 12, "type": "float32", "unit": "W"},
                     "current": {"address": 6, "type": "float32", "unit": "A"},
                     "frequency": {"address": 70, "type": "float32", "unit": "Hz"},
-                    "energy": {"address": 342, "type": "float32", "unit": "kWh"}
+                    "energy": {"address": 342, "type": "float32", "unit": "kWh"},
                 },
                 "alert_presets": [
-                    {"name": "Low Voltage Warning", "key": "voltage", "condition": "lt", "threshold": 210, "severity": "warning"},
-                    {"name": "Over-Current Critical", "key": "current", "condition": "gt", "threshold": 60, "severity": "critical"}
-                ]
+                    {
+                        "name": "Low Voltage Warning",
+                        "key": "voltage",
+                        "condition": "lt",
+                        "threshold": 210,
+                        "severity": "warning",
+                    },
+                    {
+                        "name": "Over-Current Critical",
+                        "key": "current",
+                        "condition": "gt",
+                        "threshold": 60,
+                        "severity": "critical",
+                    },
+                ],
             },
             {
                 "name": "Schneider PM5350",
@@ -36,11 +50,17 @@ class Command(BaseCommand):
                     "voltage": {"address": 3028, "type": "float32", "unit": "V"},
                     "active_power": {"address": 3054, "type": "float32", "unit": "W"},
                     "current": {"address": 3000, "type": "float32", "unit": "A"},
-                    "energy": {"address": 2700, "type": "int64", "unit": "Wh"}
+                    "energy": {"address": 2700, "type": "int64", "unit": "Wh"},
                 },
                 "alert_presets": [
-                    {"name": "High Power Demand", "key": "active_power", "condition": "gt", "threshold": 20000, "severity": "warning"}
-                ]
+                    {
+                        "name": "High Power Demand",
+                        "key": "active_power",
+                        "condition": "gt",
+                        "threshold": 20000,
+                        "severity": "warning",
+                    }
+                ],
             },
             {
                 "name": "ABB B23 Energy Meter",
@@ -51,9 +71,9 @@ class Command(BaseCommand):
                 "category": "energy",
                 "register_map": {
                     "energy": {"address": 20480, "type": "int64", "unit": "Wh"},
-                    "voltage": {"address": 23296, "type": "int32", "unit": "mV"}
+                    "voltage": {"address": 23296, "type": "int32", "unit": "mV"},
                 },
-                "alert_presets": []
+                "alert_presets": [],
             },
             {
                 "name": "ABB ACS580 VFD",
@@ -66,11 +86,17 @@ class Command(BaseCommand):
                     "frequency": {"address": 1, "type": "uint16", "unit": "Hz"},
                     "output_current": {"address": 4, "type": "uint16", "unit": "A"},
                     "output_power": {"address": 5, "type": "uint16", "unit": "kW"},
-                    "motor_speed": {"address": 2, "type": "uint16", "unit": "rpm"}
+                    "motor_speed": {"address": 2, "type": "uint16", "unit": "rpm"},
                 },
                 "alert_presets": [
-                    {"name": "Motor Over-Speed", "key": "motor_speed", "condition": "gt", "threshold": 1600, "severity": "critical"}
-                ]
+                    {
+                        "name": "Motor Over-Speed",
+                        "key": "motor_speed",
+                        "condition": "gt",
+                        "threshold": 1600,
+                        "severity": "critical",
+                    }
+                ],
             },
             {
                 "name": "Generic Modbus Temp/Humidity",
@@ -81,12 +107,24 @@ class Command(BaseCommand):
                 "category": "cold_chain",
                 "register_map": {
                     "temperature": {"address": 0, "type": "int16", "scale": 0.1, "unit": "°C"},
-                    "humidity": {"address": 1, "type": "int16", "scale": 0.1, "unit": "%"}
+                    "humidity": {"address": 1, "type": "int16", "scale": 0.1, "unit": "%"},
                 },
                 "alert_presets": [
-                    {"name": "Critical Heat Alert", "key": "temperature", "condition": "gt", "threshold": 45, "severity": "critical"},
-                    {"name": "High Humidity Warning", "key": "humidity", "condition": "gt", "threshold": 80, "severity": "warning"}
-                ]
+                    {
+                        "name": "Critical Heat Alert",
+                        "key": "temperature",
+                        "condition": "gt",
+                        "threshold": 45,
+                        "severity": "critical",
+                    },
+                    {
+                        "name": "High Humidity Warning",
+                        "key": "humidity",
+                        "condition": "gt",
+                        "threshold": 80,
+                        "severity": "warning",
+                    },
+                ],
             },
             {
                 "name": "Eastron SDM120-Modbus",
@@ -98,9 +136,9 @@ class Command(BaseCommand):
                 "register_map": {
                     "voltage": {"address": 0, "type": "float32", "unit": "V"},
                     "active_power": {"address": 12, "type": "float32", "unit": "W"},
-                    "energy": {"address": 72, "type": "float32", "unit": "kWh"}
+                    "energy": {"address": 72, "type": "float32", "unit": "kWh"},
                 },
-                "alert_presets": []
+                "alert_presets": [],
             },
             {
                 "name": "SolarEdge SE Series Inverter",
@@ -112,11 +150,17 @@ class Command(BaseCommand):
                 "register_map": {
                     "solar_generation": {"address": 40084, "type": "uint16", "unit": "W"},
                     "ac_current": {"address": 40072, "type": "uint16", "unit": "A"},
-                    "temp_heatsink": {"address": 40104, "type": "int16", "unit": "°C"}
+                    "temp_heatsink": {"address": 40104, "type": "int16", "unit": "°C"},
                 },
                 "alert_presets": [
-                    {"name": "Inverter Overheating", "key": "temp_heatsink", "condition": "gt", "threshold": 85, "severity": "critical"}
-                ]
+                    {
+                        "name": "Inverter Overheating",
+                        "key": "temp_heatsink",
+                        "condition": "gt",
+                        "threshold": 85,
+                        "severity": "critical",
+                    }
+                ],
             },
             {
                 "name": "Accuenergy AcuRev 1312",
@@ -127,9 +171,9 @@ class Command(BaseCommand):
                 "category": "energy",
                 "register_map": {
                     "active_power": {"address": 4096, "type": "int32", "unit": "W"},
-                    "energy": {"address": 4128, "type": "int64", "unit": "Wh"}
+                    "energy": {"address": 4128, "type": "int64", "unit": "Wh"},
                 },
-                "alert_presets": []
+                "alert_presets": [],
             },
             {
                 "name": "Danfoss VLT HVAC Drive",
@@ -141,11 +185,17 @@ class Command(BaseCommand):
                 "register_map": {
                     "speed_pct": {"address": 16120, "type": "uint16", "scale": 0.01, "unit": "%"},
                     "current": {"address": 16140, "type": "uint16", "scale": 0.01, "unit": "A"},
-                    "power_kw": {"address": 16100, "type": "uint16", "scale": 0.01, "unit": "kW"}
+                    "power_kw": {"address": 16100, "type": "uint16", "scale": 0.01, "unit": "kW"},
                 },
                 "alert_presets": [
-                    {"name": "High Component Load", "key": "current", "condition": "gt", "threshold": 45, "severity": "warning"}
-                ]
+                    {
+                        "name": "High Component Load",
+                        "key": "current",
+                        "condition": "gt",
+                        "threshold": 45,
+                        "severity": "warning",
+                    }
+                ],
             },
             {
                 "name": "Cactus Modbus I/O Module",
@@ -156,10 +206,10 @@ class Command(BaseCommand):
                 "category": "factory",
                 "register_map": {
                     "ai_0": {"address": 0, "type": "int16", "unit": "mV"},
-                    "ai_1": {"address": 1, "type": "int16", "unit": "mV"}
+                    "ai_1": {"address": 1, "type": "int16", "unit": "mV"},
                 },
-                "alert_presets": []
-            }
+                "alert_presets": [],
+            },
         ]
 
         for t_data in templates:
@@ -173,8 +223,8 @@ class Command(BaseCommand):
                     "category": t_data["category"],
                     "register_map": t_data["register_map"],
                     "alert_presets": t_data.get("alert_presets", []),
-                    "is_verified": True
-                }
+                    "is_verified": True,
+                },
             )
             if created:
                 self.stdout.write(self.style.SUCCESS(f"Created template: {template.name}"))

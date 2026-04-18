@@ -14,11 +14,11 @@ def get_tools_definition():
                         "device_ids": {
                             "type": "array",
                             "items": {"type": "integer"},
-                            "description": "Optional list of device IDs. If omitted, returns status for all devices in the team."
+                            "description": "Optional list of device IDs. If omitted, returns status for all devices in the team.",
                         }
-                    }
-                }
-            }
+                    },
+                },
+            },
         },
         {
             "type": "function",
@@ -31,30 +31,24 @@ def get_tools_definition():
                         "device_ids": {
                             "type": "array",
                             "items": {"type": "integer"},
-                            "description": "List of device IDs to query."
+                            "description": "List of device IDs to query.",
                         },
                         "keys": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "List of telemetry keys (e.g., ['active_power', 'voltage', 'temp'])."
+                            "description": "List of telemetry keys (e.g., ['active_power', 'voltage', 'temp']).",
                         },
-                        "start_date": {
-                            "type": "string",
-                            "description": "Start date in ISO format (YYYY-MM-DD)."
-                        },
-                        "end_date": {
-                            "type": "string",
-                            "description": "End date in ISO format (YYYY-MM-DD)."
-                        },
+                        "start_date": {"type": "string", "description": "Start date in ISO format (YYYY-MM-DD)."},
+                        "end_date": {"type": "string", "description": "End date in ISO format (YYYY-MM-DD)."},
                         "aggregation": {
                             "type": "string",
                             "enum": ["hour", "day", "week"],
-                            "description": "Aggregation bucket size. Use 'hour' for detailed look, 'day' for trends."
-                        }
+                            "description": "Aggregation bucket size. Use 'hour' for detailed look, 'day' for trends.",
+                        },
                     },
-                    "required": ["device_ids", "keys", "start_date", "end_date"]
-                }
-            }
+                    "required": ["device_ids", "keys", "start_date", "end_date"],
+                },
+            },
         },
         {
             "type": "function",
@@ -64,17 +58,14 @@ def get_tools_definition():
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "days": {
-                            "type": "integer",
-                            "description": "Number of past days to look back. Default is 7."
-                        },
+                        "days": {"type": "integer", "description": "Number of past days to look back. Default is 7."},
                         "status": {
                             "type": "string",
                             "enum": ["active", "acknowledged", "resolved"],
-                            "description": "Filter by alert status."
-                        }
-                    }
-                }
-            }
-        }
+                            "description": "Filter by alert status.",
+                        },
+                    },
+                },
+            },
+        },
     ]

@@ -1,8 +1,10 @@
 from django.urls import reverse_lazy
-from django.views.generic import ListView, CreateView, UpdateView, DeleteView
-from apps.teams.mixins import PermissionRequiredMixin
-from apps.dashboard.models import SharedDashboard
+from django.views.generic import CreateView, DeleteView, ListView, UpdateView
+
 from apps.dashboard.forms import SharedDashboardForm
+from apps.dashboard.models import SharedDashboard
+from apps.teams.mixins import PermissionRequiredMixin
+
 
 class SharedDashboardListView(PermissionRequiredMixin, ListView):
     permission_required = "manage_shared_links"
@@ -18,6 +20,7 @@ class SharedDashboardListView(PermissionRequiredMixin, ListView):
         context["active_tab"] = "shared-links"
         return context
 
+
 class SharedDashboardCreateView(PermissionRequiredMixin, CreateView):
     permission_required = "manage_shared_links"
     model = SharedDashboard
@@ -31,6 +34,7 @@ class SharedDashboardCreateView(PermissionRequiredMixin, CreateView):
     def get_success_url(self):
         return reverse_lazy("web_team:dashboard_team:list", args=[self.request.team.slug])
 
+
 class SharedDashboardUpdateView(PermissionRequiredMixin, UpdateView):
     permission_required = "manage_shared_links"
     model = SharedDashboard
@@ -42,6 +46,7 @@ class SharedDashboardUpdateView(PermissionRequiredMixin, UpdateView):
 
     def get_success_url(self):
         return reverse_lazy("web_team:dashboard_team:list", args=[self.request.team.slug])
+
 
 class SharedDashboardDeleteView(PermissionRequiredMixin, DeleteView):
     permission_required = "manage_shared_links"

@@ -37,6 +37,7 @@ def single_chat_streaming(request, chat_id: int):
     chat = get_object_or_404(Chat, user=request.user, id=chat_id)
     websocket_url = websocket_absolute_url(websocket_reverse("ws_openai_continue_chat", args=[chat_id]))
     from apps.chat.models import ChatUsage
+
     usage_count = ChatUsage.get_count_for_team(request.team)
     return TemplateResponse(
         request,

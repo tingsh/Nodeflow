@@ -1,30 +1,33 @@
 from django.utils import timezone
 
+
 def get_system_prompt(team, user):
     """
     Generate a dynamic system prompt based on the team's infrastructure.
     """
     now = timezone.now()
-    
+
     # Gather team context
     sites = team.site_set.all()
     devices = team.device_set.all()
-    
+
     context = []
     context.append(f"Current Time: {now.strftime('%Y-%m-%d %H:%M:%S')} UTC")
     context.append(f"User: {user.get_display_name()}")
     context.append(f"Team: {team.name}")
-    
+
     context.append("\nAvailable Sites:")
     for site in sites:
         context.append(f"- {site.name} (ID: {site.id})")
-        
+
     context.append("\nConnected Devices:")
     for device in devices:
-        context.append(f"- {device.name} (ID: {device.id}) @ Site: {device.site.name}. Type: {device.device_type}. Category: {device.energy_category}")
-    
+        context.append(
+            f"- {device.name} (ID: {device.id}) @ Site: {device.site.name}. Type: {device.device_type}. Category: {device.energy_category}"
+        )
+
     context_str = "\n".join(context)
-    
+
     return f"""You are Antigravity AI, the intelligent assistant for the Nodeflow Industrial IoT platform.
 You help engineers and plant managers understand their real-time and historical data.
 

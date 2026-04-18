@@ -1,4 +1,5 @@
 from django.urls import path
+
 from . import team_views as views
 
 app_name = "dashboard_team"

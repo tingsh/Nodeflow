@@ -2,7 +2,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from apps.teams.models import Invitation, Team
-from apps.teams.roles import ROLE_ADMIN, ROLE_MANAGER, ROLE_OWNER
+from apps.teams.roles import ROLE_MANAGER, ROLE_OWNER
 from apps.users.models import CustomUser
 
 PASSWORD = "123"

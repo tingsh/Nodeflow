@@ -12,7 +12,7 @@ from apps.teams.forms import InvitationForm, TeamChangeForm
 from apps.teams.helpers import get_open_invitations_for_user
 from apps.teams.invitations import send_invitation
 from apps.teams.models import Invitation
-from apps.teams.roles import is_admin, has_permission, ROLE_OWNER, ROLE_DESCRIPTIONS
+from apps.teams.roles import ROLE_DESCRIPTIONS, ROLE_OWNER, has_permission
 from apps.web.forms import set_form_fields_disabled
 
 

@@ -38,7 +38,9 @@ class TeamMixinTest(TestCase):
         cls.sox.members.add(cls.sox_member, through_defaults={"role": ROLE_MANAGER})
 
         cls.yanks_admin = CustomUser.objects.create(username="joe.torre@yankees.com", email="joe.torre@yankees.com")
-        cls.yanks_member = CustomUser.objects.create(username="derek.jeter@yankees.com", email="derek.jeter@yankees.com")
+        cls.yanks_member = CustomUser.objects.create(
+            username="derek.jeter@yankees.com", email="derek.jeter@yankees.com"
+        )
         cls.yanks.members.add(cls.yanks_admin, through_defaults={"role": ROLE_ADMIN})
         cls.yanks.members.add(cls.yanks_member, through_defaults={"role": ROLE_MANAGER})
 

@@ -1,7 +1,9 @@
 import logging
+
 from apps.alerts.models import AlertRule
 
 logger = logging.getLogger(__name__)
+
 
 def apply_template_presets(device):
     """
@@ -23,15 +25,15 @@ def apply_template_presets(device):
             rule, created = AlertRule.objects.get_or_create(
                 team=device.team,
                 device=device,
-                telemetry_key=preset['key'],
-                condition=preset['condition'],
-                threshold=preset['threshold'],
+                telemetry_key=preset["key"],
+                condition=preset["condition"],
+                threshold=preset["threshold"],
                 defaults={
-                    'name': f"Auto: {device.name} {preset['key']} {preset['condition']} {preset['threshold']}",
-                    'severity': preset.get('severity', 'warning'),
-                    'site': device.site,
-                    'is_active': True,
-                }
+                    "name": f"Auto: {device.name} {preset['key']} {preset['condition']} {preset['threshold']}",
+                    "severity": preset.get("severity", "warning"),
+                    "site": device.site,
+                    "is_active": True,
+                },
             )
             if created:
                 created_count += 1

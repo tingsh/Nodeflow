@@ -25,9 +25,7 @@ class Chat(BaseModel):
     def __str__(self):
         return f"{self.name} ({self.user})"
 
-    team = models.ForeignKey(
-        "teams.Team", on_delete=models.CASCADE, null=True, blank=True, related_name="chats"
-    )
+    team = models.ForeignKey("teams.Team", on_delete=models.CASCADE, null=True, blank=True, related_name="chats")
 
     def get_openai_messages(self) -> list[dict]:
         """

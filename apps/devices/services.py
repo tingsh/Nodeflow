@@ -1,12 +1,15 @@
 import json
 import logging
 import uuid
+
 import paho.mqtt.publish as publish
 from django.conf import settings
 from django.utils import timezone
+
 from .models import DeviceCommand
 
-logger = logging.getLogger('iot_platform')
+logger = logging.getLogger("iot_platform")
+
 
 def send_device_command(device, user, key, value):
     """
@@ -17,17 +20,10 @@ def send_device_command(device, user, key, value):
 
     # 1. Create Command Record
     transaction_id = str(uuid.uuid4())
-    
+
     # Prepare the payload (Compatible with TB Gateway RPC format)
     # { "device": "Device A", "data": { "id": 123, "method": "set_power", "params": 100 } }
-    rpc_payload = {
-        "device": device.name,
-        "data": {
-            "id": transaction_id,
-            "method": key,
-            "params": value
-        }
-    }
+    rpc_payload = {"device": device.name, "data": {"id": transaction_id, "method": key, "params": value}}
 
     command = DeviceCommand.objects.create(
         team=device.team,
@@ -37,7 +33,7 @@ def send_device_command(device, user, key, value):
         value=value,
         transaction_id=transaction_id,
         payload=rpc_payload,
-        status='pending'
+        status="pending",
     )
 
     # 2. Publish to MQTT
@@ -48,18 +44,19 @@ def send_device_command(device, user, key, value):
             payload=json.dumps(rpc_payload),
             hostname=settings.MQTT_BROKER_HOST,
             port=settings.MQTT_BROKER_PORT,
-            client_id=f"nodeflow_srv_{uuid.uuid4().hex[:8]}"
+            client_id=f"nodeflow_srv_{uuid.uuid4().hex[:8]}",
         )
-        command.status = 'sent'
+        command.status = "sent"
         command.save()
         logger.info(f"Command {key}={value} sent to {device.name} (tx: {transaction_id})")
         return command
     except Exception as e:
-        command.status = 'failed'
+        command.status = "failed"
         command.error_message = str(e)
         command.save()
         logger.error(f"Failed to publish command to MQTT: {e}")
         raise e
+
 
 def process_command_response(payload_str):
     """
@@ -68,9 +65,9 @@ def process_command_response(payload_str):
     """
     try:
         payload = json.loads(payload_str)
-        tx_id = payload.get('id')
-        device_name = payload.get('device')
-        
+        tx_id = payload.get("id")
+        device_name = payload.get("device")
+
         if not tx_id:
             return
 
@@ -78,14 +75,14 @@ def process_command_response(payload_str):
         if command:
             command.response_payload = payload
             command.executed_at = timezone.now()
-            
-            data = payload.get('data', {})
-            if data.get('success') is True or data.get('status') == 'OK':
-                command.status = 'executed'
+
+            data = payload.get("data", {})
+            if data.get("success") is True or data.get("status") == "OK":
+                command.status = "executed"
             else:
-                command.status = 'failed'
-                command.error_message = data.get('error', 'Execution failed at edge')
-            
+                command.status = "failed"
+                command.error_message = data.get("error", "Execution failed at edge")
+
             command.save()
             logger.info(f"Command {command.transaction_id} updated to {command.status}")
     except Exception as e:
