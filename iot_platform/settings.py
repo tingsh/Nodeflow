@@ -114,6 +114,7 @@ PROJECT_APPS = [
     "apps.onboarding",
     "apps.events",
     "apps.maintenance",
+    "apps.automations",
 ]
 
 # MQTT Settings
@@ -519,6 +520,12 @@ CACHES = {
 
 CELERY_BROKER_URL = CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+CELERY_BEAT_SCHEDULE = {
+    "generate-preventive-tickets": {
+        "task": "apps.maintenance.tasks.generate_preventive_tickets",
+        "schedule": 86400.0,  # Run daily
+    },
+}
 
 # Channels / Daphne setup
 
