@@ -1,6 +1,8 @@
 {% load i18n %}
 {% load notification_tags %}
-{% get_unread_notifications team as notifications %}
+
+{% if request.team %}
+{% get_unread_notifications request.team as notifications %}
 
 <details class="dropdown dropdown-end mx-1">
     <summary class="btn btn-ghost btn-sm btn-circle relative list-none cursor-pointer">
@@ -21,7 +23,7 @@
         </div>
         
         <div class="max-h-96 overflow-y-auto">
-            {% if notifications.unread_count == 0 %}
+            {% if notifications.unread_count == 0 and notifications.discoveries|length == 0 %}
                 <div class="py-12 text-center">
                     <div class="p-3 bg-base-200 rounded-full w-fit mx-auto mb-3">
                         <i class="fa fa-check text-base-content/20"></i>
@@ -76,3 +78,5 @@
         </div>
     </div>
 </details>
+{% endif %}
+

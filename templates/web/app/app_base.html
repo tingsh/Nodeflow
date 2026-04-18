@@ -3,17 +3,26 @@
 {% block top_nav %}
   {% include 'web/components/top_nav_app.html' %}
 {% endblock %}
+{% block footer %}{% endblock %}
 {% block body %}
   {% block notifications %}
   {% endblock %}
-  <section class="section">
-    <div class="container flex flex-row">
-      <div class="w-64 hidden lg:flex">
-        {% block sidebar-nav %}
-          {% include "web/components/app_nav.html" %}
-        {% endblock %}
+  <section class="section" 
+           x-data="{ sidebarOpen: true }" 
+           @toggle-sidebar.window="sidebarOpen = !sidebarOpen">
+    <div class="max-w-[1800px] mx-auto px-4 sm:px-8 lg:px-12 flex flex-row min-h-screen">
+      <!-- Sidebar Container -->
+      <div class="transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0"
+           :class="sidebarOpen ? 'w-64 opacity-100' : 'w-0 opacity-0 pointer-events-none'">
+        <div class="w-64"> <!-- Content wrapper to prevent squishing -->
+          {% block sidebar-nav %}
+            {% include "web/components/app_nav.html" %}
+          {% endblock %}
+        </div>
       </div>
-      <div class="w-full">
+
+      <!-- Main App Content -->
+      <div class="flex-1 min-w-0 transition-all duration-300">
         {% block app %}
         {% endblock %}
       </div>

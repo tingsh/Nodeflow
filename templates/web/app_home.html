@@ -1,245 +1,379 @@
 {% extends "web/app/app_base.html" %}
 {% load i18n %}
 {% load static %}
+{% load team_permissions %}
 
 {% block app %}
 <div class="px-4 sm:px-6 lg:px-8 py-8 selection:bg-indigo-500/30">
     <!-- Header -->
-    <div class="mb-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+    <div class="mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
             <h1 class="text-3xl font-black text-base-content font-heading tracking-tight">Command Center</h1>
             <p class="text-sm text-base-content/50 mt-1 font-light">Real-time fleet operations and energy intelligence.</p>
         </div>
-        <div class="flex items-center space-x-2 bg-base-100 px-4 py-2 rounded-2xl border border-base-content/5 shadow-sm">
-            <span class="flex h-2 w-2 relative">
-              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-              <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-            </span>
-            <span class="text-[10px] font-black text-green-600 dark:text-green-400 font-mono tracking-widest uppercase">Nodes Online</span>
+        <div class="flex items-center space-x-3">
+            <div class="flex items-center space-x-2 bg-base-100 px-4 py-2 rounded-2xl border border-base-content/5 shadow-sm">
+                <span class="flex h-2 w-2 relative">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                <span class="text-[10px] font-black text-green-600 dark:text-green-400 font-mono tracking-widest uppercase">{{ devices_online }} / {{ devices_count }} Online</span>
+            </div>
         </div>
     </div>
 
-    <!-- Top Grid: Stats & Fleet Chart -->
-    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
-        <!-- Stats Sidebar -->
-        <div class="lg:col-span-1 space-y-6">
-            <div class="bg-base-100 p-6 rounded-3xl border border-base-content/5 shadow-sm group hover:border-indigo-500/20 transition-all">
-                <p class="text-[10px] font-black text-base-content/30 uppercase tracking-widest mb-3">Energy (24h)</p>
-                <div class="flex items-baseline space-x-2">
-                    <h2 class="text-4xl font-black text-base-content font-mono">{{ total_energy }}</h2>
-                    <span class="text-xs font-bold text-base-content/30 uppercase">kWh</span>
+    <div id="dashboard-live-container" hx-get="{% url 'web_team:home' team.slug %}" hx-trigger="every 60s" hx-select="#dashboard-live-container" hx-swap="outerHTML" class="bg-noise">
+        <!-- Row 1: KPI Strip -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+        <!-- Energy -->
+        <div class="bg-base-100 p-5 rounded-2xl border border-base-content/5 shadow-sm group hover:border-indigo-500/30 transition-all cursor-pointer glass-card" onclick="window.location.href='{% url 'web_team:devices:device_list' team.slug %}'">
+            <div class="flex items-center justify-between mb-3">
+                <p class="text-[10px] font-black text-base-content/30 uppercase tracking-widest">Energy (24h)</p>
+                <div class="w-8 h-8 rounded-xl bg-indigo-500/10 flex items-center justify-center">
+                    <i class="fa fa-bolt text-indigo-500 text-sm"></i>
                 </div>
             </div>
-            <div class="bg-base-100 p-6 rounded-3xl border border-base-content/5 shadow-sm group hover:border-indigo-500/20 transition-all">
-                <p class="text-[10px] font-black text-base-content/30 uppercase tracking-widest mb-3">Nodes</p>
-                <div class="flex items-baseline space-x-4">
-                    <div>
-                        <span class="text-2xl font-black text-base-content font-mono">{{ sites_count }}</span>
-                        <span class="text-[9px] font-bold text-base-content/40 block">SITES</span>
-                    </div>
-                    <div>
-                        <span class="text-2xl font-black text-base-content font-mono">{{ devices_count }}</span>
-                        <span class="text-[9px] font-bold text-base-content/40 block">DEVICES</span>
-                    </div>
-                </div>
-            </div>
-            <div class="bg-base-100 p-6 rounded-3xl border border-base-content/5 shadow-sm group hover:border-indigo-500/20 transition-all cursor-pointer" onclick="window.location.href='{% url 'web_team:maintenance:ticket_list' request.team.slug %}'">
-                <p class="text-[10px] font-black text-base-content/30 uppercase tracking-widest mb-3">Maintenance</p>
-                <div class="flex items-baseline space-x-4">
-                    <div>
-                        <span class="text-2xl font-black text-base-content font-mono">{{ open_tickets }}</span>
-                        <span class="text-[9px] font-bold text-base-content/40 block">OPEN TKTS</span>
-                    </div>
-                    <div>
-                        <span class="text-2xl font-black text-{% if overdue_pms > 0 %}red-500{% else %}base-content{% endif %} font-mono">{{ overdue_pms }}</span>
-                        <span class="text-[9px] font-bold text-{% if overdue_pms > 0 %}red-500/70{% else %}base-content/40{% endif %} block">OVERDUE PMS</span>
-                    </div>
-                </div>
-            </div>
-            <a href="{% url 'web_team:onboarding:setup_start' request.team.slug %}" class="block bg-indigo-600 p-6 rounded-3xl shadow-lg shadow-indigo-600/20 group hover:scale-[1.02] transition-all relative overflow-hidden">
-                <div class="absolute -right-4 -bottom-4 opacity-20 group-hover:scale-110 transition-transform">
-                    <i class="fa fa-plus-circle text-6xl text-white"></i>
-                </div>
-                <h3 class="text-white font-black text-lg leading-tight">Add<br/>Hardware</h3>
-                <p class="text-white/60 text-xs mt-2">Provision new nodes</p>
-            </a>
+            <h2 class="text-3xl font-black text-base-content font-mono">{{ total_energy }}</h2>
+            <span class="text-[10px] font-bold text-base-content/30 uppercase">kWh</span>
         </div>
 
-        <!-- Fleet Chart -->
-        <div class="lg:col-span-3 bg-base-100 rounded-3xl border border-base-content/5 shadow-sm overflow-hidden flex flex-col p-6">
-            <div class="flex items-center justify-between mb-6">
-                <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">Fleet Energy Profile</h3>
-                <div class="flex space-x-2">
-                    <span class="bg-indigo-500/10 text-indigo-500 text-[9px] font-black px-2 py-1 rounded-md">LAST 24H</span>
+        <!-- Active Alerts -->
+        <div class="bg-base-100 p-5 rounded-2xl border border-base-content/5 shadow-sm group hover:border-red-500/30 transition-all cursor-pointer" onclick="window.location.href='{% url 'web_team:alerts:alert_list' team.slug %}'">
+            <div class="flex items-center justify-between mb-3">
+                <p class="text-[10px] font-black text-base-content/30 uppercase tracking-widest">Active Alerts</p>
+                <div class="w-8 h-8 rounded-xl {% if active_alerts_count > 0 %}bg-red-500/10{% else %}bg-green-500/10{% endif %} flex items-center justify-center">
+                    <i class="fa fa-bell {% if active_alerts_count > 0 %}text-red-500 animate-pulse{% else %}text-green-500{% endif %} text-sm"></i>
                 </div>
             </div>
-            <div class="flex-1 min-h-[220px]">
+            <h2 class="text-3xl font-black {% if active_alerts_count > 0 %}text-red-500{% else %}text-base-content{% endif %} font-mono">{{ active_alerts_count }}</h2>
+            <span class="text-[10px] font-bold text-base-content/30 uppercase">Triggered</span>
+        </div>
+
+        <!-- Devices Online -->
+        <div class="bg-base-100 p-5 rounded-2xl border border-base-content/5 shadow-sm group hover:border-emerald-500/30 transition-all cursor-pointer" onclick="window.location.href='{% url 'web_team:devices:device_list' team.slug %}'">
+            <div class="flex items-center justify-between mb-3">
+                <p class="text-[10px] font-black text-base-content/30 uppercase tracking-widest">Fleet</p>
+                <div class="w-8 h-8 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                    <i class="fa fa-microchip text-emerald-500 text-sm"></i>
+                </div>
+            </div>
+            <div class="flex items-baseline space-x-3">
+                <div>
+                    <span class="text-3xl font-black text-base-content font-mono">{{ devices_online }}</span>
+                    <span class="text-[10px] font-bold text-green-500 block uppercase">Online</span>
+                </div>
+                <div>
+                    <span class="text-xl font-black text-base-content/30 font-mono">{{ devices_offline }}</span>
+                    <span class="text-[10px] font-bold text-base-content/30 block uppercase">Offline</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Open Tickets -->
+        <div class="bg-base-100 p-5 rounded-2xl border border-base-content/5 shadow-sm group hover:border-amber-500/30 transition-all cursor-pointer" onclick="window.location.href='{% url 'web_team:maintenance:ticket_list' team.slug %}'">
+            <div class="flex items-center justify-between mb-3">
+                <p class="text-[10px] font-black text-base-content/30 uppercase tracking-widest">Maintenance</p>
+                <div class="w-8 h-8 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                    <i class="fa fa-wrench text-amber-500 text-sm"></i>
+                </div>
+            </div>
+            <div class="flex items-baseline space-x-3">
+                <div>
+                    <span class="text-3xl font-black text-base-content font-mono">{{ open_tickets }}</span>
+                    <span class="text-[10px] font-bold text-base-content/30 block uppercase">Open</span>
+                </div>
+                {% if overdue_pms > 0 %}
+                <div>
+                    <span class="text-xl font-black text-red-500 font-mono">{{ overdue_pms }}</span>
+                    <span class="text-[10px] font-bold text-red-500/70 block uppercase">Overdue</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Automations -->
+        <div class="bg-base-100 p-5 rounded-2xl border border-base-content/5 shadow-sm group hover:border-purple-500/30 transition-all cursor-pointer glass-card" onclick="window.location.href='{% url 'web_team:automations:list' team.slug %}'">
+            <div class="flex items-center justify-between mb-3">
+                <p class="text-[10px] font-black text-base-content/30 uppercase tracking-widest">Automations</p>
+                <div class="w-8 h-8 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                    <i class="fa fa-bolt text-purple-500 text-sm"></i>
+                </div>
+            </div>
+            <h2 class="text-3xl font-black text-base-content font-mono">{{ active_automations }}</h2>
+            <span class="text-[10px] font-bold text-base-content/30 uppercase">of {{ total_automations }} active</span>
+        </div>
+    </div>
+
+    <!-- Row 2: Fleet Chart + Alert Feed -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <!-- Fleet Energy Chart -->
+        <div class="lg:col-span-2 bg-base-100 rounded-3xl border border-base-content/5 shadow-sm overflow-hidden flex flex-col p-6 glass-card">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">Fleet Energy Profile</h3>
+                <div class="flex items-center space-x-2">
+                    <span class="bg-indigo-500/10 text-indigo-500 text-[9px] font-black px-2 py-1 rounded-md">LAST 24H</span>
+                    <span class="bg-base-200 text-base-content/40 text-[9px] font-black px-2 py-1 rounded-md">LIVE</span>
+                </div>
+            </div>
+            <div class="flex-1 min-h-[250px]">
                 <canvas id="fleet-chart"></canvas>
             </div>
         </div>
-    </div>
 
-    <!-- Bottom Grid: Sites & Activity -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Site Navigator -->
+        <!-- Live Alert Feed -->
         <div class="lg:col-span-1 bg-base-100 rounded-3xl border border-base-content/5 shadow-sm overflow-hidden flex flex-col">
             <div class="px-6 py-5 border-b border-base-content/5 flex justify-between items-center bg-base-200/20">
+                <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">Live Alerts</h3>
+                <a href="{% url 'web_team:alerts:alert_list' team.slug %}" class="text-[10px] font-bold text-indigo-500 hover:underline uppercase">View All</a>
+            </div>
+            <div class="flex-1 overflow-auto max-h-[350px]">
+                <ul class="divide-y divide-base-content/5">
+                    {% for alert in recent_alerts %}
+                    <li class="px-5 py-4 hover:bg-base-200/30 transition-colors">
+                        <div class="flex items-start gap-3">
+                            <div class="mt-1 shrink-0">
+                                {% if alert.rule.severity == 'critical' %}
+                                <div class="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)] animate-pulse"></div>
+                                {% elif alert.rule.severity == 'warning' %}
+                                <div class="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]"></div>
+                                {% else %}
+                                <div class="w-2.5 h-2.5 rounded-full bg-blue-400"></div>
+                                {% endif %}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-bold text-base-content truncate">{{ alert.rule.name }}</p>
+                                <div class="flex items-center gap-2 mt-1.5">
+                                    <span class="text-[9px] font-black text-indigo-500/80 uppercase bg-indigo-500/5 px-1.5 py-0.5 rounded">{{ alert.device.name }}</span>
+                                    <span class="text-[9px] font-black text-base-content/25 font-mono">{{ alert.triggered_at|timesince }} ago</span>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                    {% empty %}
+                    <li class="px-6 py-12 text-center text-base-content/25">
+                        <i class="fa fa-shield-check text-3xl mb-2 block"></i>
+                        <p class="text-[10px] font-black uppercase">All Clear</p>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Row 3: Site Navigator + Device Fleet + Quick Actions -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Site Navigator -->
+        <div class="bg-base-100 rounded-3xl border border-base-content/5 shadow-sm overflow-hidden flex flex-col">
+            <div class="px-6 py-5 border-b border-base-content/5 flex justify-between items-center bg-base-200/20">
                 <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">Site Navigator</h3>
-                <a href="{% url 'web_team:devices:site_create' request.team.slug %}" class="btn btn-ghost btn-xs text-indigo-500">
+                {% has_perm 'manage_devices' as can_manage_devices %}
+                {% if can_manage_devices %}
+                <a href="{% url 'web_team:devices:site_create' team.slug %}" class="btn btn-ghost btn-xs text-indigo-500">
                     <i class="fa fa-plus mr-1"></i>
                 </a>
+                {% endif %}
             </div>
-            <div class="flex-1 overflow-auto max-h-[400px]">
+            <div class="flex-1 overflow-auto max-h-[320px]">
                 <ul class="divide-y divide-base-content/5">
                     {% for site in team.site_set.all %}
-                    <li class="group px-6 py-4 hover:bg-base-200/30 transition-colors cursor-pointer" onclick="window.location.href='{% url 'web_team:devices:site_detail' request.team.slug site.pk %}'">
+                    <li class="group px-6 py-4 hover:bg-base-200/30 transition-colors cursor-pointer" onclick="window.location.href='{% url 'web_team:devices:site_detail' team.slug site.pk %}'">
                         <div class="flex items-center justify-between">
                             <div class="flex items-center">
-                                <div class="w-8 h-8 rounded-xl bg-base-200 flex items-center justify-center mr-3 group-hover:bg-indigo-500 group-hover:text-white transition-all">
+                                <div class="w-9 h-9 rounded-xl bg-base-200 flex items-center justify-center mr-3 group-hover:bg-indigo-500 group-hover:text-white transition-all">
                                     <i class="fa fa-map-marker-alt text-xs opacity-40 group-hover:opacity-100"></i>
                                 </div>
                                 <div>
-                                    <h4 class="text-sm font-bold text-base-content group-hover:text-indigo-500">{{ site.name }}</h4>
+                                    <h4 class="text-sm font-bold text-base-content group-hover:text-indigo-500 transition-colors">{{ site.name }}</h4>
                                     <p class="text-[10px] text-base-content/40 uppercase font-black">{{ site.devices.count }} devices</p>
                                 </div>
                             </div>
-                            <i class="fa fa-chevron-right text-[10px] opacity-10 group-hover:opacity-100 group-hover:translate-x-1 transition-all"></i>
+                            <i class="fa fa-chevron-right text-[10px] opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all"></i>
                         </div>
                     </li>
                     {% empty %}
                     <li class="px-6 py-10 text-center text-base-content/30">
                         <i class="fa fa-folder-open mb-2 text-xl block"></i>
-                        <p class="text-[10px] font-bold">NO SITES CONFIGURED</p>
+                        <p class="text-[10px] font-bold uppercase">No Sites Configured</p>
                     </li>
                     {% endfor %}
                 </ul>
             </div>
         </div>
 
-        <!-- Activity Feed -->
-        <div class="lg:col-span-2 bg-base-100 rounded-3xl border border-base-content/5 shadow-sm overflow-hidden flex flex-col pt-6">
-            <div class="px-6 mb-6">
-                <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40 mb-4">Operations Feed</h3>
-                <div class="flex space-x-1 bg-base-200/50 p-1 rounded-xl w-fit" id="feed-tabs">
-                    <button onclick="filterFeed('all')" class="feed-tab active text-[10px] font-black px-4 py-1.5 rounded-lg transition-all" data-category="all">ALL</button>
-                    <button onclick="filterFeed('infrastructure')" class="feed-tab text-[10px] font-black px-4 py-1.5 rounded-lg transition-all" data-category="infrastructure">INFRA</button>
-                    <button onclick="filterFeed('alert')" class="feed-tab text-[10px] font-black px-4 py-1.5 rounded-lg transition-all" data-category="alert">ALERTS</button>
-                    <button onclick="filterFeed('audit')" class="feed-tab text-[10px] font-black px-4 py-1.5 rounded-lg transition-all" data-category="audit">LOGS</button>
-                </div>
+        <!-- Device Fleet Grid -->
+        <div class="bg-base-100 rounded-3xl border border-base-content/5 shadow-sm overflow-hidden flex flex-col">
+            <div class="px-6 py-5 border-b border-base-content/5 flex justify-between items-center bg-base-200/20">
+                <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">Device Fleet</h3>
+                <a href="{% url 'web_team:devices:device_list' team.slug %}" class="text-[10px] font-bold text-indigo-500 hover:underline uppercase">All Devices</a>
             </div>
-            
-            <div class="flex-1 overflow-auto max-h-[400px] px-2 pb-6">
-                <ul class="space-y-2">
-                    {% for log in logs %}
-                    <li class="log-item p-4 rounded-2xl border border-transparent hover:bg-base-200/40 hover:border-base-content/5 transition-all" data-category="{{ log.category }}">
-                        <div class="flex items-start">
-                            <div class="mt-1">
-                                {% if log.category == 'infrastructure' %}
-                                <div class="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
-                                {% elif log.category == 'alert' %}
-                                <div class="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)] animate-pulse"></div>
+            <div class="flex-1 overflow-auto max-h-[320px] p-3">
+                <div class="grid grid-cols-2 gap-2">
+                    {% for device in top_devices %}
+                    <div class="p-3 rounded-xl bg-base-200/40 border border-base-content/5 hover:border-indigo-500/30 transition-all group cursor-pointer" onclick="window.location.href='{% url 'web_team:devices:device_detail' team.slug device.pk %}'">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="flex h-2 w-2 shrink-0">
+                                {% if device.status == 'online' %}
+                                <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                                 {% else %}
-                                <div class="w-2 h-2 rounded-full bg-slate-300"></div>
+                                <span class="relative inline-flex rounded-full h-2 w-2 bg-slate-300"></span>
                                 {% endif %}
-                            </div>
-                            <div class="ml-4 flex-1">
-                                <div class="flex items-center justify-between">
-                                    <p class="text-sm font-bold text-base-content leading-tight">{{ log.message }}</p>
-                                    <span class="text-[9px] font-black text-base-content/30 uppercase font-mono ml-4">{{ log.timestamp|timesince }} ago</span>
-                                </div>
-                                <div class="flex items-center mt-2 space-x-3">
-                                    {% if log.site %}
-                                    <span class="text-[9px] font-black text-indigo-500 uppercase tracking-tighter bg-indigo-500/5 px-1.5 py-0.5 rounded">{{ log.site.name }}</span>
-                                    {% endif %}
-                                    {% if log.device %}
-                                    <span class="text-[9px] font-black text-base-content/30 uppercase tracking-tighter">{{ log.device.name }}</span>
-                                    {% endif %}
-                                </div>
-                            </div>
+                            </span>
+                            <span class="text-[11px] font-bold text-base-content truncate group-hover:text-indigo-500 transition-colors">{{ device.name }}</span>
                         </div>
-                    </li>
+                        {% if device.id in device_readings %}
+                        <div class="text-[10px] text-base-content/40 font-mono">
+                            {{ device_readings|dictsort:"key" }}
+                            <span class="font-bold text-base-content/60">{{ device_readings.key }}</span>
+                        </div>
+                        {% endif %}
+                        <div class="text-[9px] text-base-content/25 mt-1 font-mono">
+                            {% if device.last_telemetry_at %}{{ device.last_telemetry_at|timesince }} ago{% else %}No data{% endif %}
+                        </div>
+                    </div>
                     {% empty %}
-                    <div class="py-20 text-center opacity-20">
-                        <i class="fa fa-stream text-4xl mb-2 block"></i>
-                        <p class="text-xs font-black">FEED IS QUIET</p>
+                    <div class="col-span-2 py-8 text-center text-base-content/30">
+                        <i class="fa fa-microchip text-xl mb-2 block"></i>
+                        <p class="text-[10px] font-black uppercase">No Devices Yet</p>
                     </div>
                     {% endfor %}
-                </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="bg-base-100 rounded-3xl border border-base-content/5 shadow-sm overflow-hidden flex flex-col">
+            <div class="px-6 py-5 border-b border-base-content/5 bg-base-200/20">
+                <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">Quick Actions</h3>
+            </div>
+            <div class="flex-1 p-4 space-y-3">
+                <a href="{% url 'web_team:onboarding:setup_start' team.slug %}" class="flex items-center p-4 rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 group hover:scale-[1.02] transition-all relative overflow-hidden">
+                    <div class="absolute -right-4 -bottom-4 opacity-20 group-hover:scale-110 transition-transform">
+                        <i class="fa fa-plus-circle text-5xl"></i>
+                    </div>
+                    <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center mr-4">
+                        <i class="fa fa-server text-lg"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-sm">Add Hardware</h4>
+                        <p class="text-white/60 text-[10px]">Provision new gateways & devices</p>
+                    </div>
+                </a>
+
+                {% has_perm 'manage_alerts' as can_manage_alerts %}
+                {% if can_manage_alerts %}
+                <a href="{% url 'web_team:alerts:rule_create' team.slug %}" class="flex items-center p-4 rounded-2xl bg-base-200/50 border border-base-content/5 group hover:border-red-500/30 hover:bg-red-500/5 transition-all">
+                    <div class="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center mr-4">
+                        <i class="fa fa-bell text-red-500"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-sm text-base-content">Create Alert Rule</h4>
+                        <p class="text-base-content/50 text-[10px]">Set threshold triggers</p>
+                    </div>
+                </a>
+                {% endif %}
+
+                {% has_perm 'manage_automations' as can_manage_auto %}
+                {% if can_manage_auto %}
+                <a href="{% url 'web_team:automations:create' team.slug %}" class="flex items-center p-4 rounded-2xl bg-base-200/50 border border-base-content/5 group hover:border-purple-500/30 hover:bg-purple-500/5 transition-all">
+                    <div class="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center mr-4">
+                        <i class="fa fa-bolt text-purple-500"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-sm text-base-content">Create Automation</h4>
+                        <p class="text-base-content/50 text-[10px]">Build IF-THEN logic rules</p>
+                    </div>
+                </a>
+                {% endif %}
+
+                <a href="{% url 'web_team:devices:device_list' team.slug %}" class="flex items-center p-4 rounded-2xl bg-base-200/50 border border-base-content/5 group hover:border-blue-500/30 hover:bg-blue-500/5 transition-all">
+                    <div class="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center mr-4">
+                        <i class="fa fa-chart-line text-blue-500"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-sm text-base-content">View Reports</h4>
+                        <p class="text-base-content/50 text-[10px]">Analyze telemetry trends</p>
+                    </div>
+                </a>
             </div>
         </div>
     </div>
+    </div>
 </div>
-
-<style>
-    .feed-tab.active {
-        background: white;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        color: #6366f1;
-    }
-    .dark .feed-tab.active {
-        background: #1e293b;
-        color: #818cf8;
-    }
-</style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    function filterFeed(category) {
-        // Update Tabs
-        document.querySelectorAll('.feed-tab').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.category === category);
-        });
-
-        // Update Items
-        document.querySelectorAll('.log-item').forEach(item => {
-            if (category === 'all' || item.dataset.category === category) {
-                item.style.display = 'block';
-            } else {
-                item.style.display = 'none';
-            }
-        });
-    }
-
-    function initFleetChart() {
+    document.addEventListener('DOMContentLoaded', () => {
         const ctx = document.getElementById('fleet-chart').getContext('2d');
+
+        const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+        gradient.addColorStop(0, 'rgba(99, 102, 241, 0.15)');
+        gradient.addColorStop(1, 'rgba(99, 102, 241, 0.0)');
+
         new Chart(ctx, {
             type: 'line',
             data: {
-                labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', 'NOW'],
+                labels: {{ hourly_energy.labels|safe }},
                 datasets: [{
-                    label: 'Fleet Energy (kWh)',
-                    data: [12, 19, 3, 5, 2, 3, {{ total_energy }}], // Sample data + real current total
+                    label: 'Energy (kWh)',
+                    data: {{ hourly_energy.values|safe }},
                     borderColor: '#6366f1',
-                    backgroundColor: 'rgba(99, 102, 241, 0.05)',
-                    borderWidth: 4,
+                    backgroundColor: gradient,
+                    borderWidth: 3,
                     fill: true,
                     tension: 0.4,
-                    pointRadius: 4,
-                    pointBackgroundColor: '#6366f1'
+                    pointRadius: 0,
+                    pointHoverRadius: 6,
+                    pointHoverBackgroundColor: '#6366f1',
+                    pointHoverBorderColor: '#fff',
+                    pointHoverBorderWidth: 3,
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1e1b4b',
+                        titleFont: { weight: '800', size: 11 },
+                        bodyFont: { weight: '600', size: 13 },
+                        padding: 12,
+                        cornerRadius: 12,
+                        displayColors: false,
+                        callbacks: {
+                            label: function(ctx) {
+                                return ctx.parsed.y.toFixed(1) + ' kWh';
+                            }
+                        }
+                    }
+                },
                 scales: {
                     x: {
                         grid: { display: false },
-                        ticks: { font: { size: 9, weight: '700' }, color: '#94a3b8' }
+                        ticks: {
+                            font: { size: 9, weight: '700' },
+                            color: '#94a3b8',
+                            maxTicksLimit: 12,
+                        },
+                        border: { display: false }
                     },
                     y: {
                         beginAtZero: true,
-                        grid: { color: 'rgba(0,0,0,0.02)' },
-                        ticks: { font: { size: 9, weight: '700' }, color: '#94a3b8' }
+                        grid: { color: 'rgba(0,0,0,0.03)' },
+                        ticks: {
+                            font: { size: 9, weight: '700' },
+                            color: '#94a3b8',
+                            callback: function(value) { return value + ' kWh'; }
+                        },
+                        border: { display: false }
                     }
                 }
             }
         });
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-        initFleetChart();
     });
 </script>
 {% endblock %}
- stone

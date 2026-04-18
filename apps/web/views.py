@@ -37,60 +37,136 @@ def team_home(request, team_slug):
     assert request.team.slug == team_slug
     
     from apps.devices.models import Site, Gateway, Device
-    from apps.alerts.models import Alert
-    from django.db.models import Sum
+    from apps.alerts.models import Alert, AlertRule
+    from apps.telemetry.models import TelemetryData
+    from apps.maintenance.models import MaintenanceTicket, PreventiveSchedule
+    from apps.automations.models import Automation
+    from django.db.models import Sum, Count, Q
+    from django.utils import timezone
+    from django.core.cache import cache
+    from datetime import timedelta
+    
+    team = request.team
     
     # IoT Stats
-    sites_count = Site.objects.filter(team=request.team).count()
+    sites_count = Site.objects.filter(team=team).count()
     if sites_count == 0:
         return HttpResponseRedirect(reverse("web_team:onboarding:start", args=[team_slug]))
-        
-    gateways_count = Gateway.objects.filter(team=request.team).count()
-    devices_count = Device.objects.filter(team=request.team).count()
     
-    # Energy Aggregates (24h)
-    from apps.telemetry.models import TelemetryData
-    from django.utils import timezone
-    from datetime import timedelta
-    yesterday = timezone.now() - timedelta(days=1)
+    # --- Cache key prefix ---
+    cache_prefix = f"dashboard_{team.id}_"
     
-    # Sum unique energy values (assuming kWh key)
+    # --- Device & Gateway Counts ---
+    devices = Device.objects.filter(team=team)
+    devices_count = devices.count()
+    gateways_count = Gateway.objects.filter(team=team).count()
+    
+    now = timezone.now()
+    five_min_ago = now - timedelta(minutes=5)
+    
+    devices_online = devices.filter(status='online').count()
+    devices_offline = devices_count - devices_online
+    
+    gateways_online = Gateway.objects.filter(team=team, status='online').count()
+    gateways_offline = gateways_count - gateways_online
+    
+    # --- Energy Aggregates (24h) ---
+    yesterday = now - timedelta(days=1)
     total_energy = TelemetryData.objects.filter(
-        device__team=request.team,
+        device__team=team,
         key='energy',
         timestamp__gte=yesterday
     ).aggregate(Sum('value_numeric'))['value_numeric__sum'] or 0
     
-    # Activity Logs
-    from apps.events.models import ActivityLog
-    logs = ActivityLog.objects.filter(team=request.team).order_by('-timestamp')[:20]
+    # --- Hourly energy data for fleet chart (real data) ---
+    cache_key_chart = cache_prefix + "hourly_energy"
+    hourly_energy = cache.get(cache_key_chart)
+    if hourly_energy is None:
+        hourly_energy = {"labels": [], "values": []}
+        for i in range(23, -1, -1):
+            hour_start = now - timedelta(hours=i+1)
+            hour_end = now - timedelta(hours=i)
+            hour_kwh = TelemetryData.objects.filter(
+                device__team=team,
+                key__in=['energy', 'active_power'],
+                timestamp__gte=hour_start,
+                timestamp__lt=hour_end
+            ).aggregate(Sum('value_numeric'))['value_numeric__sum'] or 0
+            hourly_energy["labels"].append(hour_end.strftime("%H:%M"))
+            hourly_energy["values"].append(round(float(hour_kwh), 2))
+        cache.set(cache_key_chart, hourly_energy, 60)  # 60s TTL
     
-    # Maintenance Stats
-    from apps.maintenance.models import MaintenanceTicket, PreventiveSchedule
+    # --- Active Alerts ---
+    active_alerts_count = Alert.objects.filter(
+        device__team=team,
+        status='active'
+    ).count()
+    
+    recent_alerts = Alert.objects.filter(
+        device__team=team
+    ).select_related('device', 'rule').order_by('-triggered_at')[:5]
+    
+    # --- Maintenance Stats ---
     open_tickets = MaintenanceTicket.objects.filter(
-        team=request.team, 
+        team=team, 
         status__in=['open', 'in_progress', 'waiting']
     ).count()
     overdue_pms = PreventiveSchedule.objects.filter(
-        team=request.team,
+        team=team,
         is_active=True,
-        next_due_at__lt=timezone.now()
+        next_due_at__lt=now
     ).count()
+    
+    # --- Automations ---
+    active_automations = Automation.objects.filter(team=team, is_active=True).count()
+    total_automations = Automation.objects.filter(team=team).count()
+    
+    # --- Top Devices for Fleet Grid ---
+    top_devices = devices.select_related('site').order_by('-last_telemetry_at')[:8]
+    
+    # Get latest readings for top devices
+    device_readings = {}
+    for device in top_devices:
+        latest = TelemetryData.objects.filter(device=device).order_by('-timestamp').first()
+        if latest:
+            device_readings[device.id] = {
+                'key': latest.key,
+                'value': latest.value_numeric if latest.value_numeric is not None else latest.value_string,
+                'timestamp': latest.timestamp
+            }
+    
+    # --- Activity Logs ---
+    from apps.events.models import ActivityLog
+    logs = ActivityLog.objects.filter(team=team).order_by('-timestamp')[:15]
 
     return render(
         request,
         "web/app_home.html",
         context={
-            "team": request.team,
+            "team": team,
             "active_tab": "dashboard",
-            "page_title": _("{team} Dashboard").format(team=request.team),
+            "page_title": _("{team} Dashboard").format(team=team),
+            # KPI strip
             "sites_count": sites_count,
             "gateways_count": gateways_count,
             "devices_count": devices_count,
+            "devices_online": devices_online,
+            "devices_offline": devices_offline,
+            "gateways_online": gateways_online,
+            "gateways_offline": gateways_offline,
             "total_energy": round(total_energy, 1),
-            "logs": logs,
+            "active_alerts_count": active_alerts_count,
             "open_tickets": open_tickets,
             "overdue_pms": overdue_pms,
+            "active_automations": active_automations,
+            "total_automations": total_automations,
+            # Charts
+            "hourly_energy": hourly_energy,
+            # Feeds
+            "recent_alerts": recent_alerts,
+            "top_devices": top_devices,
+            "device_readings": device_readings,
+            "logs": logs,
         },
     )
 

@@ -1,4 +1,11 @@
 {% extends 'web/components/top_nav.html' %}
+{% block nav_links %}{% endblock %}
+{% block sidebar_toggle %}
+<button class="btn btn-ghost btn-sm btn-circle mr-3 hidden lg:flex text-base-content/50 hover:text-indigo-500 transition-colors" 
+        @click="$dispatch('toggle-sidebar')">
+  <i class="fa fa-bars text-lg"></i>
+</button>
+{% endblock %}
 {% block mobile_nav %}
 <li class="menu-title">
   <span>Site</span>
@@ -19,4 +26,5 @@
   </details>
 </li>
 {% include 'web/components/app_nav_menu_items.html' %}
+{% block mobile_nav_links %}{% endblock %}
 {% endblock %}

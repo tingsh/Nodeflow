@@ -15,6 +15,10 @@ urlpatterns = [
     path("404/", TemplateView.as_view(template_name="404.html"), name="404"),
     path("500/", TemplateView.as_view(template_name="500.html"), name="500"),
     path("simulate_error/", views.simulate_error),
+    path("product/", TemplateView.as_view(template_name="web/product.html"), name="product"),
+    path("solutions/", TemplateView.as_view(template_name="web/solutions.html"), name="solutions"),
+    path("pricing/", TemplateView.as_view(template_name="web/pricing.html"), name="pricing"),
+    path("about/", TemplateView.as_view(template_name="web/about.html"), name="about"),
     path("health/", views.HealthCheck.as_view(), name="health_check"),
 ]
 
@@ -29,6 +33,7 @@ team_urlpatterns = (
         path("onboarding/", include("apps.onboarding.urls")),
         path("shared-links/", include("apps.dashboard.team_urls")),
         path("maintenance/", include("apps.maintenance.urls")),
+        path("automations/", include("apps.automations.urls")),
     ],
     "web_team",
 )

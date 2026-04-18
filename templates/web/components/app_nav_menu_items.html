@@ -52,6 +52,12 @@
     {% translate "Maintenance" %}
   </a>
 </li>
+<li>
+  <a href="{% url 'web_team:automations:list' team.slug %}" {% if active_tab == 'automations' %}class="menu-active"{% endif %}>
+    <i class="fa fa-bolt h-4 w-4"></i>
+    {% translate "Automations" %}
+  </a>
+</li>
 
 {% endif %}
 
