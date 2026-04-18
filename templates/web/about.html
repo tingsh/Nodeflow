@@ -1,0 +1,78 @@
+{% extends "web/base.html" %}
+{% load static %}
+{% block body %}
+
+<!-- Hero -->
+<section class="pt-32 pb-40 bg-base-100">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="lg:grid lg:grid-cols-2 lg:gap-16 items-center">
+            <div>
+                <h1 class="text-5xl md:text-7xl font-black text-base-content font-heading tracking-tight mb-8">
+                    Smart factories,<br/>
+                    <span class="text-indigo-600">better world.</span>
+                </h1>
+                <p class="text-xl text-base-content/50 font-light leading-relaxed mb-8">
+                    Nodeflow was born from a simple observation: modern software hadn't reached the factory floor. We're on a mission to democratize industrial intelligence for SMEs across ASEAN.
+                </p>
+            </div>
+            <div class="relative">
+                <div class="aspect-square rounded-4xl bg-indigo-600/5 border border-indigo-600/10 flex items-center justify-center">
+                    <div class="text-center">
+                        <span class="text-8xl font-black text-indigo-100 font-heading">SG</span>
+                        <p class="text-xs font-black text-indigo-500 uppercase tracking-widest mt-4">Founded in Singapore</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Values / Mission -->
+<section class="py-32 bg-base-200/50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-12">
+            <div class="space-y-4">
+                <div class="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center text-white"><i class="fa fa-heart"></i></div>
+                <h3 class="text-xl font-black text-base-content">Simplicity First</h3>
+                <p class="text-sm text-base-content/60 leading-relaxed">Industrial software shouldn't require a 3-week training course. We build tools that technicians actually enjoy using.</p>
+            </div>
+            <div class="space-y-4">
+                <div class="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white"><i class="fa fa-shield-check"></i></div>
+                <h3 class="text-xl font-black text-base-content">Data Sovereignty</h3>
+                <p class="text-sm text-base-content/60 leading-relaxed">Your data belongs to you. We provide open exports and transparent storage policies, ensuring no vendor lock-in.</p>
+            </div>
+            <div class="space-y-4">
+                <div class="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center text-white"><i class="fa fa-microchip"></i></div>
+                <h3 class="text-xl font-black text-base-content">Edge-Enabled</h3>
+                <p class="text-sm text-base-content/60 leading-relaxed">We believe the future is hybrid. Powerful cloud analytics paired with robust, offline-resilient edge hardware.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Contact / Support -->
+<section class="py-32 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="bg-base-content rounded-4xl p-12 lg:p-20 relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+        <div class="lg:grid lg:grid-cols-2 lg:gap-16 items-center relative z-10">
+            <div>
+                <h2 class="text-3xl font-black text-white font-heading mb-6">Let's build the future together.</h2>
+                <p class="text-white/60 mb-8 leading-relaxed">Whether you're an OEM looking to add cloud features to your machines, or a facility manager starting your digital journey, we're here to help.</p>
+                <div class="space-y-4">
+                    <div class="flex items-center text-white/80"><i class="fa fa-envelope w-6 text-indigo-400"></i> hello@nodeflow.io</div>
+                    <div class="flex items-center text-white/80"><i class="fa fa-location-dot w-6 text-indigo-400"></i> One North, Singapore</div>
+                </div>
+            </div>
+            <div class="mt-12 lg:mt-0">
+                <form class="space-y-4">
+                    <input type="text" placeholder="Name" class="input input-lg bg-white/5 border-white/10 text-white w-full rounded-2xl focus:border-indigo-500" />
+                    <input type="email" placeholder="Email" class="input input-lg bg-white/5 border-white/10 text-white w-full rounded-2xl focus:border-indigo-500" />
+                    <textarea placeholder="Message" class="textarea textarea-lg bg-white/5 border-white/10 text-white w-full rounded-2xl h-32 focus:border-indigo-500"></textarea>
+                    <button class="btn btn-primary btn-block h-14 rounded-2xl font-black uppercase tracking-widest">Send Inquiry</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}

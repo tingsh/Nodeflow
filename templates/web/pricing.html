@@ -1,0 +1,159 @@
+{% extends "web/base.html" %}
+{% load static %}
+{% block body %}
+
+<div class="bg-base-100 pt-32 pb-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-24">
+        <h1 class="text-5xl md:text-7xl font-black text-base-content font-heading tracking-tight mb-6">Simple, fair pricing.</h1>
+        <p class="text-xl text-base-content/50 max-w-2xl mx-auto font-light">No hidden device fees. No complex throughput math. Just the features you need to scale your industrial monitoring.</p>
+    </div>
+
+    <!-- Pricing Tiers -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <!-- Starter -->
+            <div class="bg-base-100 rounded-4xl p-10 border border-base-content/5 shadow-sm hover:shadow-2xl transition-all group" data-aos="fade-up">
+                <div class="mb-10">
+                    <h3 class="text-lg font-bold text-base-content mb-1">Starter</h3>
+                    <p class="text-xs text-base-content/40 uppercase font-black tracking-widest">SME Entry Level</p>
+                </div>
+                <div class="flex items-baseline mb-10">
+                    <span class="text-5xl font-black font-mono text-base-content">$99</span>
+                    <span class="text-xs font-bold text-base-content/30 ml-2 uppercase tracking-widest">/mo</span>
+                </div>
+                <ul class="space-y-4 mb-10 text-sm">
+                    <li class="flex items-center text-base-content/70"><i class="fa fa-check text-indigo-500 mr-3"></i> 1 Edge Gateway</li>
+                    <li class="flex items-center text-base-content/70"><i class="fa fa-check text-indigo-500 mr-3"></i> 5 Monitored Devices</li>
+                    <li class="flex items-center text-base-content/70"><i class="fa fa-check text-indigo-500 mr-3"></i> 7-Day Data History</li>
+                    <li class="flex items-center text-base-content/70"><i class="fa fa-check text-indigo-500 mr-3"></i> Standard Support</li>
+                </ul>
+                <a href="{% url 'account_signup' %}" class="btn btn-block btn-ghost bg-base-200 border-none rounded-2xl h-14 font-black transition-all group-hover:bg-indigo-500 group-hover:text-white uppercase tracking-widest text-xs">Get Started</a>
+            </div>
+
+            <!-- Professional -->
+            <div class="bg-base-100 rounded-4xl p-10 border-2 border-indigo-600 shadow-2xl relative transform scale-105 z-10" data-aos="fade-up" data-aos-delay="100">
+                <div class="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-indigo-600 text-white text-[10px] font-black rounded-full uppercase tracking-widest shadow-lg shadow-indigo-600/30">Most Popular</div>
+                <div class="mb-10">
+                    <h3 class="text-lg font-bold text-base-content mb-1">Professional</h3>
+                    <p class="text-xs text-base-content/40 uppercase font-black tracking-widest">Growth Phase</p>
+                </div>
+                <div class="flex items-baseline mb-10">
+                    <span class="text-5xl font-black font-mono text-base-content">$299</span>
+                    <span class="text-xs font-bold text-base-content/30 ml-2 uppercase tracking-widest">/mo</span>
+                </div>
+                <ul class="space-y-4 mb-10 text-sm">
+                    <li class="flex items-center font-bold text-base-content"><i class="fa fa-check text-indigo-500 mr-3"></i> 3 Edge Gateways</li>
+                    <li class="flex items-center font-bold text-base-content"><i class="fa fa-check text-indigo-500 mr-3"></i> 20 Monitored Devices</li>
+                    <li class="flex items-center font-bold text-base-content"><i class="fa fa-check text-indigo-500 mr-3"></i> 30-Day Data History</li>
+                    <li class="flex items-center font-bold text-indigo-600"><i class="fa fa-sparkles mr-3"></i> AI Data Assistant</li>
+                    <li class="flex items-center font-bold text-base-content"><i class="fa fa-check text-indigo-500 mr-3"></i> Logic Automations</li>
+                </ul>
+                <a href="{% url 'account_signup' %}" class="btn btn-block btn-primary rounded-2xl h-14 font-black shadow-xl shadow-indigo-600/30 uppercase tracking-widest text-xs">Talk to Sales</a>
+            </div>
+
+            <!-- Business -->
+            <div class="bg-base-100 rounded-4xl p-10 border border-base-content/5 shadow-sm hover:shadow-2xl transition-all group" data-aos="fade-up" data-aos-delay="200">
+                <div class="mb-10">
+                    <h3 class="text-lg font-bold text-base-content mb-1">Business</h3>
+                    <p class="text-xs text-base-content/40 uppercase font-black tracking-widest">Enterprise Ready</p>
+                </div>
+                <div class="flex items-baseline mb-10">
+                    <span class="text-5xl font-black font-mono text-base-content">$699</span>
+                    <span class="text-xs font-bold text-base-content/30 ml-2 uppercase tracking-widest">/mo</span>
+                </div>
+                <ul class="space-y-4 mb-10 text-sm">
+                    <li class="flex items-center text-base-content/70"><i class="fa fa-check text-indigo-500 mr-3"></i> 10 Edge Gateways</li>
+                    <li class="flex items-center text-base-content/70"><i class="fa fa-check text-indigo-500 mr-3"></i> 100 Monitored Devices</li>
+                    <li class="flex items-center text-base-content/70"><i class="fa fa-check text-indigo-500 mr-3"></i> 1-Year Data History</li>
+                    <li class="flex items-center text-base-content/70"><i class="fa fa-check text-indigo-500 mr-3"></i> White-label Option</li>
+                </ul>
+                <a href="{% url 'about' %}" class="btn btn-block btn-ghost bg-base-200 border-none rounded-2xl h-14 font-black transition-all group-hover:bg-indigo-500 group-hover:text-white uppercase tracking-widest text-xs">Contact Sales</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Comparison Table -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-40">
+        <h2 class="text-3xl font-black text-center mb-16 font-heading tracking-tight">Compare Features</h2>
+        <div class="overflow-x-auto">
+            <table class="table w-full">
+                <thead>
+                    <tr class="bg-base-200/50">
+                        <th class="py-6 px-8 rounded-tl-3xl text-xs font-black uppercase tracking-widest text-base-content/40">Feature</th>
+                        <th class="py-6 px-8 text-center text-xs font-black uppercase tracking-widest text-base-content/40">Starter</th>
+                        <th class="py-6 px-8 text-center text-xs font-black uppercase tracking-widest text-base-content/40">Professional</th>
+                        <th class="py-6 px-8 rounded-tr-3xl text-center text-xs font-black uppercase tracking-widest text-base-content/40">Business</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-base-content/5">
+                    <tr>
+                        <td class="py-6 px-8 font-bold text-sm">TimescaleDB Telemetry</td>
+                        <td class="text-center"><i class="fa fa-check text-green-500"></i></td>
+                        <td class="text-center"><i class="fa fa-check text-green-500"></i></td>
+                        <td class="text-center"><i class="fa fa-check text-green-500"></i></td>
+                    </tr>
+                    <tr>
+                        <td class="py-6 px-8 font-bold text-sm">AI Data Assistant</td>
+                        <td class="text-center text-base-content/20 font-mono text-xs">-</td>
+                        <td class="text-center"><i class="fa fa-check text-green-500"></i></td>
+                        <td class="text-center"><i class="fa fa-check text-green-500"></i></td>
+                    </tr>
+                    <tr>
+                        <td class="py-6 px-8 font-bold text-sm">Logic & Automations</td>
+                        <td class="text-center text-base-content/20 font-mono text-xs">View-only</td>
+                        <td class="text-center"><i class="fa fa-check text-green-500"></i></td>
+                        <td class="text-center"><i class="fa fa-check text-green-500"></i></td>
+                    </tr>
+                    <tr>
+                        <td class="py-6 px-8 font-bold text-sm">Maintenance Ticketing</td>
+                        <td class="text-center text-base-content/20 font-mono text-xs">Reactive Only</td>
+                        <td class="text-center"><i class="fa fa-check text-green-500"></i></td>
+                        <td class="text-center"><i class="fa fa-check text-green-500"></i></td>
+                    </tr>
+                    <tr>
+                        <td class="py-6 px-8 font-bold text-sm">Kiosk & Shared Links</td>
+                        <td class="text-center">1 Link</td>
+                        <td class="text-center">10 Links</td>
+                        <td class="text-center">Unlimited</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- FAQ Section -->
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mt-40">
+        <h2 class="text-3xl font-black text-center mb-16 font-heading tracking-tight">Frequently Asked Questions</h2>
+        <div class="space-y-4">
+            <div class="collapse collapse-plus bg-base-200/50 rounded-2xl">
+                <input type="radio" name="faq-accordion" checked="checked" /> 
+                <div class="collapse-title text-sm font-bold">
+                    Do I need dedicated hardware to use Nodeflow?
+                </div>
+                <div class="collapse-content text-xs text-base-content/60 leading-relaxed">
+                    <p>You can use Nodeflow with your own hardware using our open-source edge gateway, or purchase a pre-configured Nodeflow Node for zero-config setup. We support Modbus, MQTT, and Siemens S7 protocols out of the box.</p>
+                </div>
+            </div>
+            <div class="collapse collapse-plus bg-base-200/50 rounded-2xl">
+                <input type="radio" name="faq-accordion" /> 
+                <div class="collapse-title text-sm font-bold">
+                    Is there a limit on how much data I can store?
+                </div>
+                <div class="collapse-content text-xs text-base-content/60 leading-relaxed">
+                    <p>We don't limit storage by gigabytes. Instead, we limit by retention time (7 days, 30 days, or 1 year) based on your plan. All critical alerts are logged indefinitely.</p>
+                </div>
+            </div>
+            <div class="collapse collapse-plus bg-base-200/50 rounded-2xl">
+                <input type="radio" name="faq-accordion" /> 
+                <div class="collapse-title text-sm font-bold">
+                    Can I cancel my subscription at any time?
+                </div>
+                <div class="collapse-content text-xs text-base-content/60 leading-relaxed">
+                    <p>Yes. Nodeflow is a month-to-month service. You can cancel at any time from your dashboard settings without any cancellation fees.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

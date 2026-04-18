@@ -1,18 +1,38 @@
-{% extends "content/base.html" %}
+{% extends "web/base.html" %}
 {% load wagtailcore_tags wagtailimages_tags %}
-{% load i18n %}
-{% block content %}
-  <div class="pg-text-centered my-4">
-    <h1 class="pg-title">{{ page.title }}</h1>
-  </div>
-  <div class="app-card">
-    <div class="pg-content">
-      {% include_block page.body %}
-      <ul>
-      {% for child in page.get_children %}
-        <li><a href="{% pageurl child %}">{{ child.title }}</a></li>
-      {% endfor %}
-      </ul>
+
+{% block body %}
+<div class="bg-base-100 pt-32 pb-40">
+    <!-- Header -->
+    <header class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mb-20 text-center">
+        <h1 class="text-4xl md:text-6xl font-black text-base-content font-heading tracking-tight mb-4">
+            {{ page.title }}
+        </h1>
+        <div class="w-20 h-1.5 bg-indigo-500 mx-auto rounded-full"></div>
+    </header>
+
+    <!-- Content -->
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 prose prose-indigo lg:prose-xl dark:prose-invert">
+        {% for block in page.body %}
+            <div class="mb-12">
+                {% if block.block_type == 'paragraph' %}
+                    {{ block.value }}
+                {% elif block.block_type == 'image' %}
+                    <figure>
+                        {% image block.value width-1000 as img %}
+                        <img src="{{ img.url }}" class="rounded-3xl shadow-lg" alt="{{ block.value.title }}">
+                    </figure>
+                {% elif block.block_type == 'caption' %}
+                    <div class="text-center text-sm text-base-content/40 -mt-8 italic">
+                        {{ block.value }}
+                    </div>
+                {% elif block.block_type == 'html' %}
+                    {{ block.value|safe }}
+                {% else %}
+                    {{ block }}
+                {% endif %}
+            </div>
+        {% endfor %}
     </div>
-  </div>
+</div>
 {% endblock %}

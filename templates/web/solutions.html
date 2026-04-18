@@ -1,0 +1,138 @@
+{% extends "web/base.html" %}
+{% load static %}
+{% block body %}
+
+<!-- Hero -->
+<section class="relative pt-32 pb-20 bg-base-content overflow-hidden">
+    <div class="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-repeat"></div>
+    <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <h2 class="text-indigo-400 font-black uppercase tracking-widest text-xs mb-4">Vertical Solutions</h2>
+        <h1 class="text-5xl md:text-7xl font-black text-white font-heading tracking-tight mb-8">
+            Tailored for the<br/>
+            <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-sky-400">factory floor.</span>
+        </h1>
+        <p class="text-xl text-white/50 max-w-2xl mx-auto font-light leading-relaxed">
+            Generic IoT platforms fail because they don't understand industrial protocols or SME workflows. Nodeflow was built from the ground up for industrial reality.
+        </p>
+    </div>
+</section>
+
+<!-- Solutions Grid -->
+<div class="py-32 space-y-32">
+
+    <!-- Solution 1: Energy -->
+    <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="lg:grid lg:grid-cols-2 lg:gap-16 items-center">
+            <div data-aos="fade-up">
+                <span class="text-indigo-500 font-black text-xs uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full mb-6 inline-block">Sustainability</span>
+                <h2 class="text-4xl font-black text-base-content font-heading mb-6">Energy & Grid Intelligence</h2>
+                <div class="space-y-6">
+                    <div class="flex gap-4">
+                        <div class="w-10 h-10 rounded-full bg-red-400/10 flex items-center justify-center shrink-0"><i class="fa fa-times text-red-500 text-xs"></i></div>
+                        <div>
+                            <h4 class="font-bold text-base-content">The Pain Point</h4>
+                            <p class="text-sm text-base-content/60 italic">"Our electricity bills are spikey, but we have no idea which machine is causing the peak surges or how to claim EEG grants."</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-4">
+                        <div class="w-10 h-10 rounded-full bg-green-400/10 flex items-center justify-center shrink-0"><i class="fa fa-check text-green-500 text-xs"></i></div>
+                        <div>
+                            <h4 class="font-bold text-base-content">The Nodeflow Solution</h4>
+                            <p class="text-sm text-base-content/60">Automated submetering with peak shaving alerts. Gain full visibility into solar generation offset vs. facility consumption in real-time.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-12 lg:mt-0 grid grid-cols-2 gap-4" data-aos="fade-left">
+                <div class="p-6 rounded-3xl bg-base-200 border border-base-content/5">
+                    <h5 class="font-bold text-sm mb-2">EEG Grant Ready</h5>
+                    <p class="text-xs text-base-content/40">Compliance data for Singapore's Energy Efficiency Grant.</p>
+                </div>
+                <div class="p-6 rounded-3xl bg-indigo-600 text-white shadow-xl shadow-indigo-600/20 translate-y-8">
+                    <h5 class="font-bold text-sm mb-2">Peak Shaving</h5>
+                    <p class="text-xs text-white/50">Auto-load shedding via remote control to avoid peak demand penalties.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Solution 2: Cold Chain -->
+    <section class="bg-base-200/30 py-32">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="lg:grid lg:grid-cols-2 lg:gap-16 items-center">
+                <div class="lg:order-last" data-aos="fade-up">
+                    <span class="text-sky-500 font-black text-xs uppercase tracking-widest bg-sky-500/10 px-3 py-1 rounded-full mb-6 inline-block">Food & Pharma</span>
+                    <h2 class="text-4xl font-black text-base-content font-heading mb-6">Cold Chain Compliance</h2>
+                    <div class="space-y-6">
+                        <div class="flex gap-4">
+                            <div class="w-10 h-10 rounded-full bg-red-400/10 flex items-center justify-center shrink-0"><i class="fa fa-times text-red-500 text-xs"></i></div>
+                            <div>
+                                <h4 class="font-bold text-base-content">The Pain Point</h4>
+                                <p class="text-sm text-base-content/60 italic">"If a freezer door is left open overnight, we lose $20,000 of stock. SFA requires constant logging which our staff forget to do."</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="w-10 h-10 rounded-full bg-green-400/10 flex items-center justify-center shrink-0"><i class="fa fa-check text-green-500 text-xs"></i></div>
+                            <div>
+                                <h4 class="font-bold text-base-content">The Nodeflow Solution</h4>
+                                <p class="text-sm text-base-content/60">Digital temperature logging with multi-channel alerts (WhatsApp/SMS). Automated daily PDF reports for SFA auditors.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-12 lg:mt-0 relative" data-aos="fade-right">
+                    <div class="w-full aspect-square rounded-full bg-gradient-to-tr from-sky-400/10 to-indigo-500/10 flex items-center justify-center">
+                        <i class="fa fa-snowflake text-sky-500/20 text-9xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Solution 3: OEM/Factory -->
+    <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="lg:grid lg:grid-cols-2 lg:gap-16 items-center">
+            <div data-aos="fade-up">
+                <span class="text-amber-500 font-black text-xs uppercase tracking-widest bg-amber-500/10 px-3 py-1 rounded-full mb-6 inline-block">Maintenance</span>
+                <h2 class="text-4xl font-black text-base-content font-heading mb-6">Factory Floor Automation</h2>
+                <div class="space-y-6">
+                    <div class="flex gap-4">
+                        <div class="w-10 h-10 rounded-full bg-red-400/10 flex items-center justify-center shrink-0"><i class="fa fa-times text-red-500 text-xs"></i></div>
+                        <div>
+                            <h4 class="font-bold text-base-content">The Pain Point</h4>
+                            <p class="text-sm text-base-content/60 italic">"Our technician only fixes things when they break. We have zero data on run-hours across our 50 motors."</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-4">
+                        <div class="w-10 h-10 rounded-full bg-green-400/10 flex items-center justify-center shrink-0"><i class="fa fa-check text-green-500 text-xs"></i></div>
+                        <div>
+                            <h4 class="font-bold text-base-content">The Nodeflow Solution</h4>
+                            <p class="text-sm text-base-content/60">VFD and PLC monitoring integrated with a full CMMS (Maintenance System). Auto-trigger PM tickets based on actual motor hours, not calendar days.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-12 lg:mt-0 bg-base-content rounded-4xl p-10 flex flex-col justify-center items-center h-[400px]" data-aos="fade-left">
+                <div class="w-16 h-16 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center text-white/40 mb-4 animate-spin-slow">
+                    <i class="fa fa-gear text-2xl"></i>
+                </div>
+                <p class="text-white font-black text-xl mb-2">Smart Upkeep</p>
+                <p class="text-white/40 text-sm text-center">Transition from reactive to predictive maintenance in 24 hours.</p>
+            </div>
+        </div>
+    </section>
+
+</div>
+
+<!-- Final CTA -->
+<div class="bg-indigo-600 py-32 text-center text-white">
+    <div class="max-w-4xl mx-auto px-4">
+        <h2 class="text-5xl font-black font-heading mb-8">Ready for a smart factory?</h2>
+        <div class="flex flex-col sm:flex-row justify-center gap-4">
+            <a href="{% url 'account_signup' %}" class="btn btn-white btn-lg rounded-2xl px-12 h-16 font-black uppercase tracking-widest text-indigo-600">Start Pilot Program</a>
+            <a href="/about/" class="btn btn-ghost btn-lg rounded-2xl px-12 h-16 font-black uppercase tracking-widest text-white border border-white/20">Chat With Us</a>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

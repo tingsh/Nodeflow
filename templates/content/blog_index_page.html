@@ -1,23 +1,63 @@
-{% extends "content/base.html" %}
+{% extends "web/base.html" %}
 {% load wagtailcore_tags wagtailimages_tags %}
-{% block content %}
-  <div class="pg-text-centered my-4">
-    <h1 class="pg-title">{{ page.title }}</h1>
-    <div class="pg-subtitle">{{ page.intro|richtext }}</div>
-  </div>
-  {% for post in page.get_ordered_blog_posts %}{% with post.specific as post %}
-    <div class="app-card">
-      <div class="pg-columns">
-        <div class="pg-column">
-          <h2 class="pg-title"><a class="pg-link" href="{% pageurl post %}">{{ post.title }}</a></h2>
-          <div class="pg-subtitle">{{ post.intro }}</div>
-        </div>
-        {% with post.main_image as main_image %}{% if main_image %}
-          <div class="pg-column-one-quarter">
-            {% image main_image fill-300x200 %}
-          </div>
-        {% endif %}{% endwith %}
-      </div>
+
+{% block body %}
+<!-- Header -->
+<div class="pt-32 pb-20 bg-base-100">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <h1 class="text-5xl md:text-7xl font-black text-base-content font-heading tracking-tight mb-6">Resources & <span class="text-indigo-600">Insights</span></h1>
+        <p class="text-xl text-base-content/50 max-w-2xl mx-auto font-light leading-relaxed">
+            The latest in Industrial IoT, Energy Management, and Factory Automation.
+        </p>
     </div>
-  {% endwith %}{% endfor %}
+</div>
+
+<!-- Blog Grid -->
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-32">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {% for post in page.get_ordered_blog_posts %}
+        <article class="group relative flex flex-col bg-base-100 rounded-3xl border border-base-content/5 overflow-hidden hover:border-indigo-500/30 hover:shadow-2xl transition-all duration-500">
+            {% if post.main_image %}
+                <div class="aspect-video overflow-hidden">
+                    {% image post.main_image fill-800x450 as img %}
+                    <img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" src="{{ img.url }}" alt="{{ post.title }}">
+                </div>
+            {% else %}
+                <div class="aspect-video bg-indigo-500/5 flex items-center justify-center">
+                    <i class="fa fa-bolt text-4xl text-indigo-500/20"></i>
+                </div>
+            {% endif %}
+            
+            <div class="p-8 flex-1 flex flex-col">
+                <div class="flex items-center gap-3 mb-4">
+                    <span class="text-[10px] font-black uppercase tracking-widest text-indigo-500 bg-indigo-500/10 px-2 py-1 rounded">INSIGHT</span>
+                    <span class="text-[10px] font-bold text-base-content/30 uppercase">{{ post.first_published_at|date:"M d, Y" }}</span>
+                </div>
+                
+                <h2 class="text-xl font-black text-base-content group-hover:text-indigo-600 transition-colors mb-4 leading-tight">
+                    <a href="{% pageurl post %}" class="after:absolute after:inset-0">{{ post.title }}</a>
+                </h2>
+                
+                <p class="text-sm text-base-content/50 line-clamp-3 mb-6 flex-1">
+                    {{ post.intro }}
+                </p>
+                
+                <div class="flex items-center pt-6 border-t border-base-content/5">
+                    <div class="w-8 h-8 rounded-full bg-base-200 border border-base-content/5 mr-3 flex items-center justify-center overflow-hidden">
+                        <i class="fa fa-user text-[10px] opacity-20"></i>
+                    </div>
+                    <span class="text-xs font-bold text-base-content/60">Nodeflow Team</span>
+                </div>
+            </div>
+        </article>
+        {% empty %}
+            <div class="col-span-full py-20 text-center">
+                <div class="p-6 bg-base-200 rounded-full w-fit mx-auto mb-6">
+                    <i class="fa fa-newspaper text-3xl opacity-20"></i>
+                </div>
+                <p class="text-base-content/40 font-bold uppercase tracking-widest">No articles yet. Check back soon!</p>
+            </div>
+        {% endfor %}
+    </div>
+</div>
 {% endblock %}

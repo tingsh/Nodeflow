@@ -1,0 +1,161 @@
+{% extends "web/base.html" %}
+{% load static %}
+{% block body %}
+
+<!-- Page Header -->
+<div class="relative pt-32 pb-20 overflow-hidden bg-base-100">
+    <div class="absolute inset-0 pointer-events-none">
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[100vw] h-[500px] bg-gradient-to-b from-indigo-500/5 to-transparent"></div>
+    </div>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+        <h1 class="text-5xl md:text-7xl font-black text-base-content font-heading tracking-tight mb-6">
+            Everything you need,<br/>
+            <span class="text-indigo-600">nothing you don't.</span>
+        </h1>
+        <p class="text-xl text-base-content/60 max-w-3xl mx-auto font-light leading-relaxed">
+            Nodeflow replaces complex, fragmented IoT stacks with a single, beautiful platform built specifically for industrial energy intelligence.
+        </p>
+    </div>
+</div>
+
+<!-- Feature Breakdown -->
+<div class="space-y-32 pb-32">
+    
+    <!-- Feature 1: Monitoring -->
+    <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="lg:grid lg:grid-cols-2 lg:gap-16 items-center">
+            <div data-aos="fade-right">
+                <div class="w-12 h-12 bg-indigo-500 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg shadow-indigo-500/20">
+                    <i class="fa fa-chart-line text-lg"></i>
+                </div>
+                <h2 class="text-3xl font-black text-base-content font-heading mb-6">Real-Time Dashboards & Vision</h2>
+                <p class="text-lg text-base-content/70 leading-relaxed mb-8">
+                    See your facility's energy profile in high definition. Our Command Center uses TimescaleDB for sub-second telemetry ingestion and pixel-perfect data visualization.
+                </p>
+                <ul class="space-y-4">
+                    <li class="flex items-start"><i class="fa fa-check text-indigo-500 mt-1 mr-3"></i> <span>Custom KPI strips for power, energy, and efficiency metrics.</span></li>
+                    <li class="flex items-start"><i class="fa fa-check text-indigo-500 mt-1 mr-3"></i> <span>60-second HTMX auto-refresh loops.</span></li>
+                    <li class="flex items-start"><i class="fa fa-check text-indigo-500 mt-1 mr-3"></i> <span>Historical trend analysis with multi-device comparison.</span></li>
+                </ul>
+            </div>
+            <div class="mt-12 lg:mt-0 relative aspect-video rounded-3xl bg-base-200 border border-base-content/5 shadow-2xl overflow-hidden" data-aos="fade-left">
+                 <div class="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent"></div>
+                 <div class="flex items-center justify-center h-full text-base-content/20 font-bold uppercase tracking-widest text-xs">Dashboard Mockup</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Feature 2: AI -->
+    <section class="bg-base-200/30 py-32">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="lg:grid lg:grid-cols-2 lg:gap-16 items-center">
+                <div class="lg:order-last" data-aos="fade-left">
+                    <div class="w-12 h-12 bg-purple-500 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg shadow-purple-500/20">
+                        <i class="fa fa-robot text-lg"></i>
+                    </div>
+                    <h2 class="text-3xl font-black text-base-content font-heading mb-6">Chat With Your Fleet</h2>
+                    <p class="text-lg text-base-content/70 leading-relaxed mb-8">
+                        Ask natural language questions about your facility's performance. Our AI Assistant understands your telemetry keys and can generate instant reports.
+                    </p>
+                    <div class="p-6 bg-base-100 rounded-2xl border border-base-content/5 shadow-sm italic text-sm text-base-content/60 border-l-4 border-l-purple-500">
+                        "Which site used the most energy last Saturday between 2pm and 4pm?"
+                    </div>
+                </div>
+                <div class="mt-12 lg:mt-0 relative aspect-square lg:aspect-auto h-[400px] rounded-3xl bg-base-100 border border-base-content/5 shadow-2xl overflow-hidden" data-aos="fade-right">
+                    <div class="flex items-center justify-center h-full text-base-content/20 font-bold uppercase tracking-widest text-xs">AI Chat Mockup</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Feature 3: Remote Control -->
+    <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="lg:grid lg:grid-cols-2 lg:gap-16 items-center">
+            <div data-aos="fade-right">
+                <div class="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg shadow-emerald-500/20">
+                    <i class="fa fa-toggle-on text-lg"></i>
+                </div>
+                <h2 class="text-3xl font-black text-base-content font-heading mb-6">Write-Back & RPC Control</h2>
+                <p class="text-lg text-base-content/70 leading-relaxed mb-8">
+                    Don't just watch—take action. Securely toggle loads, adjust setpoints, and send commands back to your PLCs (Siemens S7, Modbus) directly from the cloud.
+                </p>
+                <ul class="space-y-4">
+                    <li class="flex items-start"><i class="fa fa-shield-halved text-emerald-500 mt-1 mr-3"></i> <span>RBAC protection for critical control actions.</span></li>
+                    <li class="flex items-start"><i class="fa fa-shield-halved text-emerald-500 mt-1 mr-3"></i> <span>Full audit trail of who sent what command and when.</span></li>
+                    <li class="flex items-start"><i class="fa fa-shield-halved text-emerald-500 mt-1 mr-3"></i> <span>ThingsBoard Gateway compliant MQTT protocol.</span></li>
+                </ul>
+            </div>
+            <div class="mt-12 lg:mt-0 relative aspect-video rounded-3xl bg-base-100 border border-base-content/5 shadow-2xl overflow-hidden" data-aos="fade-left">
+                <div class="flex items-center justify-center h-full text-base-content/20 font-bold uppercase tracking-widest text-xs">Remote Control Mockup</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Feature 4: Automations -->
+    <section class="bg-indigo-600 py-32 overflow-hidden">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+            <div class="text-center mb-16" data-aos="zoom-in">
+                <h2 class="text-white/60 font-black uppercase tracking-widest text-xs mb-4">Cloud Logic</h2>
+                <h3 class="text-4xl font-black text-white font-heading">Automate your facility.</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="bg-white/10 backdrop-blur-md p-8 rounded-3xl border border-white/10 hover:bg-white/20 transition-all group" data-aos="fade-up">
+                    <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform">
+                        <i class="fa fa-code-fork"></i>
+                    </div>
+                    <h4 class="text-xl font-bold text-white mb-4">IFTTT Conditionals</h4>
+                    <p class="text-white/60 text-sm leading-relaxed">Build complex logic like "If Solar Power < 5kW for 10 mins AND Consumption > 50kW, then shed Load A."</p>
+                </div>
+                <div class="bg-white/10 backdrop-blur-md p-8 rounded-3xl border border-white/10 hover:bg-white/20 transition-all group" data-aos="fade-up" data-aos-delay="100">
+                    <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform">
+                        <i class="fa fa-clock"></i>
+                    </div>
+                    <h4 class="text-xl font-bold text-white mb-4">Duration Tracking</h4>
+                    <p class="text-white/60 text-sm leading-relaxed">Prevent false triggers with Redis-backed state tracking. Ensure conditions stay active for X minutes before firing.</p>
+                </div>
+                <div class="bg-white/10 backdrop-blur-md p-8 rounded-3xl border border-white/10 hover:bg-white/20 transition-all group" data-aos="fade-up" data-aos-delay="200">
+                    <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform">
+                        <i class="fa fa-paper-plane"></i>
+                    </div>
+                    <h4 class="text-xl font-bold text-white mb-4">Multi-Action Output</h4>
+                    <p class="text-white/60 text-sm leading-relaxed">Simultaneously send RPC commands, trigger webhooks to ERPs, and notify the team via WhatsApp or Email.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Feature 5 & 6: Maintenance & Sharing -->
+    <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-16">
+            <div class="p-10 rounded-4xl bg-base-100 border border-base-content/5 shadow-xl" data-aos="fade-up">
+                <div class="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg shadow-amber-500/20">
+                    <i class="fa fa-wrench"></i>
+                </div>
+                <h3 class="text-2xl font-black text-base-content font-heading mb-4">Predictive Maintenance</h3>
+                <p class="text-base-content/60 leading-relaxed mb-6">
+                    Close the loop between monitoring and action. Auto-generate maintenance tickets when alerts trigger, or set up preventive schedules based on real equipment run-hours.
+                </p>
+            </div>
+            <div class="p-10 rounded-4xl bg-base-100 border border-base-content/5 shadow-xl" data-aos="fade-up" data-aos-delay="100">
+                <div class="w-12 h-12 bg-sky-500 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg shadow-sky-500/20">
+                    <i class="fa fa-share-nodes"></i>
+                </div>
+                <h3 class="text-2xl font-black text-base-content font-heading mb-4">Kiosk & Shared Links</h3>
+                <p class="text-base-content/60 leading-relaxed mb-6">
+                    Showcase your energy performance on lobby screens or share live dashboards with stakeholders. Secured by optional passwords and auto-expiring tokens.
+                </p>
+            </div>
+        </div>
+    </section>
+
+</div>
+
+<!-- CTA -->
+<div class="bg-base-content py-24 text-center">
+    <div class="max-w-4xl mx-auto px-4">
+        <h2 class="text-4xl font-black text-base-100 font-heading mb-6">Ready to see it in action?</h2>
+        <a href="{% url 'account_signup' %}" class="btn btn-primary btn-lg rounded-2xl px-12 h-16 font-black uppercase tracking-widest shadow-2xl shadow-indigo-600/30">Start Free Trial</a>
+    </div>
+</div>
+
+{% endblock %}
