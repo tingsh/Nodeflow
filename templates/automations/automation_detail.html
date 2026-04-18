@@ -1,0 +1,146 @@
+{% extends "web/app_base.html" %}
+{% load team_permissions %}
+
+{% block app_content %}
+<div class="pg-content w-full flex flex-col pt-8 lg:max-w-5xl mx-auto px-4 md:px-8">
+  <div class="mb-6">
+    <a href="{% url 'web_team:automations:list' team.slug %}" class="btn btn-sm btn-ghost pl-0 hover:bg-transparent text-base-content/60 hover:text-base-content mb-2 transition-colors">
+      <i class="fa fa-arrow-left mr-2"></i> Back to Automations
+    </a>
+    
+    <div class="flex justify-between items-start">
+      <div>
+        <h1 class="text-3xl font-extrabold text-base-content tracking-tight flex items-center gap-3">
+          {{ automation.name }}
+          {% if automation.is_active %}
+            <span class="badge badge-success badge-md">Active</span>
+          {% else %}
+            <span class="badge badge-ghost badge-md border border-base-300">Paused</span>
+          {% endif %}
+        </h1>
+        <p class="text-base-content/80 mt-2 text-lg">{{ automation.description|default:"No description provided." }}</p>
+      </div>
+      
+      {% has_perm 'manage_automations' as can_manage %}
+      {% if can_manage %}
+        <div class="flex gap-2">
+          <a href="{% url 'web_team:automations:edit' team.slug automation.id %}" class="btn btn-outline border-base-content/20 hover:bg-base-200">
+            <i class="fa fa-pencil"></i> Edit config
+          </a>
+          <!-- Delete button requires POST in this app but simple GET confirmation for simplicity here, assuming DeleteView provides confirm form -->
+          <a href="{% url 'web_team:automations:delete' team.slug automation.id %}" class="btn btn-ghost text-error hover:bg-error/10">
+            <i class="fa fa-trash"></i>
+          </a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+      
+      <!-- Conditions Box -->
+      <div class="card bg-base-100 shadow-xl border border-base-200">
+        <div class="card-body">
+          <h2 class="card-title text-xl text-base-content border-b border-base-200 pb-2 mb-2">
+            <i class="fa fa-filter text-info"></i> IF
+          </h2>
+          <div class="flex items-center gap-2 mb-4 text-sm font-medium">
+            <span class="bg-base-200 px-3 py-1 rounded-md border border-base-300">
+              {{ automation.get_trigger_logic_display }}
+            </span>
+          </div>
+          
+          <div class="space-y-3">
+            {% for cond in automation.conditions.all %}
+              <div class="bg-base-200/50 p-4 rounded-xl border border-info/20 flex flex-col sm:flex-row items-baseline gap-2">
+                <span class="badge badge-primary badge-outline font-mono">{{ cond.device.name }}</span>
+                <span class="font-mono font-bold text-base-content">{{ cond.telemetry_key }}</span>
+                <span class="font-mono text-info font-bold">{{ cond.get_operator_display }}</span>
+                <span class="font-mono font-bold bg-base-300 px-2 rounded">{{ cond.threshold }}</span>
+                
+                {% if cond.duration_seconds > 0 %}
+                  <div class="w-full sm:w-auto sm:ml-auto mt-2 sm:mt-0 text-xs font-semibold bg-warning/20 text-warning-content px-2 py-1 rounded flex items-center gap-1">
+                    <i class="fa fa-hourglass-half"></i> For {{ cond.duration_seconds }}s
+                  </div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions Box -->
+      <div class="card bg-base-100 shadow-xl border border-base-200">
+        <div class="card-body">
+          <h2 class="card-title text-xl text-base-content border-b border-base-200 pb-2 mb-4">
+            <i class="fa fa-play text-success"></i> THEN
+          </h2>
+          
+          <div class="space-y-3">
+            {% for action in automation.actions.all %}
+              <div class="bg-base-200/50 p-4 rounded-xl border border-success/20">
+                <div class="font-semibold text-base-content flex items-center gap-2 mb-2">
+                  <i class="fa fa-bolt text-success"></i> {{ action.get_action_type_display }}
+                </div>
+                
+                {% if action.action_type == 'send_command' %}
+                  <div class="text-sm font-mono overflow-auto bg-base-300/50 p-2 rounded">
+                    Device: {{ action.target_device.name }}<br>
+                    Key: {{ action.command_key }}<br>
+                    Payload: {{ action.command_payload }}
+                  </div>
+                {% elif action.action_type == 'webhook' %}
+                  <div class="text-sm font-mono break-all bg-base-300/50 p-2 rounded">
+                    URL: {{ action.webhook_url }}
+                  </div>
+                {% elif action.action_type == 'notify_email' %}
+                  <div class="text-sm">
+                    <strong>To:</strong> {{ action.notify_emails }}
+                  </div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Side Panel (Logs) -->
+    <div class="lg:col-span-1 space-y-6">
+      <div class="card bg-base-100 shadow-xl border border-base-200">
+        <div class="card-body p-5">
+          <h2 class="card-title text-lg border-b border-base-200 pb-2 mb-2">
+            <i class="fa fa-history text-base-content/50"></i> Recent Triggers
+          </h2>
+          
+          <div class="text-sm flex justify-between items-center bg-base-200 p-2 rounded-lg mb-4">
+            <span class="text-base-content/60">Cooldown</span>
+            <span class="font-mono font-bold">{{ automation.cooldown_minutes }} mins</span>
+          </div>
+
+          <ul class="space-y-3">
+            {% for log in recent_logs %}
+              <li class="border-l-2 {% if log.status == 'success' %}border-success{% elif log.status == 'partial' %}border-warning{% else %}border-error{% endif %} pl-3 py-1">
+                <div class="text-xs text-base-content/60">{{ log.triggered_at|date:"M j, H:i:s" }}</div>
+                <div class="font-medium text-sm mt-0.5 truncate">{{ log.get_status_display }}</div>
+              </li>
+            {% empty %}
+              <li class="text-sm text-base-content/50 text-center py-4 italic">No executions yet.</li>
+            {% endfor %}
+          </ul>
+          
+          {% if recent_logs %}
+            <div class="mt-4 text-center">
+              <a href="{% url 'web_team:automations:logs' team.slug %}" class="text-sm text-primary hover:underline">View full logs</a>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+      
+      <!-- Automation Delete Confirmation Form provided automatically by Django if we link to DeleteView -->
+    </div>
+  </div>
+</div>
+{% endblock %}

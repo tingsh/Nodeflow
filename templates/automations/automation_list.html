@@ -1,0 +1,99 @@
+{% extends "web/app_base.html" %}
+{% load team_permissions %}
+
+{% block app_content %}
+<div class="pg-content w-full flex flex-col pt-8 lg:max-w-6xl mx-auto px-4 md:px-8">
+  
+  <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+    <div>
+      <h1 class="text-3xl font-extrabold tracking-tight text-base-content">
+        <i class="fa fa-bolt text-primary mr-2"></i> Logic & Automations
+      </h1>
+      <p class="text-base-content/70 mt-2 text-lg">Define rules to automatically react to telemetry and alerts.</p>
+    </div>
+    
+    {% has_perm 'manage_automations' as can_manage %}
+    <div class="flex gap-2">
+      <a href="{% url 'web_team:automations:logs' team.slug %}" class="btn btn-outline border-base-content/20">
+        <i class="fa fa-history mr-2"></i> Audit Logs
+      </a>
+      {% if can_manage %}
+        <a href="{% url 'web_team:automations:create' team.slug %}" class="btn btn-primary shadow-lg shadow-primary-500/30">
+          <i class="fa fa-plus-circle mr-2"></i> Create Automation
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Disclaimer Alert -->
+  <div class="alert bg-warning/10 text-warning border border-warning/20 mb-8 max-w-4xl rounded-2xl shadow-sm">
+    <i class="fa fa-shield-alt text-xl"></i>
+    <div>
+      <h3 class="font-bold">Supervisory & Advisory Use Only</h3>
+      <div class="text-sm opacity-90">Cloud automations are dependent on network connectivity. Do not use Nodeflow for critical safety interlocks or protective functions. Always maintain hardwired local safeguards at the edge.</div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    {% for auto in automations %}
+      <div class="card bg-base-100 shadow-xl border border-base-200 hover:shadow-2xl hover:border-primary/50 transition-all duration-300">
+        <div class="card-body">
+          <div class="flex justify-between items-start mb-2">
+            <h2 class="card-title text-xl text-base-content">
+              <a href="{% url 'web_team:automations:detail' team.slug auto.id %}" class="hover:text-primary transition-colors">
+                {{ auto.name }}
+              </a>
+            </h2>
+            {% if auto.is_active %}
+              <div class="badge badge-success badge-sm shadow-sm">Active</div>
+            {% else %}
+              <div class="badge badge-ghost badge-sm border-base-300">Paused</div>
+            {% endif %}
+          </div>
+          
+          <p class="text-base-content/70 text-sm line-clamp-2 mt-1">{{ auto.description|default:"No description provided." }}</p>
+          
+          <div class="mt-4 bg-base-200/50 p-3 rounded-xl">
+            <div class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Logic Overview</div>
+            <div class="flex flex-col gap-1 text-sm">
+              <div class="flex items-center gap-2">
+                <i class="fa fa-filter text-base-content/50 w-4"></i>
+                <span>{{ auto.conditions.count }} Condition(s) <span class="badge badge-outline badge-sm ml-1 text-[10px]">{{ auto.get_trigger_logic_display }}</span></span>
+              </div>
+              <div class="flex items-center gap-2">
+                <i class="fa fa-play text-base-content/50 w-4"></i>
+                <span>{{ auto.actions.count }} Action(s)</span>
+              </div>
+              <div class="flex items-center gap-2 mt-1">
+                <i class="fa fa-clock text-base-content/50 w-4"></i>
+                {% if auto.last_triggered_at %}
+                  <span class="text-xs">Last: {{ auto.last_triggered_at|timesince }} ago</span>
+                {% else %}
+                  <span class="text-xs text-base-content/50">Never triggered</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          
+          <div class="card-actions justify-end mt-4">
+            <a href="{% url 'web_team:automations:detail' team.slug auto.id %}" class="btn btn-sm btn-ghost hover:bg-base-200 text-primary">View <i class="fa fa-arrow-right ml-1"></i></a>
+          </div>
+        </div>
+      </div>
+    {% empty %}
+      <div class="col-span-full py-16 text-center bg-base-100 rounded-3xl border border-base-200/60 shadow-sm">
+        <div class="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+          <i class="fa fa-sitemap text-3xl text-primary"></i>
+        </div>
+        <h3 class="text-xl font-bold text-base-content mb-2">No Automations Found</h3>
+        <p class="text-base-content/60 max-w-md mx-auto mb-6">Create rule-based automations to monitor telemetry values and automatically trigger commands, webhooks, or notifications.</p>
+        {% if can_manage %}
+        <a href="{% url 'web_team:automations:create' team.slug %}" class="btn btn-primary px-8">
+          Create Your First Automation
+        </a>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

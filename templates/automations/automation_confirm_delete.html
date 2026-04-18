@@ -1,0 +1,25 @@
+{% extends "web/app_base.html" %}
+
+{% block app_content %}
+<div class="pg-content w-full flex flex-col items-center pt-16 lg:max-w-2xl mx-auto px-4">
+  <div class="card bg-base-100 shadow-xl border border-error/20 w-full">
+    <div class="card-body items-center text-center">
+      <div class="w-16 h-16 rounded-full bg-error/10 flex items-center justify-center mb-4">
+        <i class="fa fa-exclamation-triangle text-3xl text-error"></i>
+      </div>
+      
+      <h2 class="card-title text-2xl mb-2">Delete Automation Rule?</h2>
+      <p class="text-base-content/80 mb-6">
+        Are you sure you want to permanently delete the automation <strong>"{{ object.name }}"</strong>? <br>
+        This action cannot be undone and will stop any automated workflows connected to it.
+      </p>
+      
+      <form method="POST" class="w-full flex justify-center gap-4">
+        {% csrf_token %}
+        <a href="{% url 'web_team:automations:detail' team.slug object.id %}" class="btn btn-ghost">Cancel</a>
+        <button type="submit" class="btn btn-error text-white shadow-lg shadow-error/20 px-8">Yes, Delete Automation</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

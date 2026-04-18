@@ -80,6 +80,10 @@ def ingest_telemetry_data(gateway_sn, values, timestamp=None):
         from apps.alerts.services import check_alerts_for_payload
         for key, value in values.items():
             check_alerts_for_payload(target_device, key, value)
+            
+        # Evaluate automations
+        from apps.automations.engine import evaluate_automations
+        evaluate_automations(target_device, values)
 
         # Update device last seen
         target_device.last_telemetry_at = timestamp

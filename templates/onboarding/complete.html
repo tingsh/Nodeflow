@@ -1,39 +1,102 @@
 {% extends "web/app/app_base.html" %}
 {% load i18n %}
 {% block app %}
-<div class="max-w-xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
-    <div class="mb-10">
-        <div class="relative inline-block">
-            <div class="absolute inset-0 bg-green-500 rounded-full blur-2xl opacity-30 animate-pulse"></div>
-            <div class="relative inline-flex items-center justify-center p-8 bg-green-100 dark:bg-green-900/30 rounded-full">
-                <i class="fa fa-sparkles text-green-600 dark:text-green-400 text-6xl"></i>
-            </div>
-        </div>
-    </div>
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
     
-    <h1 class="text-4xl font-extrabold text-gray-900 dark:text-white mb-4">You're all set!</h1>
-    <p class="text-xl text-gray-600 dark:text-gray-400 mb-12">
-        Configuration complete. Your IoT data pipeline is now active and monitoring for alerts.
-    </p>
-
-    <div class="bg-indigo-600 rounded-2xl p-8 mb-12 shadow-2xl shadow-indigo-600/20 text-left relative overflow-hidden">
-        <div class="absolute -right-8 -bottom-8 opacity-10">
-            <i class="fa fa-chart-line text-[160px] text-white"></i>
-        </div>
-        <div class="relative z-10">
-            <h3 class="text-white font-bold text-lg mb-4 uppercase tracking-wider">Next Step</h3>
-            <p class="text-indigo-100 mb-6">
-                Connect your physical <strong>gateway</strong> to the internet and point it to our broker. Data will start flowing into your dashboard immediately.
-            </p>
-            <div class="bg-indigo-700/50 p-4 rounded-xl border border-indigo-400/30 text-indigo-50 font-mono text-sm break-all">
-                MQTT Broker: {{ request.get_host }}:1883
+    <!-- Success Celebration -->
+    <div class="text-center mb-16" data-aos="zoom-in">
+        <div class="relative inline-block mb-8">
+            <div class="absolute inset-0 bg-green-500 rounded-full blur-3xl opacity-20 animate-pulse"></div>
+            <div class="relative w-24 h-24 bg-green-500 rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-green-500/40 rotate-12 group hover:rotate-0 transition-transform duration-500">
+                <i class="fa fa-sparkles text-4xl"></i>
             </div>
+        </div>
+        <h1 class="text-4xl font-black text-base-content font-heading tracking-tight mb-4">Provisioning Complete!</h1>
+        <p class="text-lg text-base-content/50 max-w-xl mx-auto font-light">
+            Your Nodeflow data pipeline is now live and waiting for telemetry.
+        </p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-16">
+        <!-- Summary Card -->
+        <div class="lg:col-span-2 bg-base-100 rounded-3xl border border-base-content/5 shadow-sm p-8 flex flex-col">
+            <h3 class="text-xs font-black uppercase tracking-widest text-base-content/30 mb-8">Setup Summary</h3>
+            <div class="grid grid-cols-2 gap-8 flex-1">
+                <div>
+                    <p class="text-[10px] font-black uppercase text-base-content/25 mb-1">Site</p>
+                    <p class="text-lg font-bold text-base-content">Ready</p>
+                </div>
+                <div>
+                    <p class="text-[10px] font-black uppercase text-base-content/25 mb-1">Gateway</p>
+                    <p class="text-lg font-bold text-base-content">Waiting for Link</p>
+                </div>
+                <div>
+                    <p class="text-[10px] font-black uppercase text-base-content/25 mb-1">Alerts</p>
+                    <p class="text-lg font-bold text-base-content">Active</p>
+                </div>
+                <div>
+                    <p class="text-[10px] font-black uppercase text-base-content/25 mb-1">Automations</p>
+                    <p class="text-lg font-bold text-base-content">Enabled</p>
+                </div>
+            </div>
+
+            <!-- Integration Snippet -->
+            <div class="mt-12 p-6 rounded-2xl bg-base-content text-white relative overflow-hidden group">
+                <div class="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform">
+                    <i class="fa fa-server text-7xl"></i>
+                </div>
+                <div class="relative z-10">
+                    <h4 class="text-xs font-black uppercase tracking-widest text-white/40 mb-4">Immediate Next Step</h4>
+                    <p class="text-sm text-white/70 mb-6">Point your physical gateway to our MQTT broker using your unique access token.</p>
+                    <div class="bg-white/10 p-4 rounded-xl border border-white/10 font-mono text-xs break-all cursor-pointer hover:bg-white/20 transition-colors" onclick="navigator.clipboard.writeText('mqtt://{{ request.get_host }}')">
+                        Broker: mqtt://{{ request.get_host }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions Stack -->
+        <div class="flex flex-col gap-4">
+            <a href="{% url 'web_team:home' request.team.slug %}" class="flex items-center p-6 rounded-3xl bg-indigo-600 text-white shadow-xl shadow-indigo-600/20 hover:scale-[1.02] transition-all">
+                <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center mr-4">
+                    <i class="fa fa-dashboard text-sm"></i>
+                </div>
+                <div>
+                    <h4 class="font-bold text-sm">Dashboard</h4>
+                    <p class="text-white/50 text-[10px]">Go to command center</p>
+                </div>
+            </a>
+
+            <a href="{% url 'web_team:onboarding:setup_start' request.team.slug %}" class="flex items-center p-6 rounded-3xl bg-base-100 border border-base-content/5 hover:border-indigo-500/30 transition-all">
+                <div class="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500 mr-4">
+                    <i class="fa fa-plus text-sm"></i>
+                </div>
+                <div>
+                    <h4 class="font-bold text-base-content text-sm">Add More</h4>
+                    <p class="text-base-content/40 text-[10px]">Provision another site</p>
+                </div>
+            </a>
+
+            <a href="/content/docs/" class="flex items-center p-6 rounded-3xl bg-base-100 border border-base-content/5 hover:border-indigo-500/30 transition-all">
+                <div class="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500 mr-4">
+                    <i class="fa fa-book text-sm"></i>
+                </div>
+                <div>
+                    <h4 class="font-bold text-base-content text-sm">Guides</h4>
+                    <p class="text-base-content/40 text-[10px]">Read integration docs</p>
+                </div>
+            </a>
         </div>
     </div>
 
-    <a href="{% url 'web_team:home' request.team.slug %}" class="inline-flex items-center px-10 py-4 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl font-bold text-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition shadow-xl">
-        Go to Dashboard
-        <i class="fa fa-arrow-right ml-3"></i>
-    </a>
 </div>
+
+<!-- AOS (Animate On Scroll) -->
+<link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+<script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        AOS.init({ duration: 800, once: true });
+    });
+</script>
 {% endblock %}

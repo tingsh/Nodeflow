@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from apps.teams.decorators import login_and_team_required
+from apps.teams.decorators import require_permission
 from apps.devices.models import Site, Gateway, Device, DeviceTemplate
 from apps.alerts.models import AlertRule
 
@@ -12,13 +13,13 @@ ONBOARDING_STEPS = [
     {"num": 4, "label": "Alert"},
 ]
 
-@login_and_team_required
+@require_permission("manage_devices")
 def onboarding_start(request, team_slug):
     if Site.objects.filter(team=request.team).exists():
         return redirect('web_team:home', team_slug=team_slug)
     return render(request, "onboarding/welcome.html")
 
-@login_and_team_required
+@require_permission("manage_devices")
 def step_1_site(request, team_slug):
     site_id = request.session.get('onboarding_site_id')
     site = Site.objects.filter(id=site_id, team=request.team).first() if site_id else None
@@ -41,7 +42,7 @@ def step_1_site(request, team_slug):
     context = {"steps": ONBOARDING_STEPS, "current_step": 1, "site": site}
     return render(request, "onboarding/step_1_site.html", context)
 
-@login_and_team_required
+@require_permission("manage_devices")
 def step_2_gateway(request, team_slug):
     site_id = request.session.get('onboarding_site_id')
     if not site_id:
@@ -92,7 +93,7 @@ def step_2_gateway(request, team_slug):
     context = {"steps": ONBOARDING_STEPS, "current_step": 2, "site": site, "gateway": gateway}
     return render(request, "onboarding/step_2_gateway.html", context)
 
-@login_and_team_required
+@require_permission("manage_devices")
 def step_3_device(request, team_slug):
     gateway_id = request.session.get('onboarding_gateway_id')
     site_id = request.session.get('onboarding_site_id')
@@ -132,7 +133,7 @@ def step_3_device(request, team_slug):
     context = {"steps": ONBOARDING_STEPS, "current_step": 3, "templates": templates, "device": device}
     return render(request, "onboarding/step_3_device.html", context)
 
-@login_and_team_required
+@require_permission("manage_alerts")
 def step_4_alert(request, team_slug):
     device_id = request.session.get('onboarding_device_id')
     if not device_id:
@@ -162,7 +163,7 @@ def step_4_alert(request, team_slug):
     context = {"steps": ONBOARDING_STEPS, "current_step": 4, "device": device, "rule": existing_rule}
     return render(request, "onboarding/step_4_alert.html", context)
 
-@login_and_team_required
+@require_permission("manage_devices")
 def complete(request, team_slug):
     for key in ['onboarding_site_id', 'onboarding_gateway_id', 'onboarding_device_id', 'setup_mode', 'connectivity_type']:
         if key in request.session:
@@ -171,12 +172,12 @@ def complete(request, team_slug):
 
 # Setup Wizard Views for Existing Customers
 
-@login_and_team_required
+@require_permission("manage_devices")
 def setup_start(request, team_slug):
     request.session['setup_mode'] = True
     return render(request, "onboarding/setup_start.html")
 
-@login_and_team_required
+@require_permission("manage_devices")
 def setup_step_site(request, team_slug):
     sites = Site.objects.filter(team=request.team)
     
@@ -191,7 +192,7 @@ def setup_step_site(request, team_slug):
     context = {"steps": ONBOARDING_STEPS, "current_step": 1, "sites": sites}
     return render(request, "onboarding/setup_step_site.html", context)
 
-@login_and_team_required
+@require_permission("manage_devices")
 def setup_step_connectivity(request, team_slug):
     if request.method == "POST":
         connectivity = request.POST.get("connectivity")
