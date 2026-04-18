@@ -14,7 +14,9 @@ def get_tools_definition():
                         "device_ids": {
                             "type": "array",
                             "items": {"type": "integer"},
-                            "description": "Optional list of device IDs. If omitted, returns status for all devices in the team.",
+                            "description": (
+                                "Optional list of device IDs. If omitted, returns status for all devices in the team."
+                            ),
                         }
                     },
                 },

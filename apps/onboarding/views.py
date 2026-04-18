@@ -1,3 +1,5 @@
+import secrets
+
 from django.shortcuts import get_object_or_404, redirect, render
 
 from apps.alerts.models import AlertRule
@@ -74,11 +76,12 @@ def step_2_gateway(request, team_slug):
                         "current_step": 2,
                         "site": site,
                         "gateway": gateway,  # Pass the one we were editing if it failed
-                        "error": "This Serial Number is already registered to another team. Please contact support if you believe this is an error.",
+                        "error": (
+                            "This Serial Number is already registered to another team. "
+                            "Please contact support if you believe this is an error."
+                        ),
                     }
                     return render(request, "onboarding/step_2_gateway.html", context)
-
-            import secrets
 
             if gateway:
                 gateway.name = name

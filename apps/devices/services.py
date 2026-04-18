@@ -66,7 +66,6 @@ def process_command_response(payload_str):
     try:
         payload = json.loads(payload_str)
         tx_id = payload.get("id")
-        device_name = payload.get("device")
 
         if not tx_id:
             return

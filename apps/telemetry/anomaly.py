@@ -35,7 +35,10 @@ def get_z_score_insight(device, key):
         return {
             "type": "anomaly",
             "severity": "high" if z_score > 4 else "medium",
-            "message": f"Significant deviation detected in {key.replace('_', ' ')}. Value is {z_score:.1f}x the standard deviation.",
+            "message": (
+                f"Significant deviation detected in {key.replace('_', ' ')}. "
+                f"Value is {z_score:.1f}x the standard deviation."
+            ),
             "value": latest_val.value_numeric,
         }
     return None

@@ -1,12 +1,11 @@
 from django import forms
 
+from .models import SharedDashboard
+
 
 class DateRangeForm(forms.Form):
     start = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
     end = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
-
-
-from .models import SharedDashboard
 
 
 class SharedDashboardForm(forms.ModelForm):

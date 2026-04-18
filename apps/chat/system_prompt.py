@@ -22,9 +22,13 @@ def get_system_prompt(team, user):
 
     context.append("\nConnected Devices:")
     for device in devices:
-        context.append(
-            f"- {device.name} (ID: {device.id}) @ Site: {device.site.name}. Type: {device.device_type}. Category: {device.energy_category}"
+        dev_info = (
+            f"- {device.name} (ID: {device.id})"
+            f" @ Site: {device.site.name}."
+            f" Type: {device.device_type}."
+            f" Category: {device.energy_category}"
         )
+        context.append(dev_info)
 
     context_str = "\n".join(context)
 

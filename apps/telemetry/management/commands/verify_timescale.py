@@ -11,7 +11,8 @@ class Command(BaseCommand):
         with connection.cursor() as cursor:
             # Check if telemetry_telemetrydata is a hypertable
             cursor.execute(
-                "SELECT hypertable_name FROM timescaledb_information.hypertables WHERE hypertable_name = 'telemetry_telemetrydata';"
+                "SELECT hypertable_name FROM timescaledb_information.hypertables "
+                "WHERE hypertable_name = 'telemetry_telemetrydata';"
             )
             row = cursor.fetchone()
 
@@ -20,14 +21,16 @@ class Command(BaseCommand):
 
                 # Get chunk info
                 cursor.execute(
-                    "SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name = 'telemetry_telemetrydata';"
+                    "SELECT count(*) FROM timescaledb_information.chunks "
+                    "WHERE hypertable_name = 'telemetry_telemetrydata';"
                 )
                 chunk_count = cursor.fetchone()[0]
                 self.stdout.write(f"Active Chunks: {chunk_count}")
 
                 # Check dimensions
                 cursor.execute(
-                    "SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE hypertable_name = 'telemetry_telemetrydata';"
+                    "SELECT column_name, time_interval FROM timescaledb_information.dimensions "
+                    "WHERE hypertable_name = 'telemetry_telemetrydata';"
                 )
                 dimensions = cursor.fetchall()
                 for dim in dimensions:
@@ -36,7 +39,8 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR("ERROR: 'telemetry_telemetrydata' is NOT a hypertable!"))
                 self.stdout.write(
                     self.style.WARNING(
-                        "Fix: Consider running SELECT create_hypertable('telemetry_telemetrydata', 'timestamp'); manually if migrations failed."
+                        "Fix: Consider running SELECT create_hypertable('telemetry_telemetrydata', 'timestamp'); "
+                        "manually if migrations failed."
                     )
                 )
 

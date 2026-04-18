@@ -25,4 +25,5 @@ class TelemetryData(models.Model):
         verbose_name_plural = "Telemetry data"
 
     def __str__(self):
-        return f"{self.device.name} - {self.key}: {self.value_numeric or self.value_string or self.value_bool} @ {self.timestamp}"
+        val = self.value_numeric or self.value_string or self.value_bool
+        return f"{self.device.name} - {self.key}: {val} @ {self.timestamp}"

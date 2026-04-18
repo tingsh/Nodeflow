@@ -123,9 +123,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     function_args = json.loads(tool_call.function.arguments)
 
                     # Update UI that we're searching data
-                    await self.send(
-                        text_data=f'<div hx-swap-oob="beforeend:#{contents_div_id}"><i>(Querying {function_name.replace("_", " ")}...)</i><br></div>'
+                    query_label = function_name.replace("_", " ")
+                    oob_html = (
+                        f'<div hx-swap-oob="beforeend:#{contents_div_id}"><i>(Querying {query_label}...)</i><br></div>'
                     )
+                    await self.send(text_data=oob_html)
 
                     result = await database_sync_to_async(executor.execute)(function_name, function_args)
 

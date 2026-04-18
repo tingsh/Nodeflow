@@ -27,17 +27,15 @@ class TestSignupView(TestCase):
             "team_name": team_name,
             "terms_agreement": True,
         }
-        if "password2*" in settings.ACCOUNT_SIGNUP_FIELDS:
-            data["password2"] = password
+        data["password2"] = password
 
         response = self.client.post(
             reverse("account_signup"),
             data=data,
             follow=True,
         )
-        if response.status_code != 200 or CustomUser.objects.count() == 0:
-             if 'form' in response.context:
-                 print(f"FORM ERRORS: {response.context['form'].errors}")
+        if (response.status_code != 200 or CustomUser.objects.count() == 0) and "form" in response.context:
+            print(f"FORM ERRORS: {response.context['form'].errors}")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(1, CustomUser.objects.count())
         self.assertEqual(1, Team.objects.count())

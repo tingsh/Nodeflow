@@ -64,7 +64,7 @@ def ingest_telemetry_data(gateway_sn, values, timestamp=None):
         data_point = TelemetryData(device=target_device, timestamp=timestamp, key=key)
 
         # Determine value type
-        if isinstance(value, (int, float)):
+        if isinstance(value, int | float):
             data_point.value_numeric = float(value)
         elif isinstance(value, bool):
             data_point.value_bool = value

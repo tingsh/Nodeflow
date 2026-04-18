@@ -1,7 +1,11 @@
+import contextlib
+import json
+
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.urls import reverse_lazy
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
 from apps.teams.decorators import require_permission
@@ -228,10 +232,8 @@ def device_send_command(request, team_slug, pk):
     elif value.lower() == "false":
         value = False
     else:
-        try:
+        with contextlib.suppress(ValueError):
             value = float(value)
-        except ValueError:
-            pass  # Keep as string
 
     try:
         from .services import send_device_command
@@ -391,11 +393,6 @@ def template_library_search(request, team_slug):
         manufacturer__icontains=query
     )
     return render(request, "devices/partials/template_search_results.html", {"templates": templates[:10]})
-
-
-import json
-
-from django.views.decorators.csrf import csrf_exempt
 
 
 @csrf_exempt

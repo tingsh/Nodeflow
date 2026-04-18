@@ -102,8 +102,7 @@ def export_telemetry_csv(request, team_slug, device_id):
 
     def row_generator():
         yield ["Timestamp", "Metric Key", "Numeric Value", "Text Value"]
-        for row in queryset.iterator():
-            yield row
+        yield from queryset.iterator()
 
     pseudo_buffer = Echo()
     writer = csv.writer(pseudo_buffer)

@@ -46,6 +46,4 @@ class SharedDashboard(BaseTeamModel):
     def is_expired(self):
         from django.utils import timezone
 
-        if self.expires_at and timezone.now() > self.expires_at:
-            return True
-        return False
+        return bool(self.expires_at and timezone.now() > self.expires_at)

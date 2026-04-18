@@ -54,7 +54,11 @@ def send_alert_whatsapp(alert):
     # from twilio.rest import Client
     # client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
     # for number in recipients:
-    #     client.messages.create(body=message, from_=f"whatsapp:{settings.TWILIO_WHATSAPP_NUMBER}", to=f"whatsapp:{number}")
+    #     client.messages.create(
+    #         body=message,
+    #         from_=f"whatsapp:{settings.TWILIO_WHATSAPP_NUMBER}",
+    #         to=f"whatsapp:{number}",
+    #     )
 
     logger.info(f"WhatsApp dispatch triggered for {len(recipients)} recipients.")
 

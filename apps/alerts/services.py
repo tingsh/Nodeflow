@@ -13,7 +13,7 @@ def check_alerts_for_payload(device, key, value):
     """
     Checks all active alert rules for a specific telemetry data point.
     """
-    if not isinstance(value, (int, float)):
+    if not isinstance(value, int | float):
         return
 
     # Find rules that apply to this device and key

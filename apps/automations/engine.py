@@ -55,11 +55,7 @@ def evaluate_automations(device, telemetry_data):
                     results.append(False)
 
         # Apply logic
-        triggered = False
-        if automation.trigger_logic == "and":
-            triggered = all(results)
-        else:
-            triggered = any(results)
+        triggered = all(results) if automation.trigger_logic == "and" else any(results)
 
         if triggered:
             execute_automation(automation)
@@ -74,10 +70,7 @@ def evaluate_condition(condition, current_value):
 
     # Type cast threshold
     try:
-        if isinstance(current_value, (int, float)):
-            threshold = float(condition.threshold)
-        else:
-            threshold = condition.threshold
+        threshold = float(condition.threshold) if isinstance(current_value, int | float) else condition.threshold
     except ValueError:
         threshold = condition.threshold
 
@@ -134,7 +127,7 @@ def execute_automation(automation):
         try:
             if action.action_type == "send_command":
                 if action.target_device:
-                    cmd_log = send_device_command(
+                    send_device_command(
                         device=action.target_device,
                         key=action.command_key,
                         value=action.command_payload.get("value", ""),

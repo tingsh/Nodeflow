@@ -62,9 +62,9 @@ def run_simulator():
             payload = generate_telemetry(t)
 
             client.publish(TOPIC, json.dumps(payload))
-            print(
-                f"[{time.strftime('%H:%M:%S')}] Published: {payload['values']['active_power']}W, Solar: {payload['values']['solar_generation']}W"
-            )
+            pwr = payload["values"]["active_power"]
+            sol = payload["values"]["solar_generation"]
+            print(f"[{time.strftime('%H:%M:%S')}] Published: {pwr}W, Solar: {sol}W")
 
             time.sleep(5)  # Matches our 5s polling goal
     except KeyboardInterrupt:

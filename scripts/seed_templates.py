@@ -6,7 +6,7 @@ import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "iot_platform.settings")
 django.setup()
 
-from apps.devices.models import DeviceTemplate
+from apps.devices.models import DeviceTemplate  # noqa: E402
 
 
 def seed_templates():
