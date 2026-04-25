@@ -27,3 +27,25 @@ class TelemetryData(models.Model):
     def __str__(self):
         val = self.value_numeric or self.value_string or self.value_bool
         return f"{self.device.name} - {self.key}: {val} @ {self.timestamp}"
+
+
+class GatewayLog(models.Model):
+    """Log entries received from edge gateways."""
+
+    gateway = models.ForeignKey("devices.Gateway", on_delete=models.CASCADE, related_name="logs")
+    timestamp = models.DateTimeField(db_index=True)
+    level = models.CharField(max_length=20)  # INFO, WARNING, ERROR, CRITICAL
+    logger_name = models.CharField(max_length=200)
+    message = models.TextField()
+    module = models.CharField(max_length=100, blank=True)
+    line = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-timestamp"]
+        indexes = [
+            models.Index(fields=["gateway", "timestamp"]),
+            models.Index(fields=["gateway", "level"]),
+        ]
+
+    def __str__(self):
+        return f"[{self.level}] {self.gateway.serial_number} @ {self.timestamp}"

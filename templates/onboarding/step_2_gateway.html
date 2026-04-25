@@ -6,8 +6,8 @@
 
     <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700">
         <div class="p-8 sm:p-12">
-            <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Connect a Gateway</h2>
-            <p class="text-gray-500 dark:text-gray-400 mb-8">Gateways collection data from your local sensors and push it to Nodeflow.</p>
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Claim Your Gateway</h2>
+            <p class="text-gray-500 dark:text-gray-400 mb-8">Enter the Serial Number and Claim Code from the sticker on your Nodeflow Edge gateway.</p>
             
             {% if error %}
             <div class="mb-8 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl flex items-start">
@@ -15,6 +15,20 @@
                 <p class="text-sm text-red-800 dark:text-red-300 font-medium">{{ error }}</p>
             </div>
             {% endif %}
+
+            <div class="mb-8 p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700">
+                <div class="flex items-center gap-4">
+                    <div class="flex-shrink-0 w-32 h-20 rounded-xl bg-white dark:bg-gray-800 border-2 border-dashed border-gray-300 dark:border-gray-600 flex flex-col items-center justify-center text-[10px] font-mono text-gray-500 dark:text-gray-400 leading-relaxed">
+                        <span class="font-bold text-gray-700 dark:text-gray-300 text-xs mb-0.5">NODEFLOW EDGE</span>
+                        <span>S/N: NF-XXXXXX</span>
+                        <span>Code: XXXXXXXX</span>
+                    </div>
+                    <div class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                        <p class="font-semibold text-gray-800 dark:text-gray-200 mb-1">Find the sticker</p>
+                        <p>Look on the <strong>bottom or side</strong> of your Nodeflow Edge gateway for a label with the Serial Number and Claim Code.</p>
+                    </div>
+                </div>
+            </div>
 
             <form method="post">
                 {% csrf_token %}
@@ -26,11 +40,18 @@
                             class="block w-full px-4 py-3 rounded-xl border-gray-200 dark:border-gray-700 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500 transition">
                     </div>
  
-                    <div>
-                        <label for="serial_number" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Serial Number / UID</label>
-                        <input type="text" name="serial_number" id="serial_number" required placeholder="Found on device label"
-                            value="{{ gateway.serial_number|default:'' }}"
-                            class="block w-full px-4 py-3 rounded-xl border-gray-200 dark:border-gray-700 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500 transition">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label for="serial_number" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Serial Number</label>
+                            <input type="text" name="serial_number" id="serial_number" required placeholder="e.g., NF-A7B3C2"
+                                value="{{ gateway.serial_number|default:'' }}"
+                                class="block w-full px-4 py-3 rounded-xl border-gray-200 dark:border-gray-700 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500 transition uppercase tracking-wider font-mono">
+                        </div>
+                        <div>
+                            <label for="claim_code" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Claim Code</label>
+                            <input type="text" name="claim_code" id="claim_code" required placeholder="e.g., 8A72XKPL"
+                                class="block w-full px-4 py-3 rounded-xl border-gray-200 dark:border-gray-700 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500 transition uppercase tracking-wider font-mono">
+                        </div>
                     </div>
 
                     <div class="sticky bottom-0 bg-white dark:bg-gray-800 p-6 border-t border-gray-100 dark:border-gray-700 -mx-8 sm:-mx-12 mt-8 z-10 flex items-center justify-between space-x-6">
@@ -39,7 +60,7 @@
                             Back
                         </a>
                         <button type="submit" class="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-600/30 transition transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed group relative overflow-hidden">
-                            <span class="group-[.htmx-request]:opacity-0 transition-opacity">Connect & Continue</span>
+                            <span class="group-[.htmx-request]:opacity-0 transition-opacity">Claim Gateway</span>
                             <i class="fa fa-arrow-right ml-2 group-[.htmx-request]:opacity-0 transition-opacity"></i>
                             <div class="absolute inset-0 items-center justify-center hidden group-[.htmx-request]:flex">
                                 <i class="fa fa-spinner fa-spin"></i>
@@ -51,4 +72,21 @@
         </div>
     </div>
 </div>
+
+<script>
+    // Pre-fill from QR code URL params (?sn=NF-XXXX&code=XXXXXXXX)
+    document.addEventListener('DOMContentLoaded', function() {
+        const params = new URLSearchParams(window.location.search);
+        const sn = params.get('sn');
+        const code = params.get('code');
+        if (sn) {
+            const snInput = document.getElementById('serial_number');
+            if (snInput && !snInput.value) snInput.value = sn.toUpperCase();
+        }
+        if (code) {
+            const codeInput = document.getElementById('claim_code');
+            if (codeInput && !codeInput.value) codeInput.value = code.toUpperCase();
+        }
+    });
+</script>
 {% endblock %}

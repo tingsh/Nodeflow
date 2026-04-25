@@ -1,0 +1,27 @@
+{% if status == "online" %}
+<div class="flex flex-col items-center gap-3 py-6">
+    <div class="w-12 h-12 rounded-full bg-green-100 dark:bg-green-500/20 flex items-center justify-center">
+        <i class="fa fa-check text-xl text-green-600 dark:text-green-400"></i>
+    </div>
+    <span class="text-sm font-bold text-green-700 dark:text-green-400">Gateway is Online</span>
+    {% if gateway.last_seen %}
+    <span class="text-xs text-gray-400">Last seen: {{ gateway.last_seen|timesince }} ago</span>
+    {% endif %}
+</div>
+<script>
+    // Enable the continue button
+    const btn = document.getElementById('continue-btn');
+    if (btn) {
+        btn.classList.remove('opacity-50', 'pointer-events-none');
+        btn.removeAttribute('aria-disabled');
+    }
+</script>
+{% else %}
+<div class="flex items-center justify-center gap-3 py-6">
+    <span class="loading loading-spinner loading-md text-indigo-600"></span>
+    <div class="text-left">
+        <span class="block text-sm font-medium text-gray-500 dark:text-gray-400">Waiting for gateway to connect...</span>
+        <span class="block text-xs text-gray-400 dark:text-gray-500 mt-0.5">This usually takes 30-60 seconds after powering on.</span>
+    </div>
+</div>
+{% endif %}

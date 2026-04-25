@@ -26,6 +26,12 @@ class Gateway(BaseTeamModel):
         ("offline", _("Offline")),
         ("maintenance", _("Maintenance")),
     )
+    TLS_MODE_CHOICES = (
+        ("none", _("None")),
+        ("one-way", _("One-Way TLS")),
+        ("mutual", _("Mutual TLS")),
+    )
+
     site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="gateways")
     name = models.CharField(max_length=200)
     serial_number = models.CharField(max_length=100, unique=True)
@@ -38,6 +44,21 @@ class Gateway(BaseTeamModel):
     discovery_data = models.JSONField(
         default=dict, blank=True, help_text=_("Most recent discovery report from the edge")
     )
+
+    # MQTT credentials (per-gateway authentication)
+    mqtt_username = models.CharField(max_length=100, unique=True, null=True, blank=True)
+    mqtt_password = models.CharField(max_length=255, blank=True, help_text=_("Bcrypt hash of the MQTT password"))
+    tls_mode = models.CharField(max_length=10, choices=TLS_MODE_CHOICES, default="one-way")
+    client_cert_pem = models.TextField(blank=True, help_text=_("Client certificate PEM for mTLS"))
+    client_key_pem = models.TextField(blank=True, help_text=_("Client private key PEM for mTLS"))
+
+    # Heartbeat / attribute sync fields (populated by edge gateway)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    uptime_seconds = models.IntegerField(null=True, blank=True)
+    python_version = models.CharField(max_length=20, blank=True)
+    platform_info = models.CharField(max_length=200, blank=True)
+    active_connectors = models.JSONField(default=list, blank=True)
+    connected_devices = models.JSONField(default=list, blank=True)
 
     def __str__(self):
         return f"{self.name} ({self.serial_number})"
@@ -105,16 +126,69 @@ class Device(BaseTeamModel):
     name = models.CharField(max_length=200)
     device_type = models.CharField(max_length=30, choices=DeviceTemplate.DEVICE_TYPE_CHOICES)
     protocol = models.CharField(max_length=20, choices=DeviceTemplate.PROTOCOL_CHOICES)
-    port = models.PositiveIntegerField(null=True, blank=True)
+    port = models.CharField(max_length=100, null=True, blank=True, help_text="Interface name or address (e.g., /dev/ttyUSB0, 192.168.1.100:502)")
     energy_category = models.CharField(max_length=20, choices=ENERGY_CATEGORY_CHOICES, default="none")
 
     connection_config = models.JSONField(default=dict)
+    discovery_meta = models.JSONField(default=dict, blank=True, help_text="Raw discovery data from Edge (interface, slave_id, baud_rate, etc.)")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="offline")
     last_telemetry_at = models.DateTimeField(null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
         return f"{self.name} ({self.site.name})"
+
+
+class GatewayConfig(BaseTeamModel):
+    """Tracks config versions pushed to gateways."""
+
+    STATUS_CHOICES = (
+        ("pending", _("Pending")),
+        ("success", _("Success")),
+        ("failed", _("Failed")),
+    )
+
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="config_history")
+    config_json = models.JSONField()
+    pushed_at = models.DateTimeField(auto_now_add=True)
+    request_id = models.UUIDField(unique=True)
+    action = models.CharField(max_length=30, default="full_update")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    error_message = models.TextField(blank=True)
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-pushed_at"]
+
+    def __str__(self):
+        return f"Config push {self.request_id} → {self.gateway.serial_number} ({self.status})"
+
+
+class RpcCommand(BaseTeamModel):
+    """Tracks RPC commands sent to gateways."""
+
+    STATUS_CHOICES = (
+        ("pending", _("Pending")),
+        ("success", _("Success")),
+        ("error", _("Error")),
+        ("timeout", _("Timeout")),
+    )
+
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="rpc_commands")
+    request_id = models.UUIDField(unique=True)
+    method = models.CharField(max_length=50)
+    params = models.JSONField(default=dict)
+    sent_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    result = models.JSONField(null=True, blank=True)
+    error_message = models.TextField(blank=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-sent_at"]
+
+    def __str__(self):
+        return f"RPC {self.method} → {self.gateway.serial_number} ({self.status})"
 
 
 class DeviceCommand(BaseTeamModel):

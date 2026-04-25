@@ -21,26 +21,37 @@ def parse_mqtt_payload(topic, payload):
     events = []
 
     # Ensure payload is a dict
-    if isinstance(payload, bytes):
+    if isinstance(payload, (bytes, str)):
         try:
-            payload = json.loads(payload.decode())
+            payload = json.loads(payload)
         except Exception as e:
             logger.error(f"Failed to decode MQTT payload: {e}")
             return []
 
-    # Detect Format A (Nodeflow Simulator)
+    # Detect Format A (Nodeflow Simulator / Nodeflow Edge)
     if "serial_number" in payload and "values" in payload:
         gateway_sn = payload.get("serial_number")
         values = payload.get("values", {})
-        # Extracts device_name from values if present (our current logic handle this in services.py too)
-        device_name = values.get("device_name")
+        # device_id is a top-level field (Cloud-assigned UUID, set by Edge when deviceId is in connector config)
+        device_id = payload.get("device_id")
+        # device_name can be top-level or inside values
+        device_name = payload.get("device_name") or values.get("device_name")
+
+        # Parse edge-provided timestamp (ms epoch); fall back to server time
+        ts = payload.get("ts")
+        dt = (
+            datetime.fromtimestamp(ts / 1000.0, tz=timezone.utc)
+            if ts
+            else None
+        )
 
         events.append(
             {
                 "gateway_sn": gateway_sn,
+                "device_id": device_id,
                 "device_name": device_name,
                 "values": values,
-                "timestamp": None,  # Use server time
+                "timestamp": dt,
             }
         )
 

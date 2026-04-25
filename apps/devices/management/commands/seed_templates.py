@@ -16,11 +16,11 @@ class Command(BaseCommand):
                 "protocol": "modbus_rtu",
                 "category": "energy",
                 "register_map": {
-                    "voltage": {"address": 0, "type": "float32", "unit": "V"},
-                    "active_power": {"address": 12, "type": "float32", "unit": "W"},
-                    "current": {"address": 6, "type": "float32", "unit": "A"},
-                    "frequency": {"address": 70, "type": "float32", "unit": "Hz"},
-                    "energy": {"address": 342, "type": "float32", "unit": "kWh"},
+                    "voltage": {"address": 0, "type": "float32", "unit": "V", "functionCode": 4},
+                    "active_power": {"address": 12, "type": "float32", "unit": "W", "functionCode": 4},
+                    "current": {"address": 6, "type": "float32", "unit": "A", "functionCode": 4},
+                    "frequency": {"address": 70, "type": "float32", "unit": "Hz", "functionCode": 4},
+                    "energy": {"address": 342, "type": "float32", "unit": "kWh", "functionCode": 4},
                 },
                 "alert_presets": [
                     {
@@ -47,10 +47,10 @@ class Command(BaseCommand):
                 "protocol": "modbus_tcp",
                 "category": "energy",
                 "register_map": {
-                    "voltage": {"address": 3028, "type": "float32", "unit": "V"},
-                    "active_power": {"address": 3054, "type": "float32", "unit": "W"},
-                    "current": {"address": 3000, "type": "float32", "unit": "A"},
-                    "energy": {"address": 2700, "type": "int64", "unit": "Wh"},
+                    "voltage": {"address": 3028, "type": "float32", "unit": "V", "functionCode": 3},
+                    "active_power": {"address": 3054, "type": "float32", "unit": "W", "functionCode": 3},
+                    "current": {"address": 3000, "type": "float32", "unit": "A", "functionCode": 3},
+                    "energy": {"address": 2700, "type": "int64", "unit": "Wh", "functionCode": 3},
                 },
                 "alert_presets": [
                     {
@@ -70,8 +70,8 @@ class Command(BaseCommand):
                 "protocol": "modbus_rtu",
                 "category": "energy",
                 "register_map": {
-                    "energy": {"address": 20480, "type": "int64", "unit": "Wh"},
-                    "voltage": {"address": 23296, "type": "int32", "unit": "mV"},
+                    "energy": {"address": 20480, "type": "int64", "unit": "Wh", "functionCode": 3},
+                    "voltage": {"address": 23296, "type": "int32", "unit": "mV", "functionCode": 3},
                 },
                 "alert_presets": [],
             },
@@ -83,10 +83,12 @@ class Command(BaseCommand):
                 "protocol": "modbus_rtu",
                 "category": "factory",
                 "register_map": {
-                    "frequency": {"address": 1, "type": "uint16", "unit": "Hz"},
-                    "output_current": {"address": 4, "type": "uint16", "unit": "A"},
-                    "output_power": {"address": 5, "type": "uint16", "unit": "kW"},
-                    "motor_speed": {"address": 2, "type": "uint16", "unit": "rpm"},
+                    "frequency": {"address": 1, "type": "uint16", "unit": "Hz", "functionCode": 3},
+                    "output_current": {"address": 4, "type": "uint16", "unit": "A", "functionCode": 3},
+                    "output_power": {"address": 5, "type": "uint16", "unit": "kW", "functionCode": 3},
+                    "motor_speed": {"address": 2, "type": "uint16", "unit": "rpm", "functionCode": 3},
+                    "speed_setpoint": {"address": 1, "type": "uint16", "unit": "rpm", "functionCode": 6, "writable": True, "control": "input", "min": 0, "max": 3000},
+                    "run_command": {"address": 0, "type": "bool", "functionCode": 5, "writable": True, "control": "toggle", "labels": ["Stop", "Start"]},
                 },
                 "alert_presets": [
                     {
@@ -106,8 +108,8 @@ class Command(BaseCommand):
                 "protocol": "modbus_rtu",
                 "category": "cold_chain",
                 "register_map": {
-                    "temperature": {"address": 0, "type": "int16", "scale": 0.1, "unit": "°C"},
-                    "humidity": {"address": 1, "type": "int16", "scale": 0.1, "unit": "%"},
+                    "temperature": {"address": 0, "type": "int16", "scale": 0.1, "unit": "°C", "functionCode": 4},
+                    "humidity": {"address": 1, "type": "int16", "scale": 0.1, "unit": "%", "functionCode": 4},
                 },
                 "alert_presets": [
                     {
@@ -134,9 +136,9 @@ class Command(BaseCommand):
                 "protocol": "modbus_rtu",
                 "category": "energy",
                 "register_map": {
-                    "voltage": {"address": 0, "type": "float32", "unit": "V"},
-                    "active_power": {"address": 12, "type": "float32", "unit": "W"},
-                    "energy": {"address": 72, "type": "float32", "unit": "kWh"},
+                    "voltage": {"address": 0, "type": "float32", "unit": "V", "functionCode": 4},
+                    "active_power": {"address": 12, "type": "float32", "unit": "W", "functionCode": 4},
+                    "energy": {"address": 72, "type": "float32", "unit": "kWh", "functionCode": 4},
                 },
                 "alert_presets": [],
             },
@@ -148,9 +150,9 @@ class Command(BaseCommand):
                 "protocol": "modbus_tcp",
                 "category": "energy",
                 "register_map": {
-                    "solar_generation": {"address": 40084, "type": "uint16", "unit": "W"},
-                    "ac_current": {"address": 40072, "type": "uint16", "unit": "A"},
-                    "temp_heatsink": {"address": 40104, "type": "int16", "unit": "°C"},
+                    "solar_generation": {"address": 40084, "type": "uint16", "unit": "W", "functionCode": 3},
+                    "ac_current": {"address": 40072, "type": "uint16", "unit": "A", "functionCode": 3},
+                    "temp_heatsink": {"address": 40104, "type": "int16", "unit": "°C", "functionCode": 3},
                 },
                 "alert_presets": [
                     {
@@ -170,8 +172,8 @@ class Command(BaseCommand):
                 "protocol": "modbus_rtu",
                 "category": "energy",
                 "register_map": {
-                    "active_power": {"address": 4096, "type": "int32", "unit": "W"},
-                    "energy": {"address": 4128, "type": "int64", "unit": "Wh"},
+                    "active_power": {"address": 4096, "type": "int32", "unit": "W", "functionCode": 3},
+                    "energy": {"address": 4128, "type": "int64", "unit": "Wh", "functionCode": 3},
                 },
                 "alert_presets": [],
             },
@@ -183,9 +185,11 @@ class Command(BaseCommand):
                 "protocol": "modbus_rtu",
                 "category": "factory",
                 "register_map": {
-                    "speed_pct": {"address": 16120, "type": "uint16", "scale": 0.01, "unit": "%"},
-                    "current": {"address": 16140, "type": "uint16", "scale": 0.01, "unit": "A"},
-                    "power_kw": {"address": 16100, "type": "uint16", "scale": 0.01, "unit": "kW"},
+                    "speed_pct": {"address": 16120, "type": "uint16", "scale": 0.01, "unit": "%", "functionCode": 3},
+                    "current": {"address": 16140, "type": "uint16", "scale": 0.01, "unit": "A", "functionCode": 3},
+                    "power_kw": {"address": 16100, "type": "uint16", "scale": 0.01, "unit": "kW", "functionCode": 3},
+                    "speed_setpoint": {"address": 16120, "type": "uint16", "scale": 0.01, "unit": "%", "functionCode": 6, "writable": True, "control": "slider", "min": 0, "max": 100},
+                    "run_command": {"address": 0, "type": "bool", "functionCode": 5, "writable": True, "control": "toggle", "labels": ["Stop", "Start"]},
                 },
                 "alert_presets": [
                     {
@@ -205,8 +209,10 @@ class Command(BaseCommand):
                 "protocol": "modbus_rtu",
                 "category": "factory",
                 "register_map": {
-                    "ai_0": {"address": 0, "type": "int16", "unit": "mV"},
-                    "ai_1": {"address": 1, "type": "int16", "unit": "mV"},
+                    "ai_0": {"address": 0, "type": "int16", "unit": "mV", "functionCode": 4},
+                    "ai_1": {"address": 1, "type": "int16", "unit": "mV", "functionCode": 4},
+                    "do_0": {"address": 16, "type": "bool", "functionCode": 5, "writable": True, "control": "toggle", "labels": ["OFF", "ON"]},
+                    "do_1": {"address": 17, "type": "bool", "functionCode": 5, "writable": True, "control": "toggle", "labels": ["OFF", "ON"]},
                 },
                 "alert_presets": [],
             },

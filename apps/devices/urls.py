@@ -17,6 +17,23 @@ urlpatterns = [
     path("gateways/<int:pk>/", views.GatewayDetailView.as_view(), name="gateway_detail"),
     path("gateways/<int:pk>/edit/", views.GatewayUpdateView.as_view(), name="gateway_edit"),
     path("gateways/<int:pk>/delete/", views.GatewayDeleteView.as_view(), name="gateway_delete"),
+    # Gateway management (Cloud ↔ Edge)
+    path("gateways/<int:pk>/rotate-password/", views.gateway_rotate_password, name="gateway_rotate_password"),
+    path("gateways/<int:pk>/rpc/", views.gateway_send_rpc, name="gateway_send_rpc"),
+    path("gateways/<int:pk>/config/", views.gateway_push_config, name="gateway_push_config"),
+    path("gateways/<int:pk>/logs/", views.gateway_logs, name="gateway_logs"),
+    path("gateways/<int:pk>/rpc-history/", views.gateway_rpc_history, name="gateway_rpc_history"),
+    # Device RPC command (via gateway)
+    path(
+        "gateways/<int:gateway_pk>/devices/<int:device_pk>/command/",
+        views.device_rpc_command,
+        name="device_rpc_command",
+    ),
+    path(
+        "gateways/<int:gateway_pk>/devices/<int:device_pk>/rpc-status/<uuid:request_id>/",
+        views.device_rpc_status,
+        name="device_rpc_status",
+    ),
     # Device URLs
     path("", views.DeviceListView.as_view(), name="device_list"),
     path("create/", views.DeviceCreateView.as_view(), name="device_create"),

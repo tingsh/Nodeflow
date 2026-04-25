@@ -121,6 +121,15 @@ PROJECT_APPS = [
 MQTT_BROKER_HOST = env("MQTT_BROKER_HOST", default="localhost")
 MQTT_BROKER_PORT = env.int("MQTT_BROKER_PORT", default=1883)
 MQTT_CONSUMER_CLIENT_ID = env("MQTT_CONSUMER_CLIENT_ID", default="iot-platform-consumer")
+MQTT_PUBLISHER_CLIENT_ID = env("MQTT_PUBLISHER_CLIENT_ID", default="nodeflow-cloud-publisher")
+
+# Mosquitto Dynamic Security Plugin
+MQTT_DYNSEC_PORT = env.int("MQTT_DYNSEC_PORT", default=1884)
+MQTT_DYNSEC_ADMIN_USER = env("MQTT_DYNSEC_ADMIN_USER", default="dynsec-admin")
+MQTT_DYNSEC_ADMIN_PASS = env("MQTT_DYNSEC_ADMIN_PASS", default="dynsec-password")
+
+# Gateway Claim Code (HMAC secret for deriving claim codes from serial numbers)
+GATEWAY_CLAIM_SECRET = env("GATEWAY_CLAIM_SECRET", default="change-me-in-production")
 
 # WhatsApp Settings
 WHATSAPP_PROVIDER = env("WHATSAPP_PROVIDER", default="mock")  # 'mock' or 'twilio'

@@ -14,6 +14,19 @@
         <div class="px-4 py-5 sm:p-6">
             <form method="post" class="space-y-6">
                 {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4">
+                    <div class="flex items-start">
+                        <i class="fa fa-exclamation-circle text-red-500 mt-0.5 mr-3"></i>
+                        <div>
+                            {% for error in form.non_field_errors %}
+                            <p class="text-sm text-red-800 dark:text-red-300 font-medium">{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
                 
                 <div class="grid grid-cols-1 gap-y-6 sm:grid-cols-2 gap-x-6 max-w-4xl">
                     {% for field in form %}
@@ -43,6 +56,24 @@
                         {% endif %}
                     </div>
                     {% endfor %}
+
+                    {% if not object %}
+                    <div class="sm:col-span-1">
+                        <label for="id_claim_code" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            Claim Code
+                        </label>
+                        <div class="mt-1 shadow-sm">
+                            <input type="text" name="claim_code" id="id_claim_code" required
+                                   placeholder="e.g., 8A72XKPL"
+                                   value="{{ request.POST.claim_code|default:'' }}"
+                                   class="block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm uppercase tracking-wider font-mono">
+                        </div>
+                        <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                            <i class="fa fa-info-circle mr-1"></i>
+                            Found on the sticker on the bottom of your Nodeflow Edge gateway.
+                        </p>
+                    </div>
+                    {% endif %}
                 </div>
 
                 <div class="flex justify-end space-x-3 pt-5 border-t border-gray-200 dark:border-gray-700">

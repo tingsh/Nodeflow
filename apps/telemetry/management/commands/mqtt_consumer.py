@@ -1,8 +1,10 @@
+import json
 import logging
 
 import paho.mqtt.client as mqtt
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from apps.telemetry.services import ingest_telemetry_data
 
@@ -10,7 +12,7 @@ logger = logging.getLogger("iot_platform")
 
 
 class Command(BaseCommand):
-    help = "Starts the MQTT consumer service to ingest device telemetry"
+    help = "Starts the MQTT consumer service to ingest device telemetry and edge gateway messages"
 
     def handle(self, *args, **options):
         client = mqtt.Client(
@@ -38,46 +40,240 @@ class Command(BaseCommand):
     def on_connect(self, client, userdata, flags, reason_code, properties):
         if reason_code == 0:
             self.stdout.write(self.style.SUCCESS("Connected to MQTT Broker successfully."))
-            # Subscribe to topics
+            # Subscribe to all inbound topics
             client.subscribe("v1/gateway/telemetry")
-            client.subscribe("v1/gateway/rpc")  # Listen for command responses
-            self.stdout.write(self.style.NOTICE("Subscribed to telemetry and RPC response topics"))
+            client.subscribe("v1/gateway/logs")
+            client.subscribe("v1/gateway/attributes")
+            client.subscribe("v1/gateway/rpc/response")
+            self.stdout.write(
+                self.style.NOTICE("Subscribed to: telemetry, logs, attributes, rpc/response")
+            )
         else:
             self.stdout.write(self.style.ERROR(f"Connection failed with code {reason_code}"))
 
     def on_message(self, client, userdata, msg):
         try:
-            payload_str = msg.payload.decode()
+            payload = json.loads(msg.payload.decode())
 
-            # Route based on topic
-            if msg.topic == "v1/gateway/rpc":
-                from apps.devices.services import process_command_response
-
-                process_command_response(payload_str)
-                return
-
-            from apps.telemetry.mqtt_parser import parse_mqtt_payload
-
-            events = parse_mqtt_payload(msg.topic, payload_str)
-
-            for event in events:
-                gateway_sn = event.get("gateway_sn")
-                device_name = event.get("device_name")
-                values = event.get("values", {})
-                timestamp = event.get("timestamp")
-
-                # Inject device_name for the services layer if found via parser
-                if device_name and "device_name" not in values:
-                    values["device_name"] = device_name
-
-                # Filter out anonymous events if not identifying the gateway
-                if not gateway_sn:
-                    # For testing: if gateway_sn is missing, we could try to find
-                    # the first active gateway, but it's safer to require it
-                    # in your test payloads for now.
-                    continue
-
-                ingest_telemetry_data(gateway_sn, values, timestamp=timestamp)
-
+            if msg.topic == "v1/gateway/telemetry":
+                self._handle_telemetry(payload)
+            elif msg.topic == "v1/gateway/logs":
+                self._handle_logs(payload)
+            elif msg.topic == "v1/gateway/attributes":
+                self._handle_attributes(payload)
+            elif msg.topic == "v1/gateway/rpc/response":
+                self._handle_rpc_response(payload)
+            else:
+                logger.warning("Unknown MQTT topic: %s", msg.topic)
         except Exception as e:
-            logger.error(f"Error processing MQTT message: {e}")
+            logger.error("Error processing MQTT message on %s: %s", msg.topic, e, exc_info=True)
+
+    # ── Telemetry (existing logic) ──────────────────────────────────────
+
+    def _handle_telemetry(self, payload):
+        """Ingest telemetry data from a gateway (existing flow)."""
+        from apps.telemetry.mqtt_parser import parse_mqtt_payload
+
+        events = parse_mqtt_payload("v1/gateway/telemetry", payload)
+
+        for event in events:
+            gateway_sn = event.get("gateway_sn")
+            device_name = event.get("device_name")
+            device_id = event.get("device_id")
+            values = event.get("values", {})
+            timestamp = event.get("timestamp")
+
+            if device_name and "device_name" not in values:
+                values["device_name"] = device_name
+
+            if not gateway_sn:
+                continue
+
+            ingest_telemetry_data(gateway_sn, values, timestamp=timestamp, device_id=device_id)
+
+    # ── Remote Logging ──────────────────────────────────────────────────
+
+    def _handle_logs(self, payload):
+        """Ingest log entries from a gateway."""
+        from apps.devices.models import Gateway
+        from apps.telemetry.models import GatewayLog
+
+        gateway_sn = payload.get("serial_number")
+        if not gateway_sn:
+            return
+
+        try:
+            gateway = Gateway.objects.get(serial_number=gateway_sn)
+        except Gateway.DoesNotExist:
+            logger.warning("Gateway %s not found for log ingestion", gateway_sn)
+            return
+
+        log_entries = payload.get("logs", [])
+        log_objects = []
+        for entry in log_entries:
+            ts = entry.get("ts")
+            dt = (
+                timezone.datetime.fromtimestamp(ts / 1000.0, tz=timezone.utc)
+                if ts
+                else timezone.now()
+            )
+
+            log_objects.append(
+                GatewayLog(
+                    gateway=gateway,
+                    timestamp=dt,
+                    level=entry.get("level", "INFO"),
+                    logger_name=entry.get("logger", ""),
+                    message=entry.get("message", ""),
+                    module=entry.get("module", ""),
+                    line=entry.get("line"),
+                )
+            )
+
+        if log_objects:
+            GatewayLog.objects.bulk_create(log_objects)
+            logger.debug("Ingested %d log entries from %s", len(log_objects), gateway_sn)
+
+    # ── Attribute Sync / Heartbeat ──────────────────────────────────────
+
+    def _handle_attributes(self, payload):
+        """Update gateway status from heartbeat attributes or LWT."""
+        from apps.devices.models import Gateway, GatewayConfig
+
+        gateway_sn = payload.get("serial_number")
+        if not gateway_sn:
+            return
+
+        try:
+            gateway = Gateway.objects.get(serial_number=gateway_sn)
+        except Gateway.DoesNotExist:
+            logger.warning("Gateway %s not found for attribute sync", gateway_sn)
+            return
+
+        attrs = payload.get("attributes", {})
+
+        # Update gateway fields
+        update_fields = ["last_seen"]
+        gateway.last_seen = timezone.now()
+
+        field_mapping = {
+            "status": "status",
+            "firmware_version": "firmware_version",
+            "ip_address": "ip_address",
+            "uptime_seconds": "uptime_seconds",
+            "python_version": "python_version",
+            "platform": "platform_info",
+            "connected_devices": "connected_devices",
+            "active_connectors": "active_connectors",
+        }
+
+        for attr_key, model_field in field_mapping.items():
+            if attr_key in attrs:
+                setattr(gateway, model_field, attrs[attr_key])
+                update_fields.append(model_field)
+
+        gateway.save(update_fields=update_fields)
+
+        # Handle discovery report from Edge auto-scan
+        discovery_report = attrs.get("discovery_report")
+        if discovery_report:
+            self._process_discovery_report(gateway, discovery_report)
+
+        # Handle config update acknowledgement
+        config_request_id = attrs.get("config_update_request_id")
+        if config_request_id:
+            try:
+                config_record = GatewayConfig.objects.get(request_id=config_request_id)
+                config_record.status = attrs.get("config_update_status", "unknown")
+                config_record.error_message = attrs.get("config_update_error", "") or ""
+                config_record.acknowledged_at = timezone.now()
+                config_record.save()
+                logger.info(
+                    "Config update %s acknowledged: %s", config_request_id, config_record.status
+                )
+            except GatewayConfig.DoesNotExist:
+                pass
+
+        logger.debug("Updated attributes for gateway %s (status=%s)", gateway_sn, attrs.get("status"))
+
+    # ── RPC Response ────────────────────────────────────────────────────
+
+    def _handle_rpc_response(self, payload):
+        """Process RPC command response from a gateway."""
+        from apps.devices.models import RpcCommand
+
+        request_id = payload.get("request_id")
+        if not request_id:
+            return
+
+        try:
+            rpc_record = RpcCommand.objects.get(request_id=request_id)
+            rpc_record.status = payload.get("status", "unknown")
+            rpc_record.result = payload.get("result")
+            rpc_record.error_message = payload.get("error", "") or ""
+            rpc_record.responded_at = timezone.now()
+            rpc_record.save()
+            logger.info(
+                "RPC response for %s (%s): %s",
+                request_id,
+                payload.get("method"),
+                rpc_record.status,
+            )
+        except RpcCommand.DoesNotExist:
+            logger.warning("RPC response for unknown request_id: %s", request_id)
+
+    # ── Discovery Report Processing ─────────────────────────────────────
+
+    def _process_discovery_report(self, gateway, report):
+        """
+        Process a discovery report from the Edge gateway.
+        Stores it in Gateway.discovery_data and auto-matches against DeviceTemplates.
+        """
+        from apps.devices.models import DeviceTemplate
+
+        discovered_devices = report.get("discovered_devices", [])
+
+        # Auto-match each discovered device against templates
+        for device in discovered_devices:
+            identification = device.get("identification") or {}
+            vendor = (identification.get("vendor") or "").strip().lower()
+            model = (identification.get("model") or "").strip().lower()
+            signature = (device.get("signature") or "").strip().lower()
+
+            matched_template = None
+
+            # 1. Try exact vendor + model match
+            if vendor and model:
+                matched_template = DeviceTemplate.objects.filter(
+                    manufacturer__iexact=vendor,
+                    model_number__iexact=model,
+                ).first()
+
+            # 2. Fallback: match by signature against template name
+            if not matched_template and signature and signature != "unknown":
+                matched_template = (
+                    DeviceTemplate.objects.filter(name__icontains=signature).first()
+                    or DeviceTemplate.objects.filter(manufacturer__icontains=signature).first()
+                )
+
+            if matched_template:
+                device["matched_template_id"] = matched_template.id
+                device["matched_template_name"] = matched_template.name
+
+        # Store enriched discovery data
+        gateway.discovery_data = {
+            "last_discovered_at": str(timezone.now()),
+            "scan_ts": report.get("scan_ts"),
+            "scan_type": report.get("scan_type", "unknown"),
+            "interfaces": report.get("interfaces", []),
+            "devices": discovered_devices,
+            "errors": report.get("errors", []),
+        }
+        gateway.save(update_fields=["discovery_data"])
+
+        logger.info(
+            "Discovery report processed for %s: %d devices found, %d matched",
+            gateway.serial_number,
+            len(discovered_devices),
+            sum(1 for d in discovered_devices if d.get("matched_template_id")),
+        )

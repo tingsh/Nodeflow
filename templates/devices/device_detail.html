@@ -330,8 +330,10 @@
         </div>
 
         <!-- Right: Remote Controls & Metadata -->
-        <div class="space-y-6">
-            <!-- Remote Controls Card -->
+        <div class="space-y-6" x-data="deviceControls()">
+
+            <!-- ── Section 1: Quick Controls (writable registers) ── -->
+            {% if writable_registers %}
             <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                 <div class="p-6 border-b border-gray-100 dark:border-gray-700 bg-indigo-50/30 dark:bg-indigo-900/10">
                     <div class="flex items-center space-x-3">
@@ -339,63 +341,195 @@
                             <i class="fa fa-sliders"></i>
                         </div>
                         <div>
-                            <h3 class="font-bold text-gray-900 dark:text-white leading-none">Remote Controls</h3>
-                            <p class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mt-1">Bidirectional Write-Back</p>
+                            <h3 class="font-bold text-gray-900 dark:text-white leading-none">Quick Controls</h3>
+                            <p class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mt-1">Template-driven device control</p>
                         </div>
                     </div>
                 </div>
-                <div class="p-6 space-y-6">
-                    {% if writable_keys %}
-                        {% for control in writable_keys %}
-                        <div class="group">
-                            <div class="flex items-center justify-between mb-3">
-                                <label class="text-sm font-bold text-gray-700 dark:text-gray-300">{{ control.label }}</label>
-                                <div id="status-for-{{ control.key }}"></div>
-                            </div>
+                <div class="p-6 space-y-5">
+                    {% for reg in writable_registers %}
+                    <div class="group">
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="text-sm font-bold text-gray-700 dark:text-gray-300">{{ reg.label }}</label>
+                            <div id="ctrl-status-{{ reg.key }}" class="text-xs"></div>
+                        </div>
 
-                            {% if control.type == 'toggle' %}
-                            <div class="flex items-center space-x-4">
-                                <button hx-post="{% url 'web_team:devices:device_send_command' request.team.slug device.id %}" 
-                                        hx-vals='{"key": "{{ control.key }}", "value": "true"}'
-                                        hx-target="#status-for-{{ control.key }}"
-                                        class="flex-1 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-xs font-bold hover:bg-green-600 hover:text-white transition-all border border-transparent">
-                                    ON
-                                </button>
-                                <button hx-post="{% url 'web_team:devices:device_send_command' request.team.slug device.id %}" 
-                                        hx-vals='{"key": "{{ control.key }}", "value": "false"}'
-                                        hx-target="#status-for-{{ control.key }}"
-                                        class="flex-1 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-xs font-bold hover:bg-red-600 hover:text-white transition-all border border-transparent">
-                                    OFF
-                                </button>
-                            </div>
-                            {% elif control.type == 'slider' %}
-                            <div class="flex items-center space-x-4" x-data="{val: 50}">
-                                <input type="range" x-model="val" class="range range-indigo range-xs flex-1" min="0" max="100">
-                                <button hx-post="{% url 'web_team:devices:device_send_command' request.team.slug device.id %}" 
-                                        :hx-vals="'{&quot;key&quot;: &quot;{{ control.key }}&quot;, &quot;value&quot;: ' + val + '}'"
-                                        hx-target="#status-for-{{ control.key }}"
-                                        class="py-2 px-4 rounded-xl bg-indigo-600 text-white text-xs font-bold">
-                                    SET <span x-text="val"></span>
-                                </button>
-                            </div>
-                            {% endif %}
+                        {% if reg.control == 'toggle' %}
+                        <div class="flex items-center space-x-3">
+                            <button onclick="sendWriteCommand('{{ reg.key }}', {{ reg.functionCode }}, {{ reg.address }}, 0, '{{ reg.type }}', '{{ reg.labels.0|default:"OFF" }}')"
+                                    class="flex-1 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-700 text-xs font-bold hover:bg-red-600 hover:text-white transition-all">
+                                {{ reg.labels.0|default:"OFF" }}
+                            </button>
+                            <button onclick="sendWriteCommand('{{ reg.key }}', {{ reg.functionCode }}, {{ reg.address }}, 1, '{{ reg.type }}', '{{ reg.labels.1|default:"ON" }}')"
+                                    class="flex-1 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-700 text-xs font-bold hover:bg-green-600 hover:text-white transition-all">
+                                {{ reg.labels.1|default:"ON" }}
+                            </button>
                         </div>
-                        {% endfor %}
-                    {% else %}
-                        <div class="py-8 text-center bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
-                            <i class="fa fa-lock text-gray-300 dark:text-gray-600 text-2xl mb-2"></i>
-                            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-4">No writable registers defined for this equipment template.</p>
+
+                        {% elif reg.control == 'slider' %}
+                        <div class="space-y-2" x-data="{val: {{ reg.min }}}">
+                            <div class="flex items-center justify-between text-[10px] text-gray-400 font-bold">
+                                <span>{{ reg.min }} {{ reg.unit }}</span>
+                                <span class="text-indigo-600 text-sm font-black" x-text="val + ' {{ reg.unit }}'"></span>
+                                <span>{{ reg.max }} {{ reg.unit }}</span>
+                            </div>
+                            <input type="range" x-model="val" class="range range-indigo range-sm w-full" min="{{ reg.min }}" max="{{ reg.max }}">
+                            <button @click="sendWriteCommand('{{ reg.key }}', {{ reg.functionCode }}, {{ reg.address }}, Number(val), '{{ reg.type }}')"
+                                    class="w-full py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-all">
+                                Set {{ reg.label }}
+                            </button>
                         </div>
-                    {% endif %}
+
+                        {% elif reg.control == 'input' %}
+                        <div class="flex items-center space-x-3" x-data="{val: ''}">
+                            <div class="relative flex-1">
+                                <input type="number" x-model="val" min="{{ reg.min }}" max="{{ reg.max }}" placeholder="{{ reg.min }}–{{ reg.max }}"
+                                       class="input input-bordered input-sm w-full pr-12 rounded-xl font-mono">
+                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">{{ reg.unit }}</span>
+                            </div>
+                            <button @click="sendWriteCommand('{{ reg.key }}', {{ reg.functionCode }}, {{ reg.address }}, Number(val), '{{ reg.type }}')"
+                                    class="py-2 px-4 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-all whitespace-nowrap">
+                                Set
+                            </button>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
                 </div>
                 <div class="p-4 bg-amber-50 dark:bg-amber-900/10 border-t border-amber-100 dark:border-amber-900/20">
                     <p class="text-[10px] text-amber-700 dark:text-amber-500 font-medium leading-relaxed">
-                        <i class="fa fa-triangle-exclamation mr-1"></i> <strong>Critical Safety:</strong> Remote commands are supervisory. Local hardware interlocks must always be primary.
+                        <i class="fa fa-triangle-exclamation mr-1"></i> <strong>Safety:</strong> Remote commands are supervisory. Local hardware interlocks must always be primary.
                     </p>
                 </div>
             </div>
+            {% endif %}
 
-            <!-- Metadata Card -->
+            <!-- ── Section 2: On-Demand Read ── -->
+            {% if readable_registers %}
+            <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="p-2 bg-emerald-600 rounded-xl text-white">
+                            <i class="fa fa-eye"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-gray-900 dark:text-white leading-none">On-Demand Read</h3>
+                            <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mt-1">Live register values</p>
+                        </div>
+                    </div>
+                    <button onclick="readAllRegisters()" class="btn btn-ghost btn-xs rounded-xl text-emerald-600 font-bold text-[10px] uppercase tracking-widest bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100">
+                        <i class="fa fa-refresh mr-1"></i> Read All
+                    </button>
+                </div>
+                <div class="divide-y divide-gray-50 dark:divide-gray-700">
+                    {% for reg in readable_registers %}
+                    <div class="px-6 py-3 flex items-center justify-between group hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-all">
+                        <div class="flex-1">
+                            <span class="text-xs font-bold text-gray-700 dark:text-gray-300">{{ reg.label }}</span>
+                            <span class="text-[10px] text-gray-400 ml-2">{{ reg.unit }}</span>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <span id="read-val-{{ reg.key }}" class="text-sm font-mono font-bold text-gray-900 dark:text-white">—</span>
+                            <button onclick="readRegister('{{ reg.key }}', {{ reg.functionCode }}, {{ reg.address }}, {{ reg.objectsCount }}, '{{ reg.type }}')"
+                                    class="opacity-0 group-hover:opacity-100 transition-opacity btn btn-ghost btn-xs rounded-lg text-emerald-600">
+                                <i class="fa fa-refresh text-[10px]"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- ── Section 3: Advanced Controls (collapsible) ── -->
+            {% if rpc_url %}
+            <div x-data="{showAdvanced: false}" class="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <button @click="showAdvanced = !showAdvanced" class="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-all">
+                    <div class="flex items-center space-x-3">
+                        <div class="p-2 bg-gray-500 rounded-xl text-white">
+                            <i class="fa fa-terminal"></i>
+                        </div>
+                        <div class="text-left">
+                            <h3 class="font-bold text-gray-900 dark:text-white leading-none text-sm">Advanced Controls</h3>
+                            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Manual register read/write</p>
+                        </div>
+                    </div>
+                    <i class="fa fa-chevron-down text-gray-400 text-xs transition-transform" :class="showAdvanced && 'rotate-180'"></i>
+                </button>
+
+                <div x-show="showAdvanced" x-collapse>
+                    <div class="p-6 border-t border-gray-100 dark:border-gray-700 space-y-4" x-data="advancedControls()">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Operation</label>
+                                <select x-model="operation" @change="updateFcOptions()" class="select select-bordered select-sm w-full rounded-xl text-xs">
+                                    <option value="read">Read</option>
+                                    <option value="write">Write</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Function Code</label>
+                                <select x-model="fc" class="select select-bordered select-sm w-full rounded-xl text-xs">
+                                    <template x-for="opt in fcOptions" :key="opt.value">
+                                        <option :value="opt.value" x-text="opt.label"></option>
+                                    </template>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Register Address</label>
+                                <input type="number" x-model="address" min="0" class="input input-bordered input-sm w-full rounded-xl font-mono text-xs" placeholder="0">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Data Type</label>
+                                <select x-model="dataType" class="select select-bordered select-sm w-full rounded-xl text-xs">
+                                    <option value="16uint">16-bit Unsigned</option>
+                                    <option value="16int">16-bit Signed</option>
+                                    <option value="32float">32-bit Float</option>
+                                    <option value="32uint">32-bit Unsigned</option>
+                                    <option value="32int">32-bit Signed</option>
+                                    <option value="bool">Boolean (Coil)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Count</label>
+                                <input type="number" x-model="count" min="1" max="125" class="input input-bordered input-sm w-full rounded-xl font-mono text-xs" placeholder="1">
+                            </div>
+                            <div x-show="operation === 'write'">
+                                <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Value</label>
+                                <input type="number" x-model="value" class="input input-bordered input-sm w-full rounded-xl font-mono text-xs" placeholder="0">
+                            </div>
+                        </div>
+                        <div class="flex space-x-3">
+                            <button @click="sendAdvancedCommand()" class="flex-1 py-2.5 rounded-xl text-white text-xs font-bold transition-all"
+                                    :class="operation === 'write' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'">
+                                <i class="fa mr-1" :class="operation === 'write' ? 'fa-pen' : 'fa-eye'"></i>
+                                <span x-text="operation === 'write' ? 'Write Register' : 'Read Register'"></span>
+                            </button>
+                        </div>
+                        <!-- Result display -->
+                        <div id="advanced-result" class="hidden rounded-xl bg-gray-50 dark:bg-gray-900/50 p-4">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Result</span>
+                                <span id="advanced-result-time" class="text-[10px] text-gray-400 font-mono"></span>
+                            </div>
+                            <pre id="advanced-result-data" class="text-xs font-mono text-gray-700 dark:text-gray-300 whitespace-pre-wrap"></pre>
+                        </div>
+
+                        <div class="p-3 bg-amber-50 dark:bg-amber-900/10 rounded-xl border border-amber-100 dark:border-amber-900/20">
+                            <p class="text-[10px] text-amber-700 dark:text-amber-500 font-medium leading-relaxed">
+                                <i class="fa fa-triangle-exclamation mr-1"></i> <strong>Expert mode.</strong> Incorrect register writes can damage equipment. Use only if you know the device's register map.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- ── Metadata Card ── -->
             <div class="bg-white dark:bg-gray-800 shadow-sm rounded-3xl overflow-hidden border border-gray-100 dark:border-gray-700">
                 <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
                     <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Device Identity</h3>
@@ -419,5 +553,160 @@
             </div>
         </div>
     </div>
+
+    <!-- ── Device Control JS ── -->
+    <script>
+    const RPC_URL = "{{ rpc_url }}";
+    const CSRF = "{{ csrf_token }}";
+
+    function getCookie(name) {
+        const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+        return v ? v.pop() : '';
+    }
+
+    async function rpcCall(method, params) {
+        const res = await fetch(RPC_URL, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': getCookie('csrftoken')},
+            body: new URLSearchParams({method, params: JSON.stringify(params)})
+        });
+        return res.json();
+    }
+
+    async function pollRpcResult(requestId, maxAttempts = 15) {
+        const statusUrl = RPC_URL.replace(/command\/?$/, 'rpc-status/' + requestId + '/');
+        for (let i = 0; i < maxAttempts; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            try {
+                const res = await fetch(statusUrl);
+                const data = await res.json();
+                if (data.status !== 'pending') return data;
+            } catch (e) { /* retry */ }
+        }
+        return {status: 'timeout', result: null, error: 'Timed out waiting for response'};
+    }
+
+    function setStatus(elId, status, text) {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        const colors = {pending: 'text-yellow-500', success: 'text-green-500', error: 'text-red-500', timeout: 'text-gray-400'};
+        const icons = {pending: 'fa-spinner fa-spin', success: 'fa-check-circle', error: 'fa-times-circle', timeout: 'fa-clock'};
+        el.innerHTML = `<span class="${colors[status] || 'text-gray-400'} font-bold text-xs"><i class="fa ${icons[status] || 'fa-circle'} mr-1"></i>${text || status}</span>`;
+    }
+
+    async function sendWriteCommand(key, fc, address, value, dataType, label) {
+        const statusEl = 'ctrl-status-' + key;
+        setStatus(statusEl, 'pending', 'Sending...');
+        try {
+            const params = {functionCode: fc, address: address, value: value};
+            if (dataType && dataType !== 'bool') params.type = dataType;
+            const data = await rpcCall('write_device', params);
+            setStatus(statusEl, 'pending', 'Waiting...');
+            const result = await pollRpcResult(data.request_id);
+            setStatus(statusEl, result.status, result.status === 'success' ? (label || 'Done') : (result.error || 'Failed'));
+        } catch (e) {
+            setStatus(statusEl, 'error', 'Send failed');
+        }
+    }
+
+    async function readRegister(key, fc, address, count, dataType) {
+        const valEl = document.getElementById('read-val-' + key);
+        if (valEl) valEl.innerHTML = '<i class="fa fa-spinner fa-spin text-gray-400 text-xs"></i>';
+        try {
+            const params = {functionCode: fc, address: address, objectsCount: count};
+            if (dataType) params.type = dataType;
+            const data = await rpcCall('read_device', params);
+            const result = await pollRpcResult(data.request_id);
+            if (valEl) {
+                if (result.status === 'success' && result.result) {
+                    const val = result.result.value !== undefined ? result.result.value : JSON.stringify(result.result);
+                    valEl.textContent = val;
+                } else {
+                    valEl.innerHTML = '<span class="text-red-400 text-[10px]">Error</span>';
+                }
+            }
+        } catch (e) {
+            if (valEl) valEl.innerHTML = '<span class="text-red-400 text-[10px]">Failed</span>';
+        }
+    }
+
+    async function readAllRegisters() {
+        const registers = [
+            {% for reg in readable_registers %}
+            {key: '{{ reg.key }}', fc: {{ reg.functionCode }}, addr: {{ reg.address }}, count: {{ reg.objectsCount }}, type: '{{ reg.type }}'},
+            {% endfor %}
+        ];
+        for (const reg of registers) {
+            readRegister(reg.key, reg.fc, reg.addr, reg.count, reg.type);
+        }
+    }
+
+    function deviceControls() { return {}; }
+
+    function advancedControls() {
+        return {
+            operation: 'read',
+            fc: '3',
+            address: '0',
+            dataType: '16uint',
+            count: '1',
+            value: '0',
+            fcOptions: [
+                {value: '1', label: 'FC1 — Read Coils'},
+                {value: '2', label: 'FC2 — Read Discrete Inputs'},
+                {value: '3', label: 'FC3 — Read Holding Registers'},
+                {value: '4', label: 'FC4 — Read Input Registers'},
+            ],
+            updateFcOptions() {
+                if (this.operation === 'read') {
+                    this.fcOptions = [
+                        {value: '1', label: 'FC1 — Read Coils'},
+                        {value: '2', label: 'FC2 — Read Discrete Inputs'},
+                        {value: '3', label: 'FC3 — Read Holding Registers'},
+                        {value: '4', label: 'FC4 — Read Input Registers'},
+                    ];
+                    this.fc = '3';
+                } else {
+                    this.fcOptions = [
+                        {value: '5', label: 'FC5 — Write Single Coil'},
+                        {value: '6', label: 'FC6 — Write Single Register'},
+                        {value: '15', label: 'FC15 — Write Multiple Coils'},
+                        {value: '16', label: 'FC16 — Write Multiple Registers'},
+                    ];
+                    this.fc = '6';
+                }
+            },
+            async sendAdvancedCommand() {
+                const resultBox = document.getElementById('advanced-result');
+                const resultData = document.getElementById('advanced-result-data');
+                const resultTime = document.getElementById('advanced-result-time');
+                resultBox.classList.remove('hidden');
+                resultData.textContent = 'Sending...';
+                resultTime.textContent = '';
+
+                const method = this.operation === 'write' ? 'write_device' : 'read_device';
+                const params = {
+                    functionCode: parseInt(this.fc),
+                    address: parseInt(this.address),
+                };
+                if (this.dataType) params.type = this.dataType;
+                if (this.operation === 'read') {
+                    params.objectsCount = parseInt(this.count);
+                } else {
+                    params.value = parseFloat(this.value);
+                }
+                try {
+                    const data = await rpcCall(method, params);
+                    resultData.textContent = 'Waiting for response...';
+                    const result = await pollRpcResult(data.request_id);
+                    resultTime.textContent = new Date().toLocaleTimeString();
+                    resultData.textContent = JSON.stringify(result.result || {error: result.error}, null, 2);
+                } catch (e) {
+                    resultData.textContent = 'Error: ' + e.message;
+                }
+            }
+        };
+    }
+    </script>
 </div>
 {% endblock %}

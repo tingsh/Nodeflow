@@ -9,7 +9,7 @@ from .models import TelemetryData
 logger = logging.getLogger("iot_platform")
 
 
-def ingest_telemetry_data(gateway_sn, values, timestamp=None):
+def ingest_telemetry_data(gateway_sn, values, timestamp=None, device_id=None):
     """
     Ingests telemetry data from a gateway.
     Matches the gateway and its devices, and saves data to TimescaleDB.
@@ -28,29 +28,24 @@ def ingest_telemetry_data(gateway_sn, values, timestamp=None):
     gateway.status = "online"
     gateway.save(update_fields=["last_seen", "status"])
 
-    # Find devices associated with this gateway
-    # Note: In a production version, we would use a more robust mapping (e.g., payloads containing device IDs)
-    # For the MVP, we assume the gateway is sending data for its primary devices or the payload identifies the device.
-
-    # Simple mapping logic for MVP:
-    # If the gateway has only one device, we attribute all values to it.
-    # Otherwise, we look for device-specific keys in the payload or specific device identification.
-
-    # We'll support a 'device_name' key in 'values' to identify sub-devices
     target_device = None
-    # Make a copy so we don't mutate the caller's dict; pop device_name cleanly
     values = dict(values)
     device_name = values.pop("device_name", None)
 
-    if device_name:
+    # 1. Primary match: device_id (Cloud-assigned UUID, pushed to Edge via config)
+    if device_id:
+        target_device = gateway.devices.filter(pk=device_id).first()
+        if not target_device:
+            logger.debug("device_id %s not found on gateway %s, falling back to name match", device_id, gateway_sn)
+
+    # 2. Fallback: match by device_name string
+    if not target_device and device_name:
         try:
             target_device = gateway.devices.get(name=device_name)
         except Device.DoesNotExist:
-            logger.info(f"Device {device_name} not found for gateway {gateway_sn}. Creating record...")
-            # Optional: auto-provisioning logic
-            pass
+            logger.info(f"Device {device_name} not found for gateway {gateway_sn}.")
 
-    # Fallback to the first device if none identified
+    # 3. Final fallback: first device on the gateway
     if not target_device and gateway.devices.exists():
         target_device = gateway.devices.first()
 

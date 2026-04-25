@@ -1,0 +1,50 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+{% block app %}
+<div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    {% include "onboarding/partials/progress_bar.html" with current_step=3 steps=steps %}
+
+    <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700">
+        <div class="p-8 sm:p-12">
+            <div class="flex items-start justify-between mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Discovered Devices</h2>
+                    <p class="text-gray-500 dark:text-gray-400">
+                        Your gateway <strong>{{ gateway.name }}</strong> found the following devices. Select which ones to provision.
+                    </p>
+                </div>
+                <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-bold bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400">
+                    <i class="fa fa-wifi mr-1.5"></i> {{ gateway.serial_number }}
+                </span>
+            </div>
+
+            <form method="post">
+                {% csrf_token %}
+
+                <div id="discovery-list"
+                     hx-get="{% url 'web_team:onboarding:discovery_poll' request.team.slug %}"
+                     hx-trigger="load, every 5s"
+                     hx-swap="innerHTML">
+                    {% include "onboarding/partials/discovery_devices.html" %}
+                </div>
+
+                <div class="sticky bottom-0 bg-white dark:bg-gray-800 p-6 border-t border-gray-100 dark:border-gray-700 -mx-8 sm:-mx-12 mt-8 z-10 flex items-center justify-between space-x-6">
+                    <a href="{% url 'web_team:onboarding:step_2b_wait' request.team.slug %}" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 font-semibold transition flex items-center">
+                        <i class="fa fa-chevron-left mr-2 text-xs"></i>
+                        Back
+                    </a>
+                    <div class="flex items-center gap-3">
+                        <a href="{% url 'web_team:onboarding:step_4_alert' request.team.slug %}" class="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
+                            Skip
+                        </a>
+                        <button type="submit" class="py-4 px-8 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-600/30 transition transform hover:-translate-y-0.5">
+                            <span>Provision Selected</span>
+                            <i class="fa fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

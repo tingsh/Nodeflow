@@ -1,0 +1,367 @@
+{% extends "web/app/app_base.html" %}
+{% load static %}
+{% block app %}
+<div class="px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Breadcrumb -->
+    <nav class="flex mb-8" aria-label="Breadcrumb">
+        <ol role="list" class="flex items-center space-x-4">
+            <li>
+                <a href="{% url 'web_team:devices:gateway_list' request.team.slug %}" class="text-gray-400 hover:text-gray-500">
+                    <i class="fa fa-server"></i>
+                </a>
+            </li>
+            <li>
+                <div class="flex items-center">
+                    <i class="fa fa-chevron-right text-gray-400 text-xs mr-4"></i>
+                    <a href="{% url 'web_team:devices:gateway_list' request.team.slug %}" class="text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400">Gateways</a>
+                </div>
+            </li>
+            <li>
+                <div class="flex items-center">
+                    <i class="fa fa-chevron-right text-gray-400 text-xs mr-4"></i>
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ gateway.name }}</span>
+                </div>
+            </li>
+        </ol>
+    </nav>
+
+    <!-- Header -->
+    <div class="md:flex md:items-center md:justify-between mb-8">
+        <div class="min-w-0 flex-1">
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">{{ gateway.name }}</h2>
+            <div class="mt-1 flex items-center space-x-4">
+                <div class="flex items-center">
+                    <div class="h-2.5 w-2.5 rounded-full mr-2 {% if gateway.status == 'online' %}bg-green-500 animate-pulse{% elif gateway.status == 'maintenance' %}bg-amber-500{% else %}bg-gray-400{% endif %}"></div>
+                    <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">{{ gateway.get_status_display }}</span>
+                </div>
+                <div class="text-sm text-gray-300 dark:text-gray-600">|</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400 font-mono">{{ gateway.serial_number }}</div>
+                <div class="text-sm text-gray-300 dark:text-gray-600">|</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">{{ gateway.site.name }}</div>
+            </div>
+        </div>
+        <div class="mt-5 flex lg:ml-4 lg:mt-0 space-x-3">
+            <a href="{% url 'web_team:devices:gateway_logs' request.team.slug gateway.pk %}" class="btn btn-ghost btn-sm rounded-xl text-sm font-bold">
+                <i class="fa fa-scroll mr-1.5"></i> Logs
+            </a>
+            <a href="{% url 'web_team:devices:gateway_rpc_history' request.team.slug gateway.pk %}" class="btn btn-ghost btn-sm rounded-xl text-sm font-bold">
+                <i class="fa fa-history mr-1.5"></i> RPC History
+            </a>
+            <a href="{% url 'web_team:devices:gateway_edit' request.team.slug gateway.pk %}" class="btn btn-ghost btn-sm rounded-xl text-sm font-bold">
+                <i class="fa fa-edit mr-1.5"></i> Edit
+            </a>
+        </div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        <!-- Left Column: Status + Devices + Logs Preview -->
+        <div class="lg:col-span-2 space-y-8">
+
+            <!-- Status Card -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Gateway Status</h3>
+                </div>
+                <div class="p-6">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                        <div>
+                            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">IP Address</div>
+                            <div class="text-sm font-mono text-gray-900 dark:text-white">{{ gateway.ip_address|default:"—" }}</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Uptime</div>
+                            <div class="text-sm font-mono text-gray-900 dark:text-white">
+                                {% if gateway.uptime_seconds %}{{ gateway.uptime_seconds|floatformat:0 }}s{% else %}—{% endif %}
+                            </div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Firmware</div>
+                            <div class="text-sm font-mono text-gray-900 dark:text-white">{{ gateway.firmware_version|default:"—" }}</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Last Seen</div>
+                            <div class="text-sm text-gray-900 dark:text-white">
+                                {% if gateway.last_seen %}{{ gateway.last_seen|timesince }} ago{% else %}Never{% endif %}
+                            </div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Platform</div>
+                            <div class="text-sm text-gray-900 dark:text-white truncate">{{ gateway.platform_info|default:"—" }}</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Python</div>
+                            <div class="text-sm font-mono text-gray-900 dark:text-white">{{ gateway.python_version|default:"—" }}</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">TLS Mode</div>
+                            <div class="text-sm text-gray-900 dark:text-white">{{ gateway.get_tls_mode_display }}</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Capacity</div>
+                            <div class="text-sm text-gray-900 dark:text-white">{{ gateway.devices.count }}/{{ gateway.capacity }} devices</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Connected Devices -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Connected Devices</h3>
+                    <span class="text-xs font-bold text-gray-400">{{ gateway.devices.count }} registered</span>
+                </div>
+                <div class="divide-y divide-gray-50 dark:divide-gray-700">
+                    {% for device in gateway.devices.all %}
+                    <a href="{% url 'web_team:devices:device_detail' request.team.slug device.pk %}" class="flex items-center justify-between px-6 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        <div class="flex items-center">
+                            <div class="h-2 w-2 rounded-full mr-3 {% if device.status == 'online' %}bg-green-500{% else %}bg-gray-400{% endif %}"></div>
+                            <div>
+                                <div class="text-sm font-medium text-gray-900 dark:text-white">{{ device.name }}</div>
+                                <div class="text-xs text-gray-500">{{ device.get_device_type_display }} &middot; {{ device.get_protocol_display }}</div>
+                            </div>
+                        </div>
+                        <i class="fa fa-chevron-right text-gray-300 text-xs"></i>
+                    </a>
+                    {% empty %}
+                    <div class="px-6 py-8 text-center text-gray-400 text-sm italic">No devices registered on this gateway.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Recent Logs Preview -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Recent Logs</h3>
+                    <a href="{% url 'web_team:devices:gateway_logs' request.team.slug gateway.pk %}" class="text-xs font-bold text-indigo-500 hover:text-indigo-700">View All</a>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-50 dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-900/50">
+                            <tr>
+                                <th class="px-4 py-2 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Time</th>
+                                <th class="px-4 py-2 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Level</th>
+                                <th class="px-4 py-2 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Message</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-50 dark:divide-gray-700">
+                            {% for log in recent_logs %}
+                            <tr>
+                                <td class="px-4 py-2 text-xs text-gray-500 font-mono whitespace-nowrap">{{ log.timestamp|date:"H:i:s" }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap">
+                                    <span class="px-2 py-0.5 text-[10px] font-black uppercase rounded-full
+                                        {% if log.level == 'ERROR' or log.level == 'CRITICAL' %}bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400
+                                        {% elif log.level == 'WARNING' %}bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400
+                                        {% else %}bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400{% endif %}">
+                                        {{ log.level }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-2 text-xs text-gray-700 dark:text-gray-300 truncate max-w-md">{{ log.message }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="px-4 py-8 text-center text-xs text-gray-400 italic">No log entries received yet.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Quick Actions + Config History -->
+        <div class="space-y-8">
+
+            <!-- Quick RPC Actions -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div class="p-6 border-b border-gray-100 dark:border-gray-700 bg-indigo-50/30 dark:bg-indigo-900/10">
+                    <div class="flex items-center space-x-3">
+                        <div class="p-2 bg-indigo-600 rounded-xl text-white">
+                            <i class="fa fa-terminal"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-gray-900 dark:text-white leading-none">Remote Commands</h3>
+                            <p class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mt-1">RPC to Edge Gateway</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-6 space-y-3" x-data="{ rpcResult: null, loading: false }">
+                    <button @click="
+                        loading = true; rpcResult = null;
+                        fetch('{% url 'web_team:devices:gateway_send_rpc' request.team.slug gateway.pk %}', {
+                            method: 'POST',
+                            headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded'},
+                            body: 'method=ping&params={}'
+                        }).then(r => r.json()).then(d => { rpcResult = d; loading = false; }).catch(() => { loading = false; })
+                    " class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition text-sm font-bold text-gray-700 dark:text-gray-300">
+                        <span><i class="fa fa-wifi mr-2 text-green-500"></i> Ping</span>
+                        <i class="fa fa-play text-xs text-gray-400"></i>
+                    </button>
+                    <button @click="
+                        loading = true; rpcResult = null;
+                        fetch('{% url 'web_team:devices:gateway_send_rpc' request.team.slug gateway.pk %}', {
+                            method: 'POST',
+                            headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded'},
+                            body: 'method=get_status&params={}'
+                        }).then(r => r.json()).then(d => { rpcResult = d; loading = false; }).catch(() => { loading = false; })
+                    " class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition text-sm font-bold text-gray-700 dark:text-gray-300">
+                        <span><i class="fa fa-info-circle mr-2 text-blue-500"></i> Get Status</span>
+                        <i class="fa fa-play text-xs text-gray-400"></i>
+                    </button>
+                    <button @click="
+                        loading = true; rpcResult = null;
+                        fetch('{% url 'web_team:devices:gateway_send_rpc' request.team.slug gateway.pk %}', {
+                            method: 'POST',
+                            headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded'},
+                            body: 'method=restart_all&params={}'
+                        }).then(r => r.json()).then(d => { rpcResult = d; loading = false; }).catch(() => { loading = false; })
+                    " class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition text-sm font-bold text-gray-700 dark:text-gray-300">
+                        <span><i class="fa fa-rotate mr-2 text-amber-500"></i> Restart All Connectors</span>
+                        <i class="fa fa-play text-xs text-gray-400"></i>
+                    </button>
+                    <button @click="
+                        if (!confirm('Are you sure you want to reboot this gateway?')) return;
+                        loading = true; rpcResult = null;
+                        fetch('{% url 'web_team:devices:gateway_send_rpc' request.team.slug gateway.pk %}', {
+                            method: 'POST',
+                            headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded'},
+                            body: 'method=reboot&params=%7B%22delay_seconds%22%3A5%7D'
+                        }).then(r => r.json()).then(d => { rpcResult = d; loading = false; }).catch(() => { loading = false; })
+                    " class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700 hover:bg-red-50 dark:hover:bg-red-900/20 transition text-sm font-bold text-gray-700 dark:text-gray-300">
+                        <span><i class="fa fa-power-off mr-2 text-red-500"></i> Reboot Gateway</span>
+                        <i class="fa fa-play text-xs text-gray-400"></i>
+                    </button>
+
+                    <!-- RPC Feedback -->
+                    <template x-if="loading">
+                        <div class="mt-3 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl text-center">
+                            <i class="fa fa-spinner fa-spin text-indigo-500 mr-2"></i>
+                            <span class="text-xs font-bold text-indigo-600">Sending command...</span>
+                        </div>
+                    </template>
+                    <template x-if="rpcResult && !loading">
+                        <div class="mt-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-xl">
+                            <div class="text-[10px] font-black uppercase tracking-widest text-green-600 mb-1">Command Sent</div>
+                            <div class="text-xs font-mono text-green-700 dark:text-green-400" x-text="JSON.stringify(rpcResult)"></div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Active Connectors -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Active Connectors</h3>
+                </div>
+                <div class="p-6">
+                    {% if gateway.active_connectors %}
+                        <div class="space-y-2">
+                        {% for connector in gateway.active_connectors %}
+                            <div class="flex items-center px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                                <div class="h-2 w-2 rounded-full bg-green-500 mr-3"></div>
+                                <span class="text-sm text-gray-700 dark:text-gray-300 font-medium">{{ connector }}</span>
+                            </div>
+                        {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-xs text-gray-400 italic text-center py-4">No connector data received yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Security -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div class="p-6 border-b border-gray-100 dark:border-gray-700 bg-amber-50/30 dark:bg-amber-900/10">
+                    <div class="flex items-center space-x-3">
+                        <div class="p-2 bg-amber-600 rounded-xl text-white">
+                            <i class="fa fa-shield"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-gray-900 dark:text-white leading-none">Security</h3>
+                            <p class="text-[10px] font-bold text-amber-500 uppercase tracking-widest mt-1">MQTT Credentials</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div class="mb-4">
+                        <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">MQTT Username</div>
+                        <div class="text-sm font-mono text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 px-3 py-2 rounded-lg">{{ gateway.mqtt_username|default:"—" }}</div>
+                    </div>
+                    <div id="rotate-result"></div>
+                    <form hx-post="{% url 'web_team:devices:gateway_rotate_password' request.team.slug gateway.pk %}"
+                          hx-target="#rotate-result"
+                          hx-swap="innerHTML"
+                          hx-confirm="This will immediately change the gateway's MQTT password. The gateway will reconnect with the new credentials. Continue?">
+                        {% csrf_token %}
+                        <button type="submit" 
+                                class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-200 dark:border-amber-800 transition text-sm font-bold text-amber-700 dark:text-amber-400 {% if gateway.status != 'online' %}opacity-50 cursor-not-allowed{% endif %}"
+                                {% if gateway.status != "online" %}disabled title="Gateway must be online"{% endif %}>
+                            <span><i class="fa fa-key mr-2"></i> Rotate MQTT Password</span>
+                            <i class="fa fa-refresh text-xs"></i>
+                        </button>
+                    </form>
+                    {% if gateway.status != "online" %}
+                    <p class="mt-2 text-[10px] text-gray-400 italic">Gateway must be online to rotate password.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Config Push History -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Config Push History</h3>
+                </div>
+                <div class="divide-y divide-gray-50 dark:divide-gray-700">
+                    {% for cfg in recent_configs %}
+                    <div class="px-6 py-3">
+                        <div class="flex items-center justify-between">
+                            <div class="text-xs font-mono text-gray-500">{{ cfg.pushed_at|date:"M d, H:i" }}</div>
+                            <span class="px-2 py-0.5 text-[10px] font-black uppercase rounded-full
+                                {% if cfg.status == 'success' %}bg-green-100 text-green-700
+                                {% elif cfg.status == 'failed' %}bg-red-100 text-red-700
+                                {% else %}bg-gray-100 text-gray-600{% endif %}">
+                                {{ cfg.status }}
+                            </span>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">{{ cfg.action }} &middot; {{ cfg.request_id|truncatechars:12 }}</div>
+                        {% if cfg.error_message %}
+                        <div class="text-xs text-red-500 mt-1">{{ cfg.error_message }}</div>
+                        {% endif %}
+                    </div>
+                    {% empty %}
+                    <div class="px-6 py-8 text-center text-xs text-gray-400 italic">No config pushes yet.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Gateway Identity -->
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Gateway Identity</h3>
+                </div>
+                <div class="px-6 py-5">
+                    <dl class="space-y-4">
+                        <div class="flex justify-between">
+                            <dt class="text-[10px] font-black text-gray-400 uppercase tracking-tight">Serial Number</dt>
+                            <dd class="text-xs text-gray-900 dark:text-white font-mono font-bold">{{ gateway.serial_number }}</dd>
+                        </div>
+                        <div class="flex justify-between border-t border-gray-50 dark:border-gray-700 pt-3">
+                            <dt class="text-[10px] font-black text-gray-400 uppercase tracking-tight">MQTT Username</dt>
+                            <dd class="text-xs text-gray-900 dark:text-white font-mono font-bold">{{ gateway.mqtt_username|default:"—" }}</dd>
+                        </div>
+                        <div class="flex justify-between border-t border-gray-50 dark:border-gray-700 pt-3">
+                            <dt class="text-[10px] font-black text-gray-400 uppercase tracking-tight">Site</dt>
+                            <dd class="text-xs text-gray-900 dark:text-white font-bold">{{ gateway.site.name }}</dd>
+                        </div>
+                        <div class="flex justify-between border-t border-gray-50 dark:border-gray-700 pt-3">
+                            <dt class="text-[10px] font-black text-gray-400 uppercase tracking-tight">Access Token</dt>
+                            <dd class="text-xs text-gray-900 dark:text-white font-mono font-bold">{{ gateway.access_token|truncatechars:12 }}</dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

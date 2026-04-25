@@ -1,0 +1,118 @@
+{
+  "clients": [
+    {
+      "username": "dynsec-admin",
+      "textName": "Dynamic Security Admin",
+      "password": {
+        "salt": "oZxbrWh5fcxZ2NNWaqkqPA==",
+        "hash": "bYAEV4c2AouSwY/B4wk8GCOQCDK7UaljQgI331YrcqOvZhOI3qmPz9GYguX0dFQdbWZG6x11u0JUCDn9SH7LBg==",
+        "iterations": 101
+      },
+      "roles": [
+        {
+          "roleName": "admin"
+        }
+      ]
+    },
+    {
+      "username": "nodeflow-cloud",
+      "textName": "Nodeflow Cloud Internal Services",
+      "textDescription": "Used by mqtt_consumer and mqtt_publisher Django services",
+      "roles": [
+        {
+          "roleName": "cloud-internal"
+        }
+      ]
+    }
+  ],
+  "roles": [
+    {
+      "roleName": "admin",
+      "acls": [
+        {
+          "acltype": "publishClientSend",
+          "topic": "$CONTROL/dynamic-security/#",
+          "allow": true
+        },
+        {
+          "acltype": "publishClientReceive",
+          "topic": "$CONTROL/dynamic-security/#",
+          "allow": true
+        },
+        {
+          "acltype": "subscribePattern",
+          "topic": "$CONTROL/dynamic-security/#",
+          "allow": true
+        },
+        {
+          "acltype": "publishClientSend",
+          "topic": "#",
+          "allow": true
+        },
+        {
+          "acltype": "publishClientReceive",
+          "topic": "#",
+          "allow": true
+        },
+        {
+          "acltype": "subscribePattern",
+          "topic": "#",
+          "allow": true
+        }
+      ]
+    },
+    {
+      "roleName": "cloud-internal",
+      "textDescription": "Full access for Django Cloud services (consumer + publisher)",
+      "acls": [
+        {
+          "acltype": "publishClientSend",
+          "topic": "#",
+          "allow": true
+        },
+        {
+          "acltype": "publishClientReceive",
+          "topic": "#",
+          "allow": true
+        },
+        {
+          "acltype": "subscribePattern",
+          "topic": "#",
+          "allow": true
+        }
+      ]
+    },
+    {
+      "roleName": "gateway",
+      "textDescription": "Shared role for all edge gateways — grants access to shared inbound topics",
+      "acls": [
+        {
+          "acltype": "publishClientSend",
+          "topic": "v1/gateway/telemetry",
+          "allow": true
+        },
+        {
+          "acltype": "publishClientSend",
+          "topic": "v1/gateway/logs",
+          "allow": true
+        },
+        {
+          "acltype": "publishClientSend",
+          "topic": "v1/gateway/attributes",
+          "allow": true
+        },
+        {
+          "acltype": "publishClientSend",
+          "topic": "v1/gateway/rpc/response",
+          "allow": true
+        }
+      ]
+    }
+  ],
+  "defaultACLAccess": {
+    "publishClientSend": false,
+    "publishClientReceive": false,
+    "subscribe": false,
+    "unsubscribe": true
+  }
+}

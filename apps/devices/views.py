@@ -1,17 +1,21 @@
 import contextlib
 import json
+import logging
 
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
 from apps.teams.decorators import require_permission
 from apps.teams.mixins import PermissionRequiredMixin
 
-from .models import Device, DeviceTemplate, Gateway, Site
+from .models import Device, DeviceTemplate, Gateway, GatewayConfig, RpcCommand, Site
+
+logger = logging.getLogger("iot_platform")
 
 
 class SiteListView(PermissionRequiredMixin, ListView):
@@ -42,36 +46,44 @@ class SiteDetailView(PermissionRequiredMixin, DetailView):
 
         # Process discovery and conflicts for UI
         for gateway in self.object.gateways.all():
-            gateway.port_range = range(1, gateway.capacity + 1)
             port_map = {}
-            # 1. Map registered devices
+
+            # 1. Map registered devices by their port (interface key)
             for device in gateway.devices.all():
                 if device.port:
                     port_map[device.port] = {"status": "registered", "device": device}
 
-            # 2. Layer discovery data
-            discovery_list = gateway.discovery_data.get("devices", [])
-            for disc in discovery_list:
-                port = disc.get("port")
-                if not port:
-                    continue
+            # 2. Layer discovery data — use interface name as port key
+            discovery_data = gateway.discovery_data or {}
+            discovery_list = discovery_data.get("devices", [])
+            interfaces = discovery_data.get("interfaces", [])
 
-                if port in port_map:
+            for disc in discovery_list:
+                # Use interface as the port key (e.g., "/dev/ttyUSB0", "192.168.1.100:502")
+                port_key = disc.get("interface") or disc.get("port")
+                if not port_key:
+                    continue
+                port_key = str(port_key)
+
+                if port_key in port_map:
                     # Check for conflict
-                    reg_device = port_map[port]["device"]
-                    # Simplified signature check
-                    if (
-                        disc.get("signature") not in reg_device.name
-                        and disc.get("signature") not in reg_device.device_type
-                    ):
-                        port_map[port]["status"] = "conflict"
-                        port_map[port]["discovered"] = disc
+                    reg_device = port_map[port_key]["device"]
+                    sig = disc.get("signature", "")
+                    if sig and sig.lower() not in reg_device.name.lower() and sig.lower() not in reg_device.device_type.lower():
+                        port_map[port_key]["status"] = "conflict"
+                        port_map[port_key]["discovered"] = disc
                 else:
-                    # New device discovered
-                    port_map[port] = {"status": "discovered", "discovered": disc}
+                    port_map[port_key] = {"status": "discovered", "discovered": disc}
+
+            # 3. Add empty slots for interfaces with no devices/discoveries
+            for iface in interfaces:
+                iface_name = iface.get("name", "")
+                if iface_name and iface_name not in port_map:
+                    port_map[iface_name] = {"status": "empty", "interface": iface}
 
             # Attach to the gateway object for use in templates
             gateway.computed_port_map = port_map
+            gateway.computed_interfaces = interfaces
 
         # Aggregate insights for all devices in the site
         site_insights = []
@@ -136,6 +148,16 @@ class GatewayDetailView(PermissionRequiredMixin, DetailView):
     template_name = "devices/gateway_detail.html"
     context_object_name = "gateway"
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        from apps.telemetry.models import GatewayLog
+
+        gateway = self.object
+        context["recent_logs"] = GatewayLog.objects.filter(gateway=gateway)[:20]
+        context["recent_rpc"] = RpcCommand.objects.filter(gateway=gateway)[:10]
+        context["recent_configs"] = GatewayConfig.objects.filter(gateway=gateway)[:5]
+        return context
+
 
 class GatewayCreateView(PermissionRequiredMixin, CreateView):
     permission_required = "manage_devices"
@@ -143,16 +165,48 @@ class GatewayCreateView(PermissionRequiredMixin, CreateView):
     fields = ["site", "name", "serial_number"]
     template_name = "devices/gateway_form.html"
 
-    def form_valid(self, form):
-        form.instance.team = self.request.team
-        # For MVP, auto-generate a token if not present
+    def post(self, request, *args, **kwargs):
+        from .services import validate_claim_code
+
+        self.object = None
+        form = self.get_form()
+        claim_code = request.POST.get("claim_code", "").strip()
+
+        if not claim_code:
+            form.add_error(None, "Claim code is required. Check the sticker on your gateway.")
+            return self.form_invalid(form)
+
+        serial_number = form.data.get("serial_number", "").strip()
+        if serial_number and not validate_claim_code(serial_number, claim_code):
+            form.add_error(None, "Invalid claim code. Please check the sticker on the bottom of your gateway.")
+            return self.form_invalid(form)
+
+        if form.is_valid():
+            return self.form_valid(form, claim_code=claim_code)
+        else:
+            return self.form_invalid(form)
+
+    def form_valid(self, form, claim_code=""):
         import secrets
 
+        form.instance.team = self.request.team
+        # Auto-generate access token
         form.instance.access_token = secrets.token_hex(20)
-        return super().form_valid(form)
+        # MQTT credentials: username = serial_number, password = claim_code (from sticker)
+        form.instance.mqtt_username = form.cleaned_data["serial_number"]
+        form.instance.mqtt_password = claim_code.strip().upper()
+        response = super().form_valid(form)
+        # Provision MQTT credentials on Mosquitto using claim code as the password
+        try:
+            from .mqtt_provisioning import provision_gateway_mqtt
+
+            provision_gateway_mqtt(self.object, claim_code.strip().upper())
+        except Exception as e:
+            logger.warning("Mosquitto provisioning failed for gateway %s: %s (gateway saved, manual setup may be required)", self.object.serial_number, e)
+        return response
 
     def get_success_url(self):
-        return reverse_lazy("web_team:devices:gateway_list", args=[self.request.team.slug])
+        return reverse_lazy("web_team:devices:gateway_detail", args=[self.request.team.slug, self.object.pk])
 
 
 class GatewayUpdateView(PermissionRequiredMixin, UpdateView):
@@ -170,8 +224,176 @@ class GatewayDeleteView(PermissionRequiredMixin, DeleteView):
     model = Gateway
     template_name = "devices/gateway_confirm_delete.html"
 
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        # Deprovision MQTT credentials from Mosquitto before deleting the gateway
+        try:
+            from .mqtt_provisioning import deprovision_gateway_mqtt
+
+            deprovision_gateway_mqtt(self.object)
+        except Exception as e:
+            logger.warning("Mosquitto deprovisioning failed for gateway %s: %s", self.object.serial_number, e)
+        return super().delete(request, *args, **kwargs)
+
     def get_success_url(self):
         return reverse_lazy("web_team:devices:gateway_list", args=[self.request.team.slug])
+
+
+# ── Gateway Management Views (Cloud ↔ Edge) ────────────────────────────
+
+
+@require_permission("manage_devices")
+@require_POST
+def gateway_rotate_password(request, team_slug, pk):
+    """Rotate the MQTT password for a gateway."""
+    import secrets
+
+    from apps.telemetry.mqtt_publisher import publish_credential_rotation
+
+    from .mqtt_provisioning import rotate_gateway_password
+
+    gateway = Gateway.objects.get(pk=pk, team=request.team)
+
+    if gateway.status != "online":
+        return JsonResponse(
+            {"error": "Gateway must be online to rotate password."}, status=400
+        )
+
+    new_password = secrets.token_urlsafe(32)
+
+    # 1. Update Mosquitto dynsec client password
+    rotate_gateway_password(gateway, new_password)
+
+    # 2. Publish new credentials to Edge via provision topic
+    publish_credential_rotation(gateway, new_password)
+
+    # 3. Update Cloud DB
+    gateway.mqtt_password = new_password
+    gateway.save(update_fields=["mqtt_password"])
+
+    logger.info("Password rotated for gateway %s", gateway.serial_number)
+
+    # Return HTMX-friendly response
+    if request.headers.get("HX-Request"):
+        return HttpResponse(
+            '<div class="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 font-medium">'
+            '<i class="fa fa-check-circle"></i> Password rotated successfully. Gateway will reconnect shortly.'
+            "</div>"
+        )
+    return JsonResponse({"status": "rotated", "gateway": gateway.serial_number})
+
+
+@require_permission("manage_devices")
+@require_POST
+def gateway_send_rpc(request, team_slug, pk):
+    """Send an RPC command to a gateway from the dashboard."""
+    from apps.telemetry.mqtt_publisher import publish_rpc_command
+
+    gateway = Gateway.objects.get(pk=pk, team=request.team)
+    method = request.POST.get("method")
+    params = json.loads(request.POST.get("params", "{}"))
+
+    rpc = publish_rpc_command(gateway, method, params)
+
+    return JsonResponse(
+        {"request_id": str(rpc.request_id), "method": method, "status": "sent"}
+    )
+
+
+@require_permission("manage_devices")
+@require_POST
+def gateway_push_config(request, team_slug, pk):
+    """Push a config update to a gateway."""
+    from apps.telemetry.mqtt_publisher import publish_config_update
+
+    gateway = Gateway.objects.get(pk=pk, team=request.team)
+    action = request.POST.get("action", "full_update")
+    config = json.loads(request.POST.get("config"))
+
+    config_record = publish_config_update(gateway, action, config)
+
+    return JsonResponse(
+        {"request_id": str(config_record.request_id), "action": action, "status": "sent"}
+    )
+
+
+@require_permission("view_devices")
+def gateway_logs(request, team_slug, pk):
+    """View gateway logs with optional level filter."""
+    from apps.telemetry.models import GatewayLog
+
+    gateway = Gateway.objects.get(pk=pk, team=request.team)
+    level = request.GET.get("level")
+
+    logs = GatewayLog.objects.filter(gateway=gateway)
+    if level:
+        logs = logs.filter(level=level)
+    logs = logs[:200]
+
+    return render(
+        request,
+        "devices/gateway_logs.html",
+        {"gateway": gateway, "logs": logs, "current_level": level},
+    )
+
+
+@require_permission("view_devices")
+def gateway_rpc_history(request, team_slug, pk):
+    """View RPC command history for a gateway."""
+    gateway = Gateway.objects.get(pk=pk, team=request.team)
+    commands = RpcCommand.objects.filter(gateway=gateway)[:50]
+
+    return render(
+        request,
+        "devices/gateway_rpc_history.html",
+        {"gateway": gateway, "commands": commands},
+    )
+
+
+@require_permission("manage_devices")
+@require_POST
+def device_rpc_command(request, team_slug, gateway_pk, device_pk):
+    """Send a write/read command to a device via its gateway using RPC."""
+    from apps.telemetry.mqtt_publisher import publish_rpc_command
+
+    gateway = Gateway.objects.get(pk=gateway_pk, team=request.team)
+    device = Device.objects.get(pk=device_pk, gateway=gateway)
+
+    method = request.POST.get("method")  # 'write_device' or 'read_device'
+    params = json.loads(request.POST.get("params", "{}"))
+    params["device_name"] = device.name  # Inject the device name
+
+    rpc = publish_rpc_command(gateway, method, params)
+
+    return JsonResponse(
+        {
+            "request_id": str(rpc.request_id),
+            "method": method,
+            "device": device.name,
+            "status": "sent",
+        }
+    )
+
+
+@require_permission("view_devices")
+def device_rpc_status(request, team_slug, gateway_pk, device_pk, request_id):
+    """Poll the status of an RPC command sent to a device."""
+    rpc = RpcCommand.objects.filter(
+        gateway__pk=gateway_pk,
+        gateway__team=request.team,
+        request_id=request_id,
+    ).first()
+
+    if not rpc:
+        return JsonResponse({"status": "not_found", "result": None, "error": "RPC command not found"}, status=404)
+
+    return JsonResponse(
+        {
+            "status": rpc.status,
+            "result": rpc.result,
+            "error": rpc.error_message or None,
+        }
+    )
 
 
 class DeviceListView(PermissionRequiredMixin, ListView):
@@ -199,19 +421,56 @@ class DeviceDetailView(PermissionRequiredMixin, DetailView):
         context["ai_insights"] = get_ai_insights(self.object)
         context["recent_commands"] = self.object.commands.all().order_by("-requested_at")[:10]
 
-        # Check for writable keys in template
-        writable_keys = []
-        if self.object.template and self.object.template.register_map:
+        # Build structured register data from template
+        readable_registers = []
+        writable_registers = []
+        writable_keys = []  # backward compat for old toggle/slider controls
+        has_template = bool(self.object.template and self.object.template.register_map)
+
+        if has_template:
             for key, config in self.object.template.register_map.items():
-                if isinstance(config, dict) and config.get("writable"):
-                    writable_keys.append(
-                        {
-                            "key": key,
-                            "label": key.replace("_", " ").title(),
-                            "type": config.get("type", "toggle"),  # toggle or slider
-                        }
-                    )
+                if not isinstance(config, dict):
+                    continue
+                reg = {
+                    "key": key,
+                    "label": config.get("label", key.replace("_", " ").title()),
+                    "address": config.get("address", 0),
+                    "functionCode": config.get("functionCode", 3),
+                    "type": config.get("type", "uint16"),
+                    "unit": config.get("unit", ""),
+                    "objectsCount": config.get("objectsCount", 1),
+                }
+                if config.get("writable"):
+                    reg.update({
+                        "control": config.get("control", "input"),
+                        "min": config.get("min", 0),
+                        "max": config.get("max", 65535),
+                        "labels": config.get("labels", ["OFF", "ON"]),
+                    })
+                    writable_registers.append(reg)
+                    # backward compat
+                    writable_keys.append({
+                        "key": key,
+                        "label": reg["label"],
+                        "type": config.get("control", "toggle"),
+                    })
+                else:
+                    readable_registers.append(reg)
+
+        context["readable_registers"] = readable_registers
+        context["writable_registers"] = writable_registers
         context["writable_keys"] = writable_keys
+        context["has_template"] = has_template
+
+        # RPC endpoint URL (needs gateway_pk and device_pk)
+        if self.object.gateway_id:
+            context["rpc_url"] = reverse_lazy(
+                "web_team:devices:device_rpc_command",
+                args=[self.request.team.slug, self.object.gateway_id, self.object.pk],
+            )
+        else:
+            context["rpc_url"] = ""
+
         return context
 
 
@@ -316,18 +575,24 @@ def htmx_device_create(request, team_slug):
     resolve = request.GET.get("resolve")
 
     prefill_data = {}
+    discovery_entry = None
     if provision == "true" or resolve == "true":
         gateway = Gateway.objects.get(id=gateway_id)
-        # Find discovery info for this port
-        disc_devices = gateway.discovery_data.get("devices", [])
+        disc_devices = (gateway.discovery_data or {}).get("devices", [])
         for d in disc_devices:
-            if str(d.get("port")) == str(port):
+            # Match by interface key (new format) or legacy port number
+            d_key = str(d.get("interface") or d.get("port", ""))
+            if d_key == str(port):
+                discovery_entry = d
                 prefill_data["name"] = d.get("signature", "New Device")
-                # Try to find a matching template
-                sig = d.get("signature", "").lower()
-                tpl = DeviceTemplate.objects.filter(name__icontains=sig).first()
-                if tpl:
-                    prefill_data["template_id"] = tpl.id
+                # Use pre-matched template from discovery processing
+                if d.get("matched_template_id"):
+                    prefill_data["template_id"] = d["matched_template_id"]
+                else:
+                    sig = d.get("signature", "").lower()
+                    tpl = DeviceTemplate.objects.filter(name__icontains=sig).first()
+                    if tpl:
+                        prefill_data["template_id"] = tpl.id
                 break
 
     if request.method == "POST":
@@ -340,6 +605,18 @@ def htmx_device_create(request, team_slug):
         if resolve == "true":
             Device.objects.filter(gateway_id=gateway_id, port=port).delete()
 
+        # Build discovery_meta from the discovery entry
+        disc_meta = {}
+        if discovery_entry:
+            disc_meta = {
+                "interface": discovery_entry.get("interface"),
+                "connection": discovery_entry.get("connection"),
+                "slave_id": discovery_entry.get("slave_id"),
+                "baud_rate": discovery_entry.get("baud_rate"),
+                "signature": discovery_entry.get("signature"),
+                "identification": discovery_entry.get("identification"),
+            }
+
         device = Device.objects.create(
             team=request.team,
             site_id=site_id,
@@ -350,6 +627,7 @@ def htmx_device_create(request, team_slug):
             device_type=template.device_type,
             protocol=template.protocol,
             connection_config=template.register_map,
+            discovery_meta=disc_meta,
         )
 
         from apps.events.services import log_event
@@ -362,6 +640,15 @@ def htmx_device_create(request, team_slug):
             site=device.site,
             user=request.user,
         )
+
+        # Push updated connector config to the Edge gateway
+        try:
+            from .config_generator import generate_and_push_config
+
+            gw = Gateway.objects.get(id=gateway_id)
+            generate_and_push_config(gw)
+        except Exception as e:
+            logger.warning("Config push failed after device creation: %s", e)
 
         # Return the updated gateway section (Re-calculate the port map first)
         gateway = Gateway.objects.get(id=gateway_id)

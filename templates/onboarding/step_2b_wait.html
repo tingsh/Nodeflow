@@ -1,0 +1,47 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+{% block app %}
+<div class="max-w-xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    {% include "onboarding/partials/progress_bar.html" with current_step=2 steps=steps %}
+
+    <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700">
+        <div class="p-8 sm:p-12 text-center">
+            <div class="w-20 h-20 mx-auto mb-6 rounded-full bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center">
+                <i class="fa fa-server text-3xl text-indigo-600 dark:text-indigo-400"></i>
+            </div>
+
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Waiting for Gateway</h2>
+            <p class="text-gray-500 dark:text-gray-400 mb-2">
+                <strong>{{ gateway.name }}</strong> ({{ gateway.serial_number }}) has been claimed.
+            </p>
+            <p class="text-sm text-gray-400 dark:text-gray-500 mb-8">
+                Make sure your gateway is powered on and connected to the internet. It will connect automatically.
+            </p>
+
+            <div id="gateway-status"
+                 hx-get="{% url 'web_team:onboarding:gateway_status_poll' request.team.slug %}"
+                 hx-trigger="load, every 3s"
+                 hx-swap="innerHTML">
+                <div class="flex items-center justify-center gap-3 py-6">
+                    <span class="loading loading-spinner loading-md text-indigo-600"></span>
+                    <span class="text-sm font-medium text-gray-500 dark:text-gray-400">Connecting...</span>
+                </div>
+            </div>
+
+            <div class="mt-8 pt-6 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                <a href="{% url 'web_team:onboarding:step_2_gateway' request.team.slug %}" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 font-semibold transition flex items-center">
+                    <i class="fa fa-chevron-left mr-2 text-xs"></i>
+                    Back
+                </a>
+                <a href="{% url 'web_team:onboarding:step_3_discover' request.team.slug %}"
+                   id="continue-btn"
+                   class="py-3 px-8 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-600/30 transition transform hover:-translate-y-0.5 opacity-50 pointer-events-none"
+                   aria-disabled="true">
+                    Continue
+                    <i class="fa fa-arrow-right ml-2"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

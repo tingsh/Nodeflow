@@ -19,7 +19,7 @@
         <ul role="list" class="divide-y divide-gray-200 dark:divide-gray-700">
             {% for gateway in gateways %}
             <li>
-                <div class="block hover:bg-gray-50 dark:hover:bg-gray-700/50 transition duration-150 ease-in-out">
+                <a href="{% url 'web_team:devices:gateway_detail' request.team.slug gateway.pk %}" class="block hover:bg-gray-50 dark:hover:bg-gray-700/50 transition duration-150 ease-in-out">
                     <div class="px-4 py-4 sm:px-6 flex items-center justify-between">
                         <div class="flex items-center">
                             <div class="flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500">
@@ -47,7 +47,7 @@
                             </div>
                         </div>
                     </div>
-                </div>
+                </a>
             </li>
             {% empty %}
             <li class="px-4 py-12 text-center text-gray-500 dark:text-gray-400 italic">
