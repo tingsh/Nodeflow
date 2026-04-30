@@ -45,7 +45,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='gateway',
             name='mqtt_username',
-            field=models.CharField(blank=True, default='', max_length=100, unique=True),
+            field=models.CharField(blank=True, max_length=100, null=True, unique=True),
         ),
         migrations.AddField(
             model_name='gateway',
