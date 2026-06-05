@@ -8,8 +8,8 @@ from apps.alerts.models import AlertRule
 from apps.teams.models import Team
 from apps.users.models import CustomUser
 
-from .models import Device, DeviceCommand, DeviceTemplate, Gateway, Site
-from .services import process_command_response, send_device_command
+from ..models import Device, DeviceCommand, DeviceTemplate, Gateway, Site
+from ..services import process_command_response, send_device_command
 
 
 class DeviceInfrastructureTest(TestCase):
@@ -70,11 +70,15 @@ class DeviceCommandTest(TestCase):
             protocol="modbus_tcp",
         )
 
-    @patch("paho.mqtt.publish.single")
-    def test_send_command_creates_record_and_publishes(self, mock_publish):
+    @patch("apps.telemetry.mqtt_publisher.publish_rpc_command")
+    def test_send_command_creates_record_and_publishes(self, mock_publish_rpc):
+        from apps.devices.models import RpcCommand
+        mock_rpc = RpcCommand(request_id="12345678-1234-1234-1234-123456789012")
+        mock_publish_rpc.return_value = mock_rpc
+
         command = send_device_command(self.device, self.user, "toggle_switch", True)
         self.assertEqual(command.status, "sent")
-        self.assertTrue(mock_publish.called)
+        self.assertTrue(mock_publish_rpc.called)
 
     def test_process_command_response_success(self):
         command = DeviceCommand.objects.create(

@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime, timezone as dt_timezone
 
 import paho.mqtt.client as mqtt
 from django.conf import settings
@@ -15,6 +16,9 @@ class Command(BaseCommand):
     help = "Starts the MQTT consumer service to ingest device telemetry and edge gateway messages"
 
     def handle(self, *args, **options):
+        import redis
+        self.redis_client = redis.Redis.from_url(settings.REDIS_URL)
+
         client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2, client_id=settings.MQTT_CONSUMER_CLIENT_ID
         )
@@ -68,71 +72,93 @@ class Command(BaseCommand):
         except Exception as e:
             logger.error("Error processing MQTT message on %s: %s", msg.topic, e, exc_info=True)
 
-    # ── Telemetry (existing logic) ──────────────────────────────────────
+    # ── Telemetry (Ingestion queueing and WebSockets broadcast) ──────────
 
     def _handle_telemetry(self, payload):
-        """Ingest telemetry data from a gateway (existing flow)."""
-        from apps.telemetry.mqtt_parser import parse_mqtt_payload
+        """Ingest telemetry data from a gateway."""
+        # 1. Queue to Redis
+        try:
+            self.redis_client.rpush("telemetry_ingest_queue", json.dumps(payload))
+        except Exception as e:
+            logger.error(f"Failed to queue telemetry raw payload to Redis: {e}")
 
-        events = parse_mqtt_payload("v1/gateway/telemetry", payload)
+        # 2. Broadcast via WebSockets
+        try:
+            from apps.telemetry.mqtt_parser import parse_mqtt_payload
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            from apps.devices.models import Device, Gateway
+            
+            events = parse_mqtt_payload("v1/gateway/telemetry", payload)
+            channel_layer = get_channel_layer()
 
-        for event in events:
-            gateway_sn = event.get("gateway_sn")
-            device_name = event.get("device_name")
-            device_id = event.get("device_id")
-            values = event.get("values", {})
-            timestamp = event.get("timestamp")
+            gateway_cache = {}
+            device_cache = {}
+            device_by_id = {}
 
-            if device_name and "device_name" not in values:
-                values["device_name"] = device_name
+            for event in events:
+                gateway_sn = event.get("gateway_sn")
+                device_name = event.get("device_name")
+                device_id = event.get("device_id")
+                values = dict(event.get("values", {}))
+                timestamp = event.get("timestamp") or timezone.now()
 
-            if not gateway_sn:
-                continue
+                if device_name and "device_name" not in values:
+                    values["device_name"] = device_name
 
-            ingest_telemetry_data(gateway_sn, values, timestamp=timestamp, device_id=device_id)
+                if not gateway_sn:
+                    continue
+
+                # Cache lookup for Gateway
+                if gateway_sn not in gateway_cache:
+                    try:
+                        gateway_cache[gateway_sn] = Gateway.objects.get(serial_number=gateway_sn)
+                    except Gateway.DoesNotExist:
+                        continue
+                gateway = gateway_cache[gateway_sn]
+
+                # Cache lookup for Device
+                target_device = None
+                if device_id:
+                    try:
+                        d_id = int(device_id)
+                        if d_id not in device_by_id:
+                            device_by_id[d_id] = Device.objects.filter(id=d_id, gateway=gateway).first()
+                        target_device = device_by_id[d_id]
+                    except (ValueError, TypeError):
+                        pass
+                
+                if not target_device and device_name:
+                    cache_key = (gateway.id, device_name)
+                    if cache_key not in device_cache:
+                        device_cache[cache_key] = Device.objects.filter(gateway=gateway, name=device_name).first()
+                    target_device = device_cache[cache_key]
+
+                if not target_device:
+                    target_device = Device.objects.filter(gateway=gateway).first()
+
+                if target_device:
+                    # Broadcast to WebSocket channel group
+                    async_to_sync(channel_layer.group_send)(
+                        f"device_{target_device.id}",
+                        {
+                            "type": "telemetry_message",
+                            "timestamp": timestamp.isoformat() if hasattr(timestamp, "isoformat") else str(timestamp),
+                            "values": values,
+                        }
+                    )
+        except Exception as e:
+            logger.error(f"Error broadcasting WebSocket telemetry: {e}", exc_info=True)
 
     # ── Remote Logging ──────────────────────────────────────────────────
 
     def _handle_logs(self, payload):
-        """Ingest log entries from a gateway."""
-        from apps.devices.models import Gateway
-        from apps.telemetry.models import GatewayLog
-
-        gateway_sn = payload.get("serial_number")
-        if not gateway_sn:
-            return
-
+        """Queue log entries from a gateway to Redis."""
         try:
-            gateway = Gateway.objects.get(serial_number=gateway_sn)
-        except Gateway.DoesNotExist:
-            logger.warning("Gateway %s not found for log ingestion", gateway_sn)
-            return
+            self.redis_client.rpush("logs_ingest_queue", json.dumps(payload))
+        except Exception as e:
+            logger.error(f"Failed to queue logs raw payload to Redis: {e}")
 
-        log_entries = payload.get("logs", [])
-        log_objects = []
-        for entry in log_entries:
-            ts = entry.get("ts")
-            dt = (
-                timezone.datetime.fromtimestamp(ts / 1000.0, tz=timezone.utc)
-                if ts
-                else timezone.now()
-            )
-
-            log_objects.append(
-                GatewayLog(
-                    gateway=gateway,
-                    timestamp=dt,
-                    level=entry.get("level", "INFO"),
-                    logger_name=entry.get("logger", ""),
-                    message=entry.get("message", ""),
-                    module=entry.get("module", ""),
-                    line=entry.get("line"),
-                )
-            )
-
-        if log_objects:
-            GatewayLog.objects.bulk_create(log_objects)
-            logger.debug("Ingested %d log entries from %s", len(log_objects), gateway_sn)
 
     # ── Attribute Sync / Heartbeat ──────────────────────────────────────
 

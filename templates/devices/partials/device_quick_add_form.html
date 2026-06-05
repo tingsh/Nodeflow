@@ -21,8 +21,8 @@
     {% endif %}
 
     <form hx-post="{% url 'web_team:devices:htmx_device_create' request.team.slug %}?site_id={{ site_id }}&gateway_id={{ gateway_id }}&port={{ port }}{% if resolve %}&resolve=true{% endif %}" 
-          hx-swap="none"
-          onsubmit="document.getElementById('quick-add-modal').close()"
+          hx-target="#modal-content"
+          hx-swap="innerHTML"
           class="space-y-6">
         {% csrf_token %}
         
@@ -38,6 +38,33 @@
             <label class="label">
                 <span class="label-text font-bold text-xs uppercase tracking-widest text-base-content/50">Hardware Template</span>
             </label>
+
+            {% if suggested_templates %}
+            <div class="mb-4">
+                <span class="text-[10px] font-black text-indigo-500 uppercase tracking-widest block mb-2"><i class="fa fa-sparkles mr-1 animate-pulse"></i>Suggested matches from discovery:</span>
+                <div class="space-y-1 bg-indigo-500/5 p-2 rounded-2xl border border-indigo-500/10">
+                    {% for template in suggested_templates %}
+                    <div id="template-{{ template.id }}" 
+                         onclick="selectTemplate('{{ template.id }}')"
+                         class="template-item p-3 rounded-xl border border-transparent bg-base-100 hover:bg-base-200 cursor-pointer transition-all flex items-center justify-between group">
+                        <div class="flex items-center">
+                            <div class="w-8 h-8 bg-base-200 rounded-lg flex items-center justify-center mr-3 group-hover:bg-primary-500/10 transition-colors">
+                                <i class="fa {% if template.device_type == 'power_meter' %}fa-bolt{% elif template.device_type == 'temp_sensor' %}fa-thermometer-half{% else %}fa-microchip{% endif %} text-base-content/20 group-hover:text-primary-500 transition-colors text-xs"></i>
+                            </div>
+                            <div>
+                                <h5 class="text-xs font-bold text-base-content">{{ template.name }}</h5>
+                                <p class="text-[9px] text-base-content/40 uppercase tracking-widest font-mono">{{ template.manufacturer }} &middot; {{ template.get_protocol_display }}</p>
+                            </div>
+                        </div>
+                        <div class="text-primary-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <i class="fa fa-plus-circle text-xs"></i>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
             <div class="relative group">
                 <input type="text" name="template_search" placeholder="Search library (e.g. Eastron, Schneider)..." 
                        hx-get="{% url 'web_team:devices:template_library_search' request.team.slug %}" 
@@ -48,12 +75,18 @@
             </div>
             
             <div id="template-results" class="mt-4 max-h-60 overflow-y-auto rounded-2xl border border-base-content/5 bg-base-200/30 p-2 space-y-1">
-                {% if prefill.template_id %}
-                    {# Pre-fill logic could go here but let's keep it simple and just show the search #}
-                    {% include "devices/partials/template_search_results.html" %}
-                {% else %}
-                    {% include "devices/partials/template_search_results.html" %}
-                {% endif %}
+                {% include "devices/partials/template_search_results.html" %}
+            </div>
+            
+            <!-- AI Template Generation Fallback -->
+            <div class="collapse bg-base-200/30 rounded-2xl border border-base-content/5 mt-4">
+                <input type="checkbox" /> 
+                <div class="collapse-title text-xs font-bold uppercase tracking-widest text-primary-500 flex items-center gap-2 cursor-pointer">
+                    <i class="fa fa-sparkles animate-pulse text-indigo-500"></i> Can't find your template? Try AI Generator
+                </div>
+                <div class="collapse-content px-4 pb-4">
+                    {% include "devices/partials/ai_template_builder.html" %}
+                </div>
             </div>
         </div>
 

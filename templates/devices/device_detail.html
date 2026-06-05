@@ -128,34 +128,21 @@
             </a>
 
             <div class="flex items-center space-x-2 bg-base-100 p-1.5 rounded-2xl border border-base-content/5 shadow-sm">
-                <span class="text-[10px] font-black uppercase tracking-widest text-base-content/40 ml-2 mr-1">Polling:</span>
-                <div class="dropdown dropdown-end">
-                    <label id="polling-label" tabindex="0" class="btn btn-ghost btn-xs normal-case font-bold text-primary">10s</label>
-                    <ul tabindex="0" class="dropdown-content z-[20] menu p-2 shadow-2xl bg-base-100 rounded-xl w-32 border border-base-content/5 mt-2">
-                        <li><a onclick="updatePolling(2000, '2s')">2s (Fast)</a></li>
-                        <li><a onclick="updatePolling(5000, '5s')">5s (Std)</a></li>
-                        <li><a onclick="updatePolling(10000, '10s')">10s (Eco)</a></li>
-                        <li><a onclick="updatePolling(0, 'Paused')" class="text-error">Pause</a></li>
-                    </ul>
-                </div>
+                <i class="fa fa-bolt text-indigo-500 animate-pulse ml-2 text-xs"></i>
+                <span class="text-[10px] font-black uppercase tracking-widest text-base-content/40 mr-1">Live Feed:</span>
+                <span id="streaming-latency-badge" class="text-xs font-bold text-indigo-600 mr-2 uppercase">Connecting...</span>
             </div>
         </div>
     </div>
 
-    <!-- Dynamic Metrics Container -->
-    <div id="metrics-container" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <!-- Skeleton Loaders -->
-        <div class="bg-base-100 rounded-3xl p-6 border border-base-content/5 animate-pulse h-64"></div>
-        <div class="bg-base-100 rounded-3xl p-6 border border-base-content/5 animate-pulse h-64"></div>
-    </div>
+
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         let charts = {};
-        let pollingInterval = 10000;
-        let pollingTimer = null;
         const deviceId = "{{ device.id }}";
         const teamSlug = "{{ request.team.slug }}";
+        let socket = null;
 
         async function initDashboard() {
             try {
@@ -180,7 +167,8 @@
                     createMetricCard(metric);
                 });
 
-                startPolling();
+                // Establish Real-time WebSocket connection
+                initWebSocket();
             } catch (e) {
                 console.error("Failed to init dashboard", e);
             }
@@ -236,11 +224,11 @@
                 }
             });
             
-            // Initial data pull
-            updateMetric(metric.key);
+            // Single initial fetch of historical coordinates
+            updateMetricHistory(metric.key);
         }
 
-        async function updateMetric(key) {
+        async function updateMetricHistory(key) {
             try {
                 const response = await fetch(`/a/${teamSlug}/telemetry/api/history/${deviceId}/?key=${key}&hours=1`);
                 const data = await response.json();
@@ -250,28 +238,80 @@
                     document.getElementById(`value-${key}`).innerText = latestValue.toFixed(1);
                     
                     const chart = charts[key];
-                    chart.data.labels = data.labels;
+                    chart.data.labels = data.labels.map(l => new Date(l).toLocaleTimeString());
                     chart.data.datasets[0].data = data.values;
-                    chart.update('none'); // Update without animation for performance
+                    chart.update('none');
                 }
             } catch (e) {
-                console.warn(`Update failed for ${key}`, e);
+                console.warn(`History fetch failed for ${key}`, e);
             }
         }
 
-        function startPolling() {
-            if (pollingTimer) clearInterval(pollingTimer);
-            if (pollingInterval === 0) return;
+        function initWebSocket() {
+            const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+            const wsUrl = `${wsScheme}://${window.location.host}/ws/device/${deviceId}/`;
             
-            pollingTimer = setInterval(() => {
-                Object.keys(charts).forEach(key => updateMetric(key));
-            }, pollingInterval);
-        }
+            console.log(`Connecting to WebSocket: ${wsUrl}`);
+            socket = new WebSocket(wsUrl);
 
-        function updatePolling(ms, label) {
-            pollingInterval = ms;
-            document.getElementById('polling-label').innerText = label;
-            startPolling();
+            socket.onopen = function() {
+                console.log("WebSocket connected successfully.");
+            };
+
+            socket.onmessage = function(e) {
+                const msg = JSON.parse(e.data);
+                
+                if (msg.type === "connection_established") {
+                    const badge = document.getElementById("streaming-latency-badge");
+                    if (badge) {
+                        badge.innerText = `${msg.min_interval}s stream`;
+                        if (msg.min_interval <= 1.0) {
+                            badge.className = "text-xs font-bold text-green-500 mr-2 uppercase";
+                        } else if (msg.min_interval <= 5.0) {
+                            badge.className = "text-xs font-bold text-amber-500 mr-2 uppercase";
+                        } else {
+                            badge.className = "text-xs font-bold text-indigo-500 mr-2 uppercase";
+                        }
+                    }
+                } else if (msg.type === "telemetry") {
+                    const timestamp = new Date(msg.timestamp).toLocaleTimeString();
+                    
+                    Object.keys(msg.values).forEach(key => {
+                        if (charts[key]) {
+                            const chart = charts[key];
+                            const val = msg.values[key];
+                            const displayVal = typeof val === 'number' ? val.toFixed(1) : val;
+                            
+                            const valEl = document.getElementById(`value-${key}`);
+                            if (valEl) valEl.innerText = displayVal;
+
+                            chart.data.labels.push(timestamp);
+                            chart.data.datasets[0].data.push(val);
+                            
+                            // Keep last 30 points
+                            if (chart.data.labels.length > 30) {
+                                chart.data.labels.shift();
+                                chart.data.datasets[0].data.shift();
+                            }
+                            chart.update('none');
+                        }
+                    });
+                }
+            };
+
+            socket.onclose = function(e) {
+                console.log("WebSocket connection closed. Reconnecting in 3s...", e);
+                const badge = document.getElementById("streaming-latency-badge");
+                if (badge) {
+                    badge.innerText = "Reconnecting...";
+                    badge.className = "text-xs font-bold text-gray-400 mr-2 uppercase";
+                }
+                setTimeout(initWebSocket, 3000);
+            };
+
+            socket.onerror = function(err) {
+                console.error("WebSocket error observed:", err);
+            };
         }
 
         document.addEventListener('DOMContentLoaded', initDashboard);

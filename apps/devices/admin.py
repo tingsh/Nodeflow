@@ -37,9 +37,10 @@ class GatewayAdmin(admin.ModelAdmin):
 
 @admin.register(DeviceTemplate)
 class DeviceTemplateAdmin(admin.ModelAdmin):
-    list_display = ("name", "manufacturer", "device_type", "protocol", "category", "is_verified")
-    list_filter = ("device_type", "protocol", "category", "is_verified")
+    list_display = ("name", "manufacturer", "device_type", "protocol", "category", "is_verified", "source", "ai_confidence", "usage_count", "created_at")
+    list_filter = ("device_type", "protocol", "category", "is_verified", "source")
     search_fields = ("name", "manufacturer", "model_number")
+    readonly_fields = ("usage_count", "created_at")
 
 
 @admin.register(Device)

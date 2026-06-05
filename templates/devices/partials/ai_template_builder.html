@@ -1,0 +1,68 @@
+<div class="card bg-base-100 shadow-xl border border-base-content/5 rounded-3xl overflow-hidden">
+    <div class="p-6 sm:p-8 bg-gradient-to-br from-indigo-500/5 via-primary-500/5 to-transparent">
+        <div class="flex items-start gap-4">
+            <div class="w-12 h-12 bg-primary-500/10 rounded-2xl flex items-center justify-center text-primary-500">
+                <i class="fa fa-robot text-xl animate-pulse"></i>
+            </div>
+            <div class="flex-1">
+                <h4 class="text-lg font-black text-base-content font-heading tracking-tight">AI Template Generator</h4>
+                <p class="text-xs text-base-content/60 mt-1">
+                    Can't find a template for your equipment? Provide the manufacturer and model, and our AI will search the web and compile a complete Modbus register map for you.
+                </p>
+            </div>
+        </div>
+
+        <form hx-post="{% url 'web_team:devices:ai_template_generate' request.team.slug %}"
+              hx-target="#ai-template-result"
+              hx-swap="innerHTML"
+              hx-indicator="#ai-gen-indicator"
+              class="mt-6 space-y-4">
+            {% csrf_token %}
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="form-control w-full">
+                    <label class="label pb-1">
+                        <span class="label-text text-xs font-bold uppercase tracking-widest text-base-content/50">Manufacturer</span>
+                    </label>
+                    <input type="text" name="manufacturer" placeholder="e.g. Eastron, Schneider" required
+                           class="input input-bordered w-full rounded-2xl bg-base-200 border-none focus:ring-2 focus:ring-primary-500/50 transition-all font-medium">
+                </div>
+
+                <div class="form-control w-full">
+                    <label class="label pb-1">
+                        <span class="label-text text-xs font-bold uppercase tracking-widest text-base-content/50">Model Number</span>
+                    </label>
+                    <input type="text" name="model_number" placeholder="e.g. SDM630, PM5350" required
+                           class="input input-bordered w-full rounded-2xl bg-base-200 border-none focus:ring-2 focus:ring-primary-500/50 transition-all font-medium">
+                </div>
+            </div>
+
+            <div class="form-control w-full">
+                <label class="label pb-1">
+                    <span class="label-text text-xs font-bold uppercase tracking-widest text-base-content/50">Direct Documentation URL <span class="text-base-content/30 font-medium">(Optional)</span></span>
+                </label>
+                <input type="url" name="doc_url" placeholder="e.g. https://www.schneider-electric.com/datasheet.pdf"
+                       class="input input-bordered w-full rounded-2xl bg-base-200 border-none focus:ring-2 focus:ring-primary-500/50 transition-all font-medium">
+                <span class="text-[10px] text-base-content/40 mt-1 block px-1">
+                    If provided, the AI will prioritize extracting register data from this specific page.
+                </span>
+            </div>
+
+            <div class="pt-2 flex items-center justify-between gap-4">
+                <button type="submit" 
+                        class="btn btn-primary rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-primary-500/10 px-6">
+                    <i class="fa fa-sparkles mr-2"></i> Generate with AI
+                </button>
+                <div id="ai-gen-indicator" class="htmx-indicator flex items-center gap-2 text-xs text-base-content/60">
+                    <span class="loading loading-spinner loading-xs text-primary-500"></span>
+                    Initializing task...
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- AI result insertion area -->
+    <div id="ai-template-result" class="border-t border-base-content/5 bg-base-100">
+        <!-- Result or Loading spinner will load here -->
+    </div>
+</div>

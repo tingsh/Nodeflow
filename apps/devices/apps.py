@@ -7,4 +7,4 @@ class DevicesConfig(AppConfig):
     label = "devices"
 
     def ready(self):
-        pass
+        import apps.devices.signals  # noqa

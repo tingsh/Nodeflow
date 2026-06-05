@@ -203,6 +203,17 @@
                         fetch('{% url 'web_team:devices:gateway_send_rpc' request.team.slug gateway.pk %}', {
                             method: 'POST',
                             headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded'},
+                            body: 'method=scan_devices&params={}'
+                        }).then(r => r.json()).then(d => { rpcResult = d; loading = false; }).catch(() => { loading = false; })
+                    " class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition text-sm font-bold text-gray-700 dark:text-gray-300">
+                        <span><i class="fa fa-search mr-2 text-emerald-500"></i> Trigger Port Scan</span>
+                        <i class="fa fa-play text-xs text-gray-400"></i>
+                    </button>
+                    <button @click="
+                        loading = true; rpcResult = null;
+                        fetch('{% url 'web_team:devices:gateway_send_rpc' request.team.slug gateway.pk %}', {
+                            method: 'POST',
+                            headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded'},
                             body: 'method=get_status&params={}'
                         }).then(r => r.json()).then(d => { rpcResult = d; loading = false; }).catch(() => { loading = false; })
                     " class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition text-sm font-bold text-gray-700 dark:text-gray-300">

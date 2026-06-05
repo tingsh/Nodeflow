@@ -1,0 +1,15 @@
+<div class="p-6 sm:p-8 flex flex-col items-center justify-center text-center space-y-4"
+     hx-get="{% url 'web_team:devices:ai_template_status' request.team.slug task_id %}"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML">
+    <div class="relative flex items-center justify-center">
+        <div class="w-16 h-16 rounded-full border-4 border-primary-500/10 border-t-primary-500 animate-spin"></div>
+        <i class="fa fa-search absolute text-lg text-primary-500 animate-pulse"></i>
+    </div>
+    <div>
+        <h5 class="text-sm font-black text-base-content font-heading uppercase tracking-widest">Compiling Register Map</h5>
+        <p class="text-xs text-base-content/60 mt-1 max-w-md">
+            Gemini is searching the internet and manufacturer documentation for Modbus specifications. This usually takes 15-30 seconds.
+        </p>
+    </div>
+</div>

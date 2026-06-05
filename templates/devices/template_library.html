@@ -1,0 +1,159 @@
+{% extends "web/app/app_base.html" %}
+{% load static %}
+{% block app %}
+<div class="px-4 sm:px-6 lg:px-8 py-8" x-data="{ showAiBuilder: false }">
+    <!-- Header -->
+    <div class="sm:flex sm:items-center sm:justify-between border-b border-base-content/10 pb-6 mb-8">
+        <div class="sm:flex-auto">
+            <h1 class="text-3xl font-black text-base-content font-heading tracking-tight">Hardware Templates</h1>
+            <p class="mt-2 text-sm text-base-content/60">
+                Browse pre-configured Modbus register mappings or generate new ones using AI.
+            </p>
+        </div>
+        <div class="mt-4 sm:ml-16 sm:mt-0 flex gap-3">
+            <button @click="showAiBuilder = !showAiBuilder" 
+                    class="inline-flex items-center justify-center rounded-2xl bg-indigo-600 hover:bg-indigo-700 px-5 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-indigo-600/10 transition-all">
+                <i class="fa fa-sparkles mr-2 animate-pulse"></i>
+                <span x-text="showAiBuilder ? 'Hide AI Generator' : 'Generate with AI'">Generate with AI</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- AI Generator Card (Alpine-controlled collapse) -->
+    <div x-show="showAiBuilder" 
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 transform -translate-y-4"
+         x-transition:enter-end="opacity-100 transform translate-y-0"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100 transform translate-y-0"
+         x-transition:leave-end="opacity-0 transform -translate-y-4"
+         class="mb-8">
+        {% include "devices/partials/ai_template_builder.html" %}
+    </div>
+
+    <!-- Search & Filters -->
+    <div class="bg-base-200/50 p-6 rounded-3xl border border-base-content/5 mb-8">
+        <form method="GET" action="." class="flex flex-col md:flex-row gap-4 items-end">
+            <div class="form-control w-full md:flex-1">
+                <label class="label pb-1">
+                    <span class="label-text text-xs font-bold uppercase tracking-widest text-base-content/50">Search</span>
+                </label>
+                <div class="relative">
+                    <input type="text" name="q" value="{{ search_query }}" placeholder="Search by name or manufacturer..."
+                           class="input input-bordered w-full rounded-2xl bg-base-100 border-base-content/10 focus:ring-2 focus:ring-primary-500/50 transition-all font-medium pl-10">
+                    <i class="fa fa-search absolute left-4 top-1/2 -translate-y-1/2 text-base-content/30"></i>
+                </div>
+            </div>
+
+            <div class="form-control w-full md:w-48">
+                <label class="label pb-1">
+                    <span class="label-text text-xs font-bold uppercase tracking-widest text-base-content/50">Protocol</span>
+                </label>
+                <select name="protocol" class="select select-bordered w-full rounded-2xl bg-base-100 border-base-content/10 font-medium">
+                    <option value="">All Protocols</option>
+                    {% for val, label in protocols %}
+                    <option value="{{ val }}" {% if selected_protocol == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-control w-full md:w-48">
+                <label class="label pb-1">
+                    <span class="label-text text-xs font-bold uppercase tracking-widest text-base-content/50">Category</span>
+                </label>
+                <select name="category" class="select select-bordered w-full rounded-2xl bg-base-100 border-base-content/10 font-medium">
+                    <option value="">All Categories</option>
+                    {% for val, label in categories %}
+                    <option value="{{ val }}" {% if selected_category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-control shrink-0 py-3 flex flex-row items-center gap-2">
+                <input type="checkbox" name="verified_only" value="true" id="verified_only" 
+                       {% if verified_only %}checked{% endif %}
+                       class="checkbox checkbox-primary checkbox-sm rounded-lg">
+                <label for="verified_only" class="label-text text-xs font-bold uppercase tracking-widest text-base-content/70 cursor-pointer">Verified Only</label>
+            </div>
+
+            <div class="flex gap-2 w-full md:w-auto">
+                <button type="submit" class="btn btn-primary rounded-2xl font-black text-xs uppercase tracking-widest px-6 flex-1 md:flex-none">
+                    Filter
+                </button>
+                <a href="?" class="btn btn-ghost rounded-2xl font-black text-xs uppercase tracking-widest flex-1 md:flex-none">
+                    Reset
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Templates Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for template in templates %}
+        <div class="card bg-base-100 border border-base-content/5 shadow-xl hover:shadow-2xl transition-all duration-300 rounded-3xl overflow-hidden flex flex-col group">
+            <div class="p-6 flex-1 flex flex-col">
+                <div class="flex items-start justify-between gap-4 mb-4">
+                    <div>
+                        <span class="text-[10px] text-base-content/40 uppercase tracking-widest font-bold block">{{ template.manufacturer }}</span>
+                        <h3 class="text-base font-black text-base-content font-heading tracking-tight mt-1 group-hover:text-primary-500 transition-colors">
+                            {{ template.name }}
+                        </h3>
+                    </div>
+                    <div class="shrink-0 flex flex-col items-end gap-1.5">
+                        {% if template.is_verified %}
+                        <span class="badge badge-success text-white font-black uppercase tracking-wider text-[8px] py-2 px-3 gap-1">
+                            <i class="fa fa-check-circle text-[7px]"></i> Verified
+                        </span>
+                        {% elif template.source == "ai_generated" %}
+                        <span class="badge badge-warning font-black uppercase tracking-wider text-[8px] py-2 px-3 gap-1">
+                            <i class="fa fa-robot text-[7px]"></i> AI Draft
+                        </span>
+                        {% endif %}
+                        <span class="badge badge-outline border-base-content/10 font-mono uppercase text-[8px] py-2 px-3">
+                            {{ template.protocol|upper }}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="mt-4 flex-1">
+                    <span class="text-[9px] font-black text-base-content/40 uppercase tracking-widest block mb-2">Mapped Registers</span>
+                    <div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                        {% for reg, info in template.register_map.items %}
+                        <div class="bg-base-200/50 px-2 py-1 rounded-lg border border-base-content/5 text-[10px] font-mono flex items-center gap-1">
+                            <span class="font-bold text-base-content">{{ reg }}</span>
+                            <span class="text-base-content/40 text-[9px]">({{ info.address }})</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="mt-6 pt-4 border-t border-base-content/5 flex items-center justify-between">
+                    <div class="text-[10px] text-base-content/40 font-bold uppercase tracking-widest">
+                        {% if template.usage_count > 0 %}
+                        Used by <span class="text-primary-500 font-black">{{ template.usage_count }}</span> devices
+                        {% else %}
+                        Not used yet
+                        {% endif %}
+                    </div>
+                    {% if template.source_url %}
+                    <a href="{{ template.source_url }}" target="_blank" class="text-xs text-primary-500 font-bold hover:underline flex items-center gap-1">
+                        <i class="fa fa-link text-[10px]"></i> Citation
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-span-full py-16 text-center bg-base-200/20 rounded-3xl border border-dashed border-base-content/10">
+            <div class="w-16 h-16 bg-base-200 rounded-full flex items-center justify-center mx-auto mb-4 text-base-content/30">
+                <i class="fa fa-folder-open text-2xl"></i>
+            </div>
+            <h4 class="text-lg font-black text-base-content font-heading tracking-tight">No Templates Found</h4>
+            <p class="text-xs text-base-content/50 mt-1 max-w-sm mx-auto">
+                No templates matched your filtering criteria. Try resetting the filters or generate a new one with the AI tool.
+            </p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

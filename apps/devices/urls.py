@@ -43,6 +43,12 @@ urlpatterns = [
     # HTMX endpoints
     path("htmx/device/create/", views.htmx_device_create, name="htmx_device_create"),
     path("htmx/templates/search/", views.template_library_search, name="template_library_search"),
+    # AI Template Builder
+    path("htmx/ai-template/generate/", views.ai_template_generate, name="ai_template_generate"),
+    path("htmx/ai-template/status/<str:task_id>/", views.ai_template_status, name="ai_template_status"),
+    path("htmx/ai-template/approve/", views.ai_template_approve, name="ai_template_approve"),
+    # Template Library
+    path("templates/", views.TemplateLibraryView.as_view(), name="template_library"),
     # Remote Control Command URLs
     path("<int:pk>/command/", views.device_send_command, name="device_send_command"),
     path("<int:pk>/command/status/<uuid:tx_id>/", views.device_command_status, name="device_command_status"),

@@ -100,6 +100,21 @@ class DeviceTemplate(models.Model):
     alert_presets = models.JSONField(default=list, blank=True)
     is_verified = models.BooleanField(default=False)
 
+    SOURCE_CHOICES = (
+        ("curated", _("Curated (Nodeflow)")),
+        ("ai_generated", _("AI Generated")),
+        ("user_created", _("User Created")),
+    )
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default="curated")
+    source_url = models.URLField(blank=True, max_length=500, help_text=_("URL where the register map was found"))
+    ai_confidence = models.FloatField(null=True, blank=True, help_text=_("AI confidence score 0.0-1.0"))
+    created_by_team = models.ForeignKey(
+        "teams.Team", null=True, blank=True, on_delete=models.SET_NULL,
+        help_text=_("Team that originally created this template")
+    )
+    usage_count = models.PositiveIntegerField(default=0, help_text=_("Number of devices using this template"))
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+
     def __str__(self):
         return self.name
 

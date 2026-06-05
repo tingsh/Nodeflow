@@ -26,8 +26,12 @@ class DeviceCommandTest(TestCase):
             protocol="modbus_tcp",
         )
 
-    @patch("paho.mqtt.publish.single")
-    def test_send_command_creates_record_and_publishes(self, mock_publish):
+    @patch("apps.telemetry.mqtt_publisher.publish_rpc_command")
+    def test_send_command_creates_record_and_publishes(self, mock_publish_rpc):
+        from apps.devices.models import RpcCommand
+        mock_rpc = RpcCommand(request_id="12345678-1234-1234-1234-123456789012")
+        mock_publish_rpc.return_value = mock_rpc
+
         command = send_device_command(self.device, self.user, "toggle_switch", True)
 
         # Verify DB record
@@ -36,12 +40,17 @@ class DeviceCommandTest(TestCase):
         self.assertEqual(command.value, True)
 
         # Verify MQTT call
-        self.assertTrue(mock_publish.called)
-        args, kwargs = mock_publish.call_args
-        payload = json.loads(kwargs["payload"])
-        self.assertEqual(payload["device"], self.device.name)
-        self.assertEqual(payload["data"]["method"], "toggle_switch")
-        self.assertEqual(payload["data"]["params"], True)
+        self.assertTrue(mock_publish_rpc.called)
+        args, kwargs = mock_publish_rpc.call_args
+        
+        # Check method argument
+        method = kwargs.get("method") if "method" in kwargs else args[1]
+        self.assertEqual(method, "write_device")
+        
+        # Check params argument
+        params = kwargs.get("params") if "params" in kwargs else args[2]
+        self.assertEqual(params["device_name"], self.device.name)
+        self.assertEqual(params["value"], True)
 
     def test_process_command_response_success(self):
         # Setup a pending command

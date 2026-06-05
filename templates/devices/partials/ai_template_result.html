@@ -1,0 +1,180 @@
+<div class="p-6 sm:p-8 space-y-6">
+    {% if status == "found_existing" %}
+    <div class="p-5 bg-info/10 rounded-2xl border border-info/20 flex gap-4 items-start">
+        <div class="w-10 h-10 bg-info/10 text-info rounded-xl flex items-center justify-center shrink-0">
+            <i class="fa fa-info-circle text-lg"></i>
+        </div>
+        <div class="flex-1">
+            <h5 class="text-sm font-black text-base-content font-heading uppercase tracking-widest">Template Already Exists</h5>
+            <p class="text-xs text-base-content/60 mt-1">
+                We already have a template for <strong>{{ template.manufacturer }} &middot; {{ template.model_number }}</strong> in our library.
+            </p>
+            <div class="mt-4 flex gap-3">
+                <a href="{% url 'web_team:devices:template_library' request.team.slug %}?q={{ template.model_number }}" 
+                   class="btn btn-sm btn-info rounded-xl text-white font-bold">
+                    View in Library
+                </a>
+            </div>
+        </div>
+    </div>
+
+    {% elif status == "draft" %}
+    <div>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-base-content/5">
+            <div>
+                <span class="badge badge-warning font-black uppercase tracking-wider text-[9px] py-2 px-3 gap-1">
+                    <i class="fa fa-robot animate-pulse"></i> AI Generated Draft
+                </span>
+                <h4 class="text-lg font-black text-base-content font-heading tracking-tight mt-2">
+                    {{ draft.manufacturer }} &middot; {{ draft.model_number }}
+                </h4>
+                <p class="text-xs text-base-content/40 font-bold uppercase tracking-wider mt-1">
+                    Type: {{ draft.device_type|title }} &middot; Protocol: {{ draft.protocol|upper }}
+                </p>
+            </div>
+            <div class="flex items-center gap-4 bg-base-200/50 p-4 rounded-2xl border border-base-content/5">
+                <div class="text-right">
+                    <span class="text-[10px] font-bold text-base-content/40 uppercase tracking-widest block">AI Confidence</span>
+                    <span class="text-lg font-black text-base-content font-heading">{{ draft.ai_confidence|floatformat:0 }}%</span>
+                </div>
+                <div class="w-24">
+                    <progress class="progress progress-primary w-full h-2 rounded-full" 
+                              value="{{ draft.ai_confidence }}" max="100"></progress>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-6">
+            <h5 class="text-xs font-black text-base-content font-heading uppercase tracking-widest mb-3">Extracted Telemetry Parameters</h5>
+            <div class="flex flex-wrap gap-2.5">
+                {% for tag, info in draft.register_map.items %}
+                <div class="bg-base-200/50 px-3.5 py-2 rounded-2xl border border-base-content/5 flex items-center gap-2">
+                    <div class="w-1.5 h-1.5 rounded-full {% if info.writable %}bg-indigo-500{% else %}bg-primary-500{% endif %}"></div>
+                    <div>
+                        <span class="font-bold text-xs text-base-content">{{ tag }}</span>
+                        {% if info.unit %}
+                        <span class="text-[10px] text-base-content/40 font-bold uppercase tracking-tighter ml-1">({{ info.unit }})</span>
+                        {% endif %}
+                    </div>
+                    {% if info.writable %}
+                    <span class="badge badge-indigo badge-outline text-[8px] font-black uppercase tracking-wider py-1 px-2 rounded-lg gap-1 border-indigo-500/30 text-indigo-500">
+                        <i class="fa fa-pencil-alt text-[6px]"></i> Writable
+                    </span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Collapsible Raw Modbus Register Details -->
+            <details class="collapse collapse-arrow bg-base-200/10 border border-base-content/5 rounded-3xl mt-5 group">
+                <summary class="collapse-title text-[10px] font-black text-base-content/50 uppercase tracking-widest py-3 px-5 cursor-pointer hover:bg-base-200/20 transition-all select-none">
+                    <i class="fa fa-sliders text-xs mr-1 text-base-content/30 group-open:text-primary-500 transition-colors"></i> View Raw Modbus Register Map
+                </summary>
+                <div class="collapse-content px-5 pb-5">
+                    <div class="overflow-x-auto rounded-2xl border border-base-content/5 bg-base-100">
+                        <table class="table table-xs w-full bg-base-200/10">
+                            <thead>
+                                <tr class="bg-base-200/30 border-b border-base-content/5">
+                                    <th class="py-3 font-bold text-[10px] text-base-content/50 uppercase tracking-wider">Tag Name</th>
+                                    <th class="py-3 font-bold text-[10px] text-base-content/50 uppercase tracking-wider text-center">Address</th>
+                                    <th class="py-3 font-bold text-[10px] text-base-content/50 uppercase tracking-wider text-center">Type</th>
+                                    <th class="py-3 font-bold text-[10px] text-base-content/50 uppercase tracking-wider text-center">Function Code</th>
+                                    <th class="py-3 font-bold text-[10px] text-base-content/50 uppercase tracking-wider text-center">Unit</th>
+                                    <th class="py-3 font-bold text-[10px] text-base-content/50 uppercase tracking-wider text-center">Writable</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-base-content/5">
+                                {% for tag, info in draft.register_map.items %}
+                                <tr>
+                                    <td class="font-mono text-xs font-bold py-3 text-primary-500">{{ tag }}</td>
+                                    <td class="text-center font-bold text-xs py-3">{{ info.address }}</td>
+                                    <td class="text-center py-3"><span class="badge badge-outline border-base-content/15 text-base-content/75 font-mono text-[9px] uppercase">{{ info.type }}</span></td>
+                                    <td class="text-center font-mono text-xs py-3 text-base-content/60">{{ info.functionCode }}</td>
+                                    <td class="text-center py-3 font-bold text-xs text-base-content/70">{{ info.unit|default:"-" }}</td>
+                                    <td class="text-center py-3">
+                                        {% if info.writable %}
+                                        <span class="badge badge-success badge-xs gap-1 font-bold text-[9px] uppercase py-1.5 px-2">
+                                            <i class="fa fa-check text-[7px]"></i> Yes
+                                        </span>
+                                        {% else %}
+                                        <span class="text-base-content/25"><i class="fa fa-times text-[10px]"></i></span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </details>
+        </div>
+
+        {% if draft.source_url %}
+        <div class="mt-4 text-xs text-base-content/50 flex items-center gap-1.5">
+            <i class="fa fa-link text-[10px]"></i> Source Reference:
+            <a href="{{ draft.source_url }}" target="_blank" class="link link-primary font-medium hover:underline break-all">
+                {{ draft.source_url }}
+            </a>
+        </div>
+        {% endif %}
+
+        <div class="mt-8 flex flex-col sm:flex-row items-center gap-4">
+            <form hx-post="{% url 'web_team:devices:ai_template_approve' request.team.slug %}"
+                  hx-target="#ai-template-result"
+                  hx-swap="innerHTML"
+                  class="w-full sm:w-auto">
+                {% csrf_token %}
+                <input type="hidden" name="task_id" value="{{ task_id }}">
+                <button type="submit" 
+                        class="btn btn-success rounded-2xl font-black text-xs uppercase tracking-widest text-white shadow-lg shadow-success-500/10 w-full sm:w-auto px-6">
+                    <i class="fa fa-check mr-2"></i> Approve & Save to Library
+                </button>
+            </form>
+            <button onclick="document.getElementById('ai-template-result').innerHTML = ''"
+                    class="btn btn-ghost rounded-2xl font-black text-xs uppercase tracking-widest w-full sm:w-auto">
+                Discard Draft
+            </button>
+        </div>
+    </div>
+
+    {% elif status == "approved" %}
+    <div class="p-6 bg-success/10 rounded-2xl border border-success/20 flex gap-4 items-start">
+        <div class="w-12 h-12 bg-success/20 text-success rounded-2xl flex items-center justify-center shrink-0 shadow-inner">
+            <i class="fa fa-check-circle text-2xl"></i>
+        </div>
+        <div class="flex-grow">
+            <h4 class="text-base font-black text-base-content font-heading uppercase tracking-widest">Template Saved Successfully!</h4>
+            <p class="text-xs text-base-content/60 mt-1">
+                The template <strong>{{ template.name }}</strong> has been added to Nodeflow's library as a draft template. It is now selectable in the device registration form.
+            </p>
+            <div class="mt-4 flex flex-wrap gap-3">
+                <a href="{% url 'web_team:devices:template_library' request.team.slug %}?q={{ template.model_number }}" 
+                   class="btn btn-sm btn-success text-white rounded-xl font-bold">
+                    View in Library
+                </a>
+                <button onclick="window.location.reload()" 
+                        class="btn btn-sm btn-ghost rounded-xl font-bold">
+                    <i class="fa fa-sync mr-1"></i> Refresh Page
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {% elif status == "error" %}
+    <div class="p-5 bg-error/10 rounded-2xl border border-error/20 flex gap-4 items-start">
+        <div class="w-10 h-10 bg-error/10 text-error rounded-xl flex items-center justify-center shrink-0">
+            <i class="fa fa-exclamation-triangle text-lg"></i>
+        </div>
+        <div class="flex-grow">
+            <h5 class="text-sm font-black text-base-content font-heading uppercase tracking-widest">Generation Failed</h5>
+            <p class="text-xs text-red-700 dark:text-red-400 mt-1 font-semibold leading-relaxed">
+                {{ error }}
+            </p>
+            <button onclick="document.getElementById('ai-template-result').innerHTML = ''" 
+                    class="btn btn-sm btn-ghost border border-error/20 hover:bg-error/10 hover:border-error/30 mt-4 rounded-xl font-bold text-xs">
+                Dismiss
+            </button>
+        </div>
+    </div>
+    {% endif %}
+</div>

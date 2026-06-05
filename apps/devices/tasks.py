@@ -50,3 +50,25 @@ def check_rpc_timeouts():
     count = timed_out.update(status="timeout")
     if count:
         logger.info("Marked %d RPC command(s) as timed out", count)
+
+
+@shared_task
+def generate_template_ai_task(task_id: str, manufacturer: str, model_number: str, doc_url: str = None):
+    """
+    Background task: AI generates a device template draft.
+    Result is cached in Redis keyed by task_id for frontend polling.
+    """
+    from django.core.cache import cache
+    from apps.devices.template_ai import generate_template_from_ai
+
+    logger.info("Starting AI template generation background task: %s (Manufacturer: %s, Model: %s)", task_id, manufacturer, model_number)
+    try:
+        cache.set(f"ai_template:{task_id}", {"status": "processing"}, timeout=300)
+        draft = generate_template_from_ai(manufacturer, model_number, doc_url=doc_url)
+        if draft.get("status") == "error":
+            cache.set(f"ai_template:{task_id}", {"status": "error", "error": draft.get("error")}, timeout=300)
+        else:
+            cache.set(f"ai_template:{task_id}", {"status": "complete", "draft": draft}, timeout=300)
+    except Exception as e:
+        cache.set(f"ai_template:{task_id}", {"status": "error", "error": str(e)}, timeout=300)
+        logger.exception("AI template generation background task failed for task_id %s", task_id)

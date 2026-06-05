@@ -1,0 +1,171 @@
+<div class="p-6 sm:p-8 space-y-6">
+    <!-- Header -->
+    <div class="flex items-start gap-4">
+        <div class="w-12 h-12 bg-success/10 text-success rounded-2xl flex items-center justify-center shrink-0">
+            <i class="fa fa-check-circle text-2xl animate-bounce"></i>
+        </div>
+        <div class="flex-1">
+            <h4 class="text-lg font-black text-base-content font-heading tracking-tight">Device Registered!</h4>
+            <p class="text-xs text-base-content/60 mt-1">
+                <strong>{{ device.name }}</strong> has been successfully registered on port <strong>{{ device.port }}</strong> of gateway <strong>{{ device.gateway.name }}</strong>.
+            </p>
+        </div>
+    </div>
+
+    <!-- Live Connection Test Module -->
+    <div class="bg-base-200/50 p-6 rounded-3xl border border-base-content/5 space-y-4">
+        <div class="flex items-center justify-between">
+            <span class="text-[10px] font-black text-base-content/40 uppercase tracking-widest block">Live Connection Test</span>
+            <div id="test-status-badge" class="badge badge-ghost font-bold text-[8px] uppercase py-1.5 px-2.5">
+                Not Tested
+            </div>
+        </div>
+
+        <p class="text-xs text-base-content/60 leading-relaxed">
+            Verify that your gateway is physically communicating with the device. This will send an on-demand Modbus read request through the gateway's active MQTT channel.
+        </p>
+
+        {% if test_register %}
+        <!-- Target Parameter details -->
+        <div class="text-xs font-mono bg-base-100 p-4 rounded-2xl border border-base-content/5 flex items-center justify-between gap-4">
+            <div>
+                <span class="font-bold text-primary-500">{{ test_register.key }}</span>
+                <span class="text-base-content/40 ml-1.5">(Address: {{ test_register.address }}, FC: {{ test_register.functionCode }})</span>
+            </div>
+            <div class="shrink-0 flex items-center gap-1.5">
+                <span class="badge badge-outline border-base-content/10 text-[9px] uppercase font-bold">{{ test_register.type }}</span>
+                {% if test_register.unit %}
+                <span class="badge badge-primary badge-outline text-[9px] font-bold">{{ test_register.unit }}</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Live Read Result Box -->
+        <div id="test-result-box" class="hidden rounded-2xl bg-base-100 p-4 border border-base-content/5">
+            <span class="text-[10px] font-black text-base-content/40 uppercase tracking-widest block mb-1">Response Data</span>
+            <div id="test-result-data" class="text-xs font-mono font-bold leading-relaxed break-all"></div>
+        </div>
+
+        <!-- Trigger Button -->
+        <button onclick="runLiveConnectionTest()" id="btn-test-connection" 
+                class="btn btn-secondary w-full rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-secondary-500/10">
+            <i class="fa fa-bolt mr-2 animate-pulse"></i> Test Connection & Read
+        </button>
+        {% else %}
+        <div class="p-4 bg-amber-500/5 rounded-2xl border border-amber-500/10 text-xs text-amber-500 font-bold text-center">
+            <i class="fa fa-exclamation-triangle mr-1.5"></i> No readable registers found in this template to test.
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Actions / Navigation -->
+    <div class="flex flex-col sm:flex-row items-center gap-3 pt-4 border-t border-base-content/5">
+        <button onclick="closeModalAndRefresh()" 
+                class="btn btn-ghost rounded-2xl font-black text-xs uppercase tracking-widest w-full sm:w-auto sm:flex-1">
+            Finish & Close
+        </button>
+        <a href="{% url 'web_team:devices:device_detail' request.team.slug device.pk %}" 
+           class="btn btn-primary rounded-2xl font-black text-xs uppercase tracking-widest text-white shadow-lg shadow-primary-500/10 w-full sm:w-auto sm:flex-1 text-center">
+            Go to Device Dashboard <i class="fa fa-arrow-right ml-2 text-[10px]"></i>
+        </a>
+    </div>
+</div>
+
+{% if test_register %}
+<script>
+    const RPC_URL = "{% url 'web_team:devices:device_rpc_command' request.team.slug device.gateway.pk device.pk %}";
+
+    function getCookie(name) {
+        const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+        return v ? v.pop() : '';
+    }
+
+    async function rpcCall(method, params) {
+        const res = await fetch(RPC_URL, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': getCookie('csrftoken')},
+            body: new URLSearchParams({method, params: JSON.stringify(params)})
+        });
+        return res.json();
+    }
+
+    async function pollRpcResult(requestId, maxAttempts = 15) {
+        const statusUrl = RPC_URL.replace(/command\/?$/, 'rpc-status/' + requestId + '/');
+        for (let i = 0; i < maxAttempts; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            try {
+                const res = await fetch(statusUrl);
+                const data = await res.json();
+                if (data.status !== 'pending') return data;
+            } catch (e) { /* retry */ }
+        }
+        return {status: 'timeout', result: null, error: 'Timed out waiting for response'};
+    }
+
+    async function runLiveConnectionTest() {
+        const btn = document.getElementById('btn-test-connection');
+        const badge = document.getElementById('test-status-badge');
+        const resultBox = document.getElementById('test-result-box');
+        const resultData = document.getElementById('test-result-data');
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading loading-spinner loading-xs mr-2"></span> Reading Register...';
+        badge.className = 'badge badge-warning text-white text-[8px] uppercase font-bold py-1.5 px-2.5';
+        badge.innerHTML = '<i class="fa fa-sync fa-spin mr-1"></i> Testing';
+        resultBox.classList.add('hidden');
+
+        try {
+            const params = {
+                functionCode: {{ test_register.functionCode }},
+                address: {{ test_register.address }},
+                objectsCount: {{ test_register.objectsCount|default:1 }}
+            };
+            const dataType = "{{ test_register.type }}";
+            if (dataType) params.type = dataType;
+
+            const rpc = await rpcCall('read_device', params);
+            if (rpc.status === 'sent') {
+                badge.innerHTML = '<i class="fa fa-clock mr-1"></i> Waiting for Edge';
+                const result = await pollRpcResult(rpc.request_id);
+                resultBox.classList.remove('hidden');
+
+                if (result.status === 'success') {
+                    badge.className = 'badge badge-success text-white text-[8px] uppercase font-bold py-1.5 px-2.5';
+                    badge.innerHTML = '<i class="fa fa-check-circle mr-1"></i> Success';
+                    const val = result.result.value !== undefined ? result.result.value : JSON.stringify(result.result);
+                    resultData.className = 'text-xs font-mono text-success font-bold';
+                    resultData.textContent = `Successfully read telemetry: ${val} {{ test_register.unit|default:"" }}`;
+                } else {
+                    badge.className = 'badge badge-error text-white text-[8px] uppercase font-bold py-1.5 px-2.5';
+                    badge.innerHTML = '<i class="fa fa-times-circle mr-1"></i> Failed';
+                    resultData.className = 'text-xs font-mono text-error font-bold';
+                    resultData.textContent = `Error: ${result.error || 'Failed to read register map.'}`;
+                }
+            } else {
+                throw new Error(rpc.error || 'Failed to dispatch RPC command.');
+            }
+        } catch (e) {
+            resultBox.classList.remove('hidden');
+            badge.className = 'badge badge-error text-white text-[8px] uppercase font-bold py-1.5 px-2.5';
+            badge.innerHTML = '<i class="fa fa-exclamation-triangle mr-1"></i> Error';
+            resultData.className = 'text-xs font-mono text-error font-bold';
+            resultData.textContent = `Test Failed: ${e.message}`;
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa fa-bolt mr-2"></i> Test Connection & Read';
+        }
+    }
+
+    function closeModalAndRefresh() {
+        const modal = document.getElementById('quick-add-modal');
+        if (modal) modal.close();
+    }
+</script>
+{% else %}
+<script>
+    function closeModalAndRefresh() {
+        const modal = document.getElementById('quick-add-modal');
+        if (modal) modal.close();
+    }
+</script>
+{% endif %}

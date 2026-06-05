@@ -57,6 +57,7 @@ dependencies = [
     "djangorestframework",
     "djangorestframework-api-key",
     "drf-spectacular",
+    "google-generativeai>=0.8.0",
     "litellm>=1.65.1",
     "markdown",
     "nh3>=0.2.21",

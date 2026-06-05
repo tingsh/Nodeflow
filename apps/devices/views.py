@@ -576,6 +576,7 @@ def htmx_device_create(request, team_slug):
 
     prefill_data = {}
     discovery_entry = None
+    suggested_templates = []
     if provision == "true" or resolve == "true":
         gateway = Gateway.objects.get(id=gateway_id)
         disc_devices = (gateway.discovery_data or {}).get("devices", [])
@@ -585,14 +586,24 @@ def htmx_device_create(request, team_slug):
             if d_key == str(port):
                 discovery_entry = d
                 prefill_data["name"] = d.get("signature", "New Device")
-                # Use pre-matched template from discovery processing
+                
+                # Check for pre-matched template from discovery
                 if d.get("matched_template_id"):
-                    prefill_data["template_id"] = d["matched_template_id"]
-                else:
-                    sig = d.get("signature", "").lower()
-                    tpl = DeviceTemplate.objects.filter(name__icontains=sig).first()
-                    if tpl:
-                        prefill_data["template_id"] = tpl.id
+                    first_tpl = DeviceTemplate.objects.filter(id=d["matched_template_id"]).first()
+                    if first_tpl:
+                        suggested_templates.append(first_tpl)
+                
+                # Fuzzy matches by signature
+                sig = d.get("signature", "").lower()
+                if sig and sig != "unknown":
+                    from django.db.models import Q
+                    other_tpls = DeviceTemplate.objects.filter(
+                        Q(name__icontains=sig) | Q(manufacturer__icontains=sig)
+                    ).exclude(id__in=[t.id for t in suggested_templates])[:3 - len(suggested_templates)]
+                    suggested_templates.extend(other_tpls)
+                
+                if suggested_templates:
+                    prefill_data["template_id"] = suggested_templates[0].id
                 break
 
     if request.method == "POST":
@@ -650,20 +661,32 @@ def htmx_device_create(request, team_slug):
         except Exception as e:
             logger.warning("Config push failed after device creation: %s", e)
 
-        # Return the updated gateway section (Re-calculate the port map first)
-        gateway = Gateway.objects.get(id=gateway_id)
-        # We need to re-run the logic from SiteDetailView or extract it.
-        # For simplicity in this fragment render, we'll just re-map the specific gateway.
-        # (This logic is already in SiteDetailView, so a full page refresh via HX-Trigger might be cleaner,
-        # but let's try to return the fragment).
+        # Find first readable register for connection test
+        test_register = None
+        if template.register_map:
+            for key, config in template.register_map.items():
+                if isinstance(config, dict) and not config.get("writable"):
+                    test_register = {
+                        "key": key,
+                        "address": config.get("address", 0),
+                        "functionCode": config.get("functionCode", 3),
+                        "type": config.get("type", "uint16"),
+                        "unit": config.get("unit", ""),
+                        "objectsCount": config.get("objectsCount", 1),
+                    }
+                    break
 
-        # ... Re-map logic here or just rely on the next SiteDetailView call ...
-        # Actually, let's use HX-Trigger to refresh the whole section or return the partial with mapped data.
-        return HttpResponse(status=204, headers={"HX-Trigger": "infrastructureChanged"})
+        response = render(request, "devices/partials/device_quick_add_success.html", {
+            "device": device,
+            "test_register": test_register,
+        })
+        response["HX-Trigger"] = "infrastructureChanged"
+        return response
 
     templates = DeviceTemplate.objects.all()[:10]
     context = {
         "templates": templates,
+        "suggested_templates": suggested_templates,
         "gateway_id": gateway_id,
         "site_id": site_id,
         "port": port,
@@ -726,3 +749,127 @@ def gateway_discovery_api(request, team_slug):
         return HttpResponse("Gateway not found", status=404)
     except Exception as e:
         return HttpResponse(str(e), status=400)
+
+
+import uuid
+from django.core.cache import cache
+from django.db.models import Q
+from .tasks import generate_template_ai_task
+from .template_ai import save_approved_template
+
+@require_permission("manage_devices")
+@require_POST
+def ai_template_generate(request, team_slug):
+    manufacturer = request.POST.get("manufacturer", "").strip()
+    model_number = request.POST.get("model_number", "").strip()
+    doc_url = request.POST.get("doc_url", "").strip() or None
+
+    if not manufacturer or not model_number:
+        return render(request, "devices/partials/ai_template_result.html", {
+            "status": "error",
+            "error": "Both Manufacturer and Model Number are required."
+        })
+
+    # Check for existing template first (case-insensitive)
+    existing = DeviceTemplate.objects.filter(
+        manufacturer__iexact=manufacturer,
+        model_number__iexact=model_number,
+    ).first()
+    if existing:
+        return render(request, "devices/partials/ai_template_result.html", {
+            "status": "found_existing",
+            "template": existing
+        })
+
+    # Kick off async task
+    task_id = str(uuid.uuid4())
+    # Initialize cache status to processing
+    cache.set(f"ai_template:{task_id}", {"status": "processing"}, timeout=300)
+    generate_template_ai_task.delay(task_id, manufacturer, model_number, doc_url=doc_url)
+    return render(request, "devices/partials/ai_template_loading.html", {"task_id": task_id})
+
+
+@require_permission("manage_devices")
+def ai_template_status(request, team_slug, task_id):
+    result = cache.get(f"ai_template:{task_id}")
+    if not result or result.get("status") == "processing":
+        # HTMX will poll this again
+        return render(request, "devices/partials/ai_template_loading.html", {"task_id": task_id})
+    elif result.get("status") == "complete":
+        return render(request, "devices/partials/ai_template_result.html", {
+            "status": "draft",
+            "draft": result["draft"],
+            "task_id": task_id
+        })
+    else:
+        return render(request, "devices/partials/ai_template_result.html", {
+            "status": "error",
+            "error": result.get("error", "AI template generation failed or timed out.")
+        })
+
+
+@require_permission("manage_devices")
+@require_POST
+def ai_template_approve(request, team_slug):
+    task_id = request.POST.get("task_id")
+    result = cache.get(f"ai_template:{task_id}")
+    if not result or result.get("status") != "complete" or "draft" not in result:
+        return render(request, "devices/partials/ai_template_result.html", {
+            "status": "error",
+            "error": "Template draft expired or not found. Please try generating again."
+        })
+
+    try:
+        # Get team context from request
+        team = getattr(request, "team", None)
+        template = save_approved_template(result["draft"], team=team)
+        
+        # Clear cache
+        cache.delete(f"ai_template:{task_id}")
+        
+        return render(request, "devices/partials/ai_template_result.html", {
+            "status": "approved",
+            "template": template
+        })
+    except Exception as e:
+        logger.exception("Failed to save approved template")
+        return render(request, "devices/partials/ai_template_result.html", {
+            "status": "error",
+            "error": f"Failed to save template: {e}"
+        })
+
+
+class TemplateLibraryView(PermissionRequiredMixin, ListView):
+    permission_required = "view_devices"
+    model = DeviceTemplate
+    template_name = "devices/template_library.html"
+    context_object_name = "templates"
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        q = self.request.GET.get("q", "").strip()
+        protocol = self.request.GET.get("protocol", "").strip()
+        category = self.request.GET.get("category", "").strip()
+        verified_only = self.request.GET.get("verified_only", "") == "true"
+
+        if q:
+            qs = qs.filter(Q(name__icontains=q) | Q(manufacturer__icontains=q) | Q(model_number__icontains=q))
+        if protocol:
+            qs = qs.filter(protocol=protocol)
+        if category:
+            qs = qs.filter(category=category)
+        if verified_only:
+            qs = qs.filter(is_verified=True)
+
+        return qs.order_by("-is_verified", "-usage_count")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["active_tab"] = "templates"
+        context["search_query"] = self.request.GET.get("q", "")
+        context["selected_protocol"] = self.request.GET.get("protocol", "")
+        context["selected_category"] = self.request.GET.get("category", "")
+        context["verified_only"] = self.request.GET.get("verified_only", "") == "true"
+        context["protocols"] = DeviceTemplate.PROTOCOL_CHOICES
+        context["categories"] = DeviceTemplate.VERTICAL_CHOICES
+        return context

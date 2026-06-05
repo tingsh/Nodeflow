@@ -45,3 +45,32 @@ def can_add_device(team):
 
     count = Device.objects.filter(team=team).count()
     return count < limit
+
+
+# Latency limits gating: slug -> min interval in seconds
+PLAN_LATENCY_LIMITS = {
+    "starter": 10.0,       # 10s refresh
+    "professional": 5.0,  # 5s refresh
+    "business": 1.0,      # 1s refresh (Real-time)
+}
+
+DEFAULT_LATENCY_LIMIT = 10.0  # Default for free tier/no active subscription
+
+
+def get_latency_limit_for_team(team):
+    """
+    Returns the minimum telemetry update interval (in seconds) allowed for a team.
+    """
+    if not team.subscription or not team.has_active_subscription():
+        return DEFAULT_LATENCY_LIMIT
+
+    wrapped = team.wrapped_subscription
+    if wrapped and wrapped.product:
+        from apps.subscriptions.metadata import get_product_with_metadata
+
+        product_metadata = get_product_with_metadata(wrapped.product).metadata
+        slug = product_metadata.slug
+        return PLAN_LATENCY_LIMITS.get(slug, DEFAULT_LATENCY_LIMIT)
+
+    return DEFAULT_LATENCY_LIMIT
+

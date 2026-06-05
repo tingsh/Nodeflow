@@ -534,6 +534,14 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.maintenance.tasks.generate_preventive_tickets",
         "schedule": 86400.0,  # Run daily
     },
+    "flush-telemetry-buffer": {
+        "task": "apps.telemetry.tasks.flush_telemetry_buffer_task",
+        "schedule": 2.0,  # Run every 2 seconds
+    },
+    "flush-logs-buffer": {
+        "task": "apps.telemetry.tasks.flush_logs_buffer_task",
+        "schedule": 2.0,  # Run every 2 seconds
+    },
 }
 
 # Channels / Daphne setup

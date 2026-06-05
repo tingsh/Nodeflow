@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 
 from django.utils import timezone
 
@@ -40,7 +40,7 @@ def parse_mqtt_payload(topic, payload):
         # Parse edge-provided timestamp (ms epoch); fall back to server time
         ts = payload.get("ts")
         dt = (
-            datetime.fromtimestamp(ts / 1000.0, tz=timezone.utc)
+            datetime.fromtimestamp(ts / 1000.0, tz=dt_timezone.utc)
             if ts
             else None
         )
@@ -68,7 +68,7 @@ def parse_mqtt_payload(topic, payload):
                         dt = None
                         if ts:
                             # TB timestamps are usually milliseconds
-                            dt = datetime.fromtimestamp(ts / 1000.0, tz=timezone.utc)
+                            dt = datetime.fromtimestamp(ts / 1000.0, tz=dt_timezone.utc)
 
                         events.append(
                             {

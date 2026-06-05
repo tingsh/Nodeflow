@@ -53,41 +53,62 @@ def telemetry_analyzer(request, team_slug, device_id):
 @login_required
 def device_metrics_api(request, team_slug, device_id):
     """
-    JSON endpoint for Chart.js real-time updates.
+    JSON endpoint returning available telemetry metrics (keys, labels, units) for a device.
     """
     device = get_object_or_404(Device, id=device_id, team__slug=team_slug)
-    key = request.GET.get("key", "active_power")
-    limit = int(request.GET.get("limit", 50))
-
-    data = get_latest_telemetry_for_chart(device, key, limit)
-    return JsonResponse(data)
+    
+    metrics = []
+    if device.template and device.template.register_map:
+        for key, val in device.template.register_map.items():
+            if isinstance(val, dict):
+                if not val.get("writable"):
+                    metrics.append({
+                        "key": key,
+                        "label": val.get("label", key.replace("_", " ").title()),
+                        "unit": val.get("unit", "")
+                    })
+    
+    if not metrics:
+        # Fallback to distinct keys recorded in TelemetryData
+        keys = TelemetryData.objects.filter(device=device).order_by().values_list("key", flat=True).distinct()
+        for key in keys:
+            metrics.append({
+                "key": key,
+                "label": key.replace("_", " ").title(),
+                "unit": ""
+            })
+            
+    return JsonResponse({"metrics": metrics})
 
 
 @login_required
 def device_telemetry_history_api(request, team_slug, device_id):
     """
-    JSON endpoint for historical data tables.
+    JSON endpoint for historical and real-time Chart.js updates.
     """
+    from django.utils import timezone
+    
     device = get_object_or_404(Device, id=device_id, team__slug=team_slug)
-    key = request.GET.get("key", None)
+    key = request.GET.get("key", "active_power")
+    hours = int(request.GET.get("hours", 24))
 
-    qs = TelemetryData.objects.filter(device=device).order_by("-timestamp")
+    qs = TelemetryData.objects.filter(device=device)
     if key:
         qs = qs.filter(key=key)
+        
+    cutoff = timezone.now() - timezone.timedelta(hours=hours)
+    qs = qs.filter(timestamp__gte=cutoff).order_by("-timestamp")[:1000]
 
-    data = []
-    for point in qs[:100]:
-        data.append(
-            {
-                "timestamp": point.timestamp.isoformat(),
-                "key": point.key,
-                "value": point.value_numeric
-                if point.value_numeric is not None
-                else (point.value_string or point.value_bool),
-            }
-        )
+    # Reverse to keep chronological order
+    points = list(reversed(list(qs)))
+    
+    labels = []
+    values = []
+    for point in points:
+        labels.append(point.timestamp.isoformat())
+        values.append(point.value_numeric or 0.0)
 
-    return JsonResponse({"results": data})
+    return JsonResponse({"labels": labels, "values": values, "key": key})
 
 
 @login_required

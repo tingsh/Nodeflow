@@ -9,8 +9,8 @@ import paho.mqtt.client as mqtt
 BROKER = "localhost"
 PORT = 1883
 TOPIC = "v1/gateway/telemetry"
-GATEWAY_SN = "GW-SIM-ENERGY-001"
-DEVICE_NAME = "Main Power Meter"
+GATEWAY_SN = "12345678"
+DEVICE_NAME = "Power meter 1"
 
 
 def generate_telemetry(t):

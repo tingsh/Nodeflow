@@ -230,11 +230,12 @@ class Command(BaseCommand):
                     "register_map": t_data["register_map"],
                     "alert_presets": t_data.get("alert_presets", []),
                     "is_verified": True,
+                    "source": "curated",
                 },
             )
             if created:
                 self.stdout.write(self.style.SUCCESS(f"Created template: {template.name}"))
             else:
-                self.stdout.write(self.style.INFO(f"Updated template: {template.name}"))
+                self.stdout.write(f"Updated template: {template.name}")
 
         self.stdout.write(self.style.SUCCESS("Seeding complete!"))

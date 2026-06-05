@@ -23,8 +23,8 @@ MQTT_PORT = 1883
 MQTT_TOPIC = "v1/gateway/telemetry"
 
 # Identity
-GATEWAY_SN = "NF-EDGE-SIM-001"
-DEVICE_NAME = "Simulated Laptop Sensor"
+GATEWAY_SN = "12345678"
+DEVICE_NAME = "test device 1"
 
 
 def run_edge_gateway():
@@ -58,7 +58,7 @@ def run_edge_gateway():
         while True:
             # Read 2 holding registers starting at address 0 (Voltage & Power) from Laptop 2
             # slave=1 is the Unit ID (typical for Modbus TCP)
-            result = modbus_client.read_holding_registers(0, 2, slave=1)
+            result = modbus_client.read_holding_registers(0, count=2, slave=1)
 
             if not result.isError():
                 # Divide by 10 to reverse the decimal scaling done on Laptop 2
