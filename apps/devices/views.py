@@ -396,6 +396,28 @@ def device_rpc_status(request, team_slug, gateway_pk, device_pk, request_id):
     )
 
 
+@require_permission("view_devices")
+def gateway_rpc_status(request, team_slug, gateway_pk, request_id):
+    """Poll the status of an RPC command sent to a gateway."""
+    rpc = RpcCommand.objects.filter(
+        gateway__pk=gateway_pk,
+        gateway__team=request.team,
+        request_id=request_id,
+    ).first()
+
+    if not rpc:
+        return JsonResponse({"status": "not_found", "result": None, "error": "RPC command not found"}, status=404)
+
+    return JsonResponse(
+        {
+            "status": rpc.status,
+            "result": rpc.result,
+            "error": rpc.error_message or None,
+        }
+    )
+
+
+
 class DeviceListView(PermissionRequiredMixin, ListView):
     permission_required = "view_devices"
     model = Device
@@ -461,6 +483,15 @@ class DeviceDetailView(PermissionRequiredMixin, DetailView):
         context["writable_registers"] = writable_registers
         context["writable_keys"] = writable_keys
         context["has_template"] = has_template
+
+        # Get auto-generated dashboard and widgets
+        from apps.dashboard.models import Dashboard
+        dashboard = Dashboard.objects.filter(device=self.object, is_default=True).first()
+        context["dashboard"] = dashboard
+        if dashboard:
+            context["widgets"] = dashboard.widgets.all()
+        else:
+            context["widgets"] = []
 
         # RPC endpoint URL (needs gateway_pk and device_pk)
         if self.object.gateway_id:

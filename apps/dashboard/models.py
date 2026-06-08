@@ -6,6 +6,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from apps.teams.models import BaseTeamModel
+from apps.devices.models import Site, Device
 
 
 class SharedDashboard(BaseTeamModel):
@@ -47,3 +48,52 @@ class SharedDashboard(BaseTeamModel):
         from django.utils import timezone
 
         return bool(self.expires_at and timezone.now() > self.expires_at)
+
+
+class Dashboard(BaseTeamModel):
+    """A team operational dashboard, linked to a Site or a Device."""
+
+    name = models.CharField(max_length=200)
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="dashboards", null=True, blank=True)
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name="dashboards", null=True, blank=True)
+    is_default = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        if self.site:
+            return f"Dashboard: {self.name} - Site: {self.site.name}"
+        if self.device:
+            return f"Dashboard: {self.name} - Device: {self.device.name}"
+        return f"Dashboard: {self.name}"
+
+
+class Widget(BaseTeamModel):
+    """A visual widget on a Dashboard."""
+
+    WIDGET_TYPE_CHOICES = (
+        ("gauge", _("Gauge")),
+        ("timeseries", _("Line Chart / Time Series")),
+        ("indicator", _("Status Indicator")),
+        ("value", _("Live Value")),
+    )
+
+    dashboard = models.ForeignKey(Dashboard, on_delete=models.CASCADE, related_name="widgets")
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name="widgets", null=True, blank=True)
+    title = models.CharField(max_length=200)
+    widget_type = models.CharField(max_length=20, choices=WIDGET_TYPE_CHOICES, default="value")
+    telemetry_key = models.CharField(max_length=100)
+    unit = models.CharField(max_length=20, blank=True)
+    row = models.PositiveIntegerField(default=0)
+    col = models.PositiveIntegerField(default=0)
+    width = models.PositiveIntegerField(default=4)
+    height = models.PositiveIntegerField(default=4)
+    config = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["row", "col"]
+
+    def __str__(self):
+        return f"{self.title} ({self.get_widget_type_display()})"
+

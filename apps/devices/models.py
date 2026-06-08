@@ -235,3 +235,18 @@ class DeviceCommand(BaseTeamModel):
 
     def __str__(self):
         return f"CMD: {self.command_key}={self.value} on {self.device.name} ({self.status})"
+
+
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+@receiver(post_save, sender=Device)
+def auto_generate_dashboard_on_template_match(sender, instance, **kwargs):
+    if instance.template:
+        try:
+            from apps.dashboard.services import generate_default_dashboard
+            generate_default_dashboard(instance)
+        except Exception as e:
+            logger = logging.getLogger("iot_platform")
+            logger.error("Failed to auto-generate dashboard for device %s: %s", instance.name, e)
+

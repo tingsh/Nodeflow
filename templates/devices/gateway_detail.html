@@ -78,7 +78,12 @@
                         </div>
                         <div>
                             <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Firmware</div>
-                            <div class="text-sm font-mono text-gray-900 dark:text-white">{{ gateway.firmware_version|default:"—" }}</div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-mono text-gray-900 dark:text-white">{{ gateway.firmware_version|default:"—" }}</span>
+                                {% if gateway.firmware_version != '1.2.0' and gateway.firmware_version %}
+                                    <span class="badge badge-warning text-[9px] font-black uppercase py-1 px-1.5 rounded-lg">Update Available</span>
+                                {% endif %}
+                            </div>
                         </div>
                         <div>
                             <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Last Seen</div>
@@ -243,6 +248,134 @@
                         <span><i class="fa fa-power-off mr-2 text-red-500"></i> Reboot Gateway</span>
                         <i class="fa fa-play text-xs text-gray-400"></i>
                     </button>
+
+                    {% if gateway.firmware_version != '1.2.0' and gateway.firmware_version %}
+                    <div class="border-t border-gray-100 dark:border-gray-700 pt-4 mt-4" x-data="otaFirmware()">
+                        <button @click="showConfirmation = true" class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 transition text-sm font-bold text-white shadow-lg shadow-indigo-600/20">
+                            <span><i class="fa fa-cloud-arrow-down mr-2"></i> Update Firmware (to v1.2.0)</span>
+                            <i class="fa fa-play text-xs text-indigo-200"></i>
+                        </button>
+
+                        <!-- Confirmation Modal -->
+                        <div x-show="showConfirmation" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" x-cloak>
+                            <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 max-w-md w-full border border-base-content/10 shadow-2xl" @click.away="showConfirmation = false">
+                                <div class="flex items-center gap-3 text-amber-500 mb-4">
+                                    <i class="fa fa-exclamation-triangle text-2xl animate-bounce"></i>
+                                    <h4 class="text-lg font-black uppercase tracking-wide">Confirm Firmware Update</h4>
+                                </div>
+                                <p class="text-sm text-base-content/70 leading-relaxed mb-6">
+                                    This will download and install firmware version <strong>v1.2.0</strong> on edge gateway <strong>{{ gateway.serial_number }}</strong>.
+                                    <br><br>
+                                    <strong class="text-amber-600 dark:text-amber-500">Warning:</strong> Although this utilizes a blue/green atomic swap, the system daemon will restart, causing a downtime of up to 1 second. Active telemetry polling might be briefly interrupted.
+                                </p>
+                                <div class="flex space-x-3">
+                                    <button @click="showConfirmation = false" class="flex-1 py-2.5 rounded-xl border border-base-content/10 text-xs font-bold hover:bg-base-200 transition-colors">
+                                        Cancel
+                                    </button>
+                                    <button @click="triggerUpdate()" class="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-600/25">
+                                        Confirm & Update
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Progress/Status Tracking Indicator -->
+                        <div x-show="otaStatus" class="mt-3 p-4 bg-base-200 rounded-2xl border border-base-content/5" x-cloak>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-[10px] font-black uppercase tracking-widest text-base-content/40">OTA Firmware Update</span>
+                                <span class="text-xs font-mono font-black text-indigo-500 uppercase" x-text="otaStatus"></span>
+                            </div>
+                            <div class="w-full bg-base-300 h-2 rounded-full overflow-hidden">
+                                <div class="bg-indigo-500 h-full transition-all duration-500" :style="'width: ' + otaProgress + '%'"></div>
+                            </div>
+                            <p class="text-[10px] text-base-content/50 mt-2 font-mono" x-text="otaMessage"></p>
+                        </div>
+                    </div>
+                    <script>
+                        function otaFirmware() {
+                            return {
+                                showConfirmation: false,
+                                otaStatus: '',
+                                otaProgress: 0,
+                                otaMessage: '',
+                                async triggerUpdate() {
+                                    this.showConfirmation = false;
+                                    this.otaStatus = 'Dispatched';
+                                    this.otaProgress = 10;
+                                    this.otaMessage = 'Sending update command to gateway...';
+                                    
+                                    try {
+                                        const res = await fetch('{% url 'web_team:devices:gateway_send_rpc' request.team.slug gateway.pk %}', {
+                                            method: 'POST',
+                                            headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded'},
+                                            body: 'method=update_firmware&params=' + JSON.stringify({
+                                                version: '1.2.0',
+                                                url: 'https://raw.githubusercontent.com/nodeflow-iot/firmware/main/v1.2.0.tar.gz',
+                                                token: '{{ gateway.access_token }}'
+                                            })
+                                        });
+                                        const data = await res.json();
+                                        
+                                        if (data.request_id) {
+                                            this.otaStatus = 'Downloading';
+                                            this.otaProgress = 30;
+                                            this.otaMessage = 'Gateway is downloading the firmware package...';
+                                            this.pollUpdateResult(data.request_id);
+                                        } else {
+                                            this.otaStatus = 'Failed';
+                                            this.otaProgress = 0;
+                                            this.otaMessage = 'Failed to dispatch OTA command.';
+                                        }
+                                    } catch (e) {
+                                        this.otaStatus = 'Failed';
+                                        this.otaProgress = 0;
+                                        this.otaMessage = 'Error sending command: ' + e.message;
+                                    }
+                                },
+                                async pollUpdateResult(requestId) {
+                                    const statusUrl = '/a/{{ request.team.slug }}/devices/gateways/{{ gateway.pk }}/rpc-status/' + requestId + '/';
+                                    
+                                    for (let i = 0; i < 30; i++) {
+                                        await new Promise(r => setTimeout(r, 1000));
+                                        try {
+                                            const res = await fetch(statusUrl);
+                                            const data = await res.json();
+                                            
+                                            if (data.status === 'success') {
+                                                this.otaStatus = 'Swapping';
+                                                this.otaProgress = 80;
+                                                this.otaMessage = 'Download complete. Performing atomic swap and restarting daemon...';
+                                                
+                                                await new Promise(r => setTimeout(r, 3000));
+                                                this.otaStatus = 'Success';
+                                                this.otaProgress = 100;
+                                                this.otaMessage = 'Firmware update completed successfully! Gateway is online.';
+                                                
+                                                setTimeout(() => window.location.reload(), 2000);
+                                                return;
+                                            } else if (data.status === 'error') {
+                                                this.otaStatus = 'Failed';
+                                                this.otaProgress = 0;
+                                                this.otaMessage = 'Update failed: ' + (data.error || 'Execution error');
+                                                return;
+                                            } else if (data.status === 'timeout') {
+                                                this.otaStatus = 'Timeout';
+                                                this.otaProgress = 0;
+                                                this.otaMessage = 'Update timed out waiting for gateway response.';
+                                                return;
+                                            }
+                                        } catch (e) {
+                                            // ignore poll errors
+                                        }
+                                    }
+                                    this.otaStatus = 'Timeout';
+                                    this.otaProgress = 0;
+                                    this.otaMessage = 'OTA operation timed out.';
+                                }
+                            }
+                        }
+                    </script>
+                    {% endif %}
 
                     <!-- RPC Feedback -->
                     <template x-if="loading">

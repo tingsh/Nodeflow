@@ -254,6 +254,15 @@ else:
         }
     }
 
+if "test" in sys.argv:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": ":memory:",
+        }
+    }
+
+
 # Auth and Login
 
 # Django recommends overriding the user model even if you don"t think you need to because it makes

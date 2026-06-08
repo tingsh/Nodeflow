@@ -95,3 +95,69 @@ class SharedDashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         # In kiosk mode, the header shouldn't be rendered
         self.assertNotContains(response, "Test Team - Reception Screen")
+
+
+class AutoDashboardTests(TestCase):
+    def setUp(self):
+        from apps.devices.models import Site, DeviceTemplate
+        self.team = Team.objects.create(name="IoT Team", slug="iot-team")
+        self.site = Site.objects.create(team=self.team, name="Main Factory")
+        
+        # Create a mock template
+        self.template = DeviceTemplate.objects.create(
+            name="Test Meter",
+            manufacturer="Schneider",
+            model_number="M1",
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            register_map={
+                "voltage": {"address": 100, "type": "float32", "unit": "V", "label": "Voltage"},
+                "active_power": {"address": 102, "type": "float32", "unit": "kW", "label": "Active Power"},
+                "status_bit": {"address": 104, "type": "bool", "label": "Status Coil"},
+                "raw_val": {"address": 105, "type": "uint16", "label": "Raw Register"}
+            }
+        )
+
+    def test_dashboard_and_widgets_generated_on_save(self):
+        from apps.devices.models import Device
+        from apps.dashboard.models import Dashboard, Widget
+
+        # Provision a device matching the template
+        device = Device.objects.create(
+            team=self.team,
+            site=self.site,
+            name="Main Meter 1",
+            template=self.template,
+            device_type=self.template.device_type,
+            protocol=self.template.protocol
+        )
+
+        # Check that dashboard was auto-generated
+        dashboard = Dashboard.objects.filter(device=device, is_default=True).first()
+        self.assertIsNotNone(dashboard)
+        self.assertEqual(dashboard.name, "Main Meter 1 Overview")
+
+        # Check that correct widgets were generated
+        widgets = Widget.objects.filter(dashboard=dashboard)
+        self.assertEqual(widgets.count(), 4)
+
+        # Verify widget types
+        voltage_widget = widgets.get(telemetry_key="voltage")
+        self.assertEqual(voltage_widget.widget_type, "gauge")
+        self.assertEqual(voltage_widget.unit, "V")
+
+        power_widget = widgets.get(telemetry_key="active_power")
+        self.assertEqual(power_widget.widget_type, "timeseries")
+        self.assertEqual(power_widget.unit, "kW")
+
+        status_widget = widgets.get(telemetry_key="status_bit")
+        self.assertEqual(status_widget.widget_type, "indicator")
+
+        raw_widget = widgets.get(telemetry_key="raw_val")
+        self.assertEqual(raw_widget.widget_type, "value")
+
+        # Idempotence: save device again, widget count should not double
+        device.name = "Main Meter 1 Rename"
+        device.save()
+        self.assertEqual(Widget.objects.filter(dashboard=dashboard).count(), 4)
+

@@ -173,7 +173,28 @@
                 </a>
                 {% endif %}
             </div>
+            <!-- Geographical Map Placeholder -->
+            <div class="h-36 bg-slate-950 dark:bg-slate-900 border-b border-base-content/5 relative overflow-hidden flex items-center justify-center">
+                <!-- Abstract map grids -->
+                <div class="absolute inset-0 opacity-15 bg-[linear-gradient(to_right,#3b82f6_1px,transparent_1px),linear-gradient(to_bottom,#3b82f6_1px,transparent_1px)] bg-[size:16px_16px]"></div>
+                <!-- Pulsing dots for sites -->
+                {% for site in team.site_set.all %}
+                    <div class="absolute flex h-3 w-3 cursor-pointer group/dot" 
+                         style="left: {% widthratio site.id 7 35|add:15 %}%; top: {% widthratio site.id 5 25|add:20 %}%;"
+                         onclick="window.location.href='{% url 'web_team:devices:site_detail' team.slug site.pk %}'">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]"></span>
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-white bg-slate-900/90 border border-white/10 px-1.5 py-0.5 rounded shadow-lg backdrop-blur-sm whitespace-nowrap opacity-75 group-hover/dot:opacity-100 transition-opacity">{{ site.name }}</span>
+                    </div>
+                {% empty %}
+                    <div class="text-center z-10">
+                        <i class="fa fa-map-marked-alt text-2xl text-slate-700 animate-pulse"></i>
+                        <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">Waiting for sites...</p>
+                    </div>
+                {% endfor %}
+            </div>
             <div class="flex-1 overflow-auto max-h-[320px]">
+
                 <ul class="divide-y divide-base-content/5">
                     {% for site in team.site_set.all %}
                     <li class="group px-6 py-4 hover:bg-base-200/30 transition-colors cursor-pointer" onclick="window.location.href='{% url 'web_team:devices:site_detail' team.slug site.pk %}'">
