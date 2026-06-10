@@ -24,6 +24,7 @@ urlpatterns = [
     path("gateways/<int:pk>/logs/", views.gateway_logs, name="gateway_logs"),
     path("gateways/<int:pk>/rpc-history/", views.gateway_rpc_history, name="gateway_rpc_history"),
     path("gateways/<int:gateway_pk>/rpc-status/<uuid:request_id>/", views.gateway_rpc_status, name="gateway_rpc_status"),
+    path("gateways/<int:pk>/ota-update/", views.gateway_ota_update, name="gateway_ota_update"),
 
     # Device RPC command (via gateway)
     path(

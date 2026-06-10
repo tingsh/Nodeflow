@@ -1,0 +1,40 @@
+{% load i18n %}
+<section class="{% if self.bg_color == 'light_gray' %}bg-base-200/30 py-32{% else %}py-32{% endif %}">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="lg:grid lg:grid-cols-2 lg:gap-16 items-center">
+            
+            <div class="{% if self.align_image == 'left' %}lg:order-last{% endif %}">
+                {% if self.badge %}
+                    <span class="text-indigo-500 font-black text-xs uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full mb-6 inline-block">{{ self.badge }}</span>
+                {% endif %}
+                <h2 class="text-4xl font-black text-base-content font-heading mb-8">{{ self.title }}</h2>
+                <div class="space-y-6">
+                    <div class="flex gap-4">
+                        <div class="w-10 h-10 rounded-full bg-red-400/10 flex items-center justify-center shrink-0">
+                            <i class="fa fa-times text-red-500 text-xs"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-base-content mb-1">{% translate "The Pain Point" %}</h4>
+                            <p class="text-sm text-base-content/60 italic leading-relaxed">"{{ self.pain_point_text }}"</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-4">
+                        <div class="w-10 h-10 rounded-full bg-green-400/10 flex items-center justify-center shrink-0">
+                            <i class="fa fa-check text-green-500 text-xs"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-base-content mb-1">{% translate "The Nodeflow Solution" %}</h4>
+                            <p class="text-sm text-base-content/70 font-medium leading-relaxed">{{ self.solution_text }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-12 lg:mt-0 flex justify-center">
+                <div class="w-64 h-64 rounded-full bg-gradient-to-tr from-indigo-100 to-indigo-50 flex items-center justify-center shadow-inner border border-white">
+                    <i class="fa fa-{{ self.illustration_type|default:'industry' }} text-6xl text-indigo-300"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>

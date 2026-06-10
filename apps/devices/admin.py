@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Device, DeviceTemplate, Gateway, GatewayConfig, RpcCommand, Site
+from .models import Device, DeviceTemplate, FirmwareRelease, Gateway, GatewayConfig, RpcCommand, Site
 
 
 @admin.register(Site)
@@ -64,3 +64,12 @@ class RpcCommandAdmin(admin.ModelAdmin):
     list_filter = ("status", "method")
     search_fields = ("gateway__serial_number", "request_id")
     readonly_fields = ("request_id", "sent_at")
+
+
+@admin.register(FirmwareRelease)
+class FirmwareReleaseAdmin(admin.ModelAdmin):
+    list_display = ("version", "is_active", "released_at")
+    list_filter = ("is_active",)
+    search_fields = ("version", "release_notes")
+    readonly_fields = ("released_at",)
+

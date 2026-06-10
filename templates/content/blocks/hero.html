@@ -1,0 +1,33 @@
+{% load i18n %}
+<div class="{% if self.bg_style == 'dark' %}bg-base-content text-white{% else %}bg-base-100 text-base-content{% endif %} pt-32 pb-24 overflow-hidden relative">
+    {% if self.bg_style == 'dark' %}
+        <div class="absolute inset-0 bg-gradient-to-br from-indigo-900/50 to-transparent mix-blend-overlay"></div>
+    {% else %}
+        <div class="absolute top-0 right-0 w-1/2 h-1/2 bg-indigo-50 blur-3xl rounded-full -z-10 translate-x-1/2 -translate-y-1/2"></div>
+    {% endif %}
+    
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
+        {% if self.tagline %}
+            <p class="text-xs font-black uppercase tracking-[0.2em] {% if self.bg_style == 'dark' %}text-indigo-300{% else %}text-indigo-600{% endif %} mb-6">{{ self.tagline }}</p>
+        {% endif %}
+        <h1 class="text-5xl md:text-7xl font-black font-heading tracking-tight mb-8 leading-tight max-w-4xl mx-auto">{{ self.title|safe }}</h1>
+        <p class="text-xl md:text-2xl font-light max-w-3xl mx-auto mb-12 {% if self.bg_style == 'dark' %}text-white/70{% else %}text-base-content/60{% endif %}">{{ self.subtitle }}</p>
+        
+        <div class="flex flex-col sm:flex-row justify-center gap-4">
+            <a href="{{ self.primary_cta_url }}" class="btn {% if self.bg_style == 'dark' %}btn-primary{% else %}btn-primary{% endif %} rounded-2xl h-14 px-8 font-black uppercase tracking-widest">{{ self.primary_cta_text }}</a>
+            {% if self.secondary_cta_url %}
+                <a href="{{ self.secondary_cta_url }}" class="btn btn-outline {% if self.bg_style == 'dark' %}text-white border-white/20 hover:bg-white hover:text-base-content{% else %}border-base-content/20 hover:bg-base-200 hover:border-transparent{% endif %} rounded-2xl h-14 px-8 font-black uppercase tracking-widest">{{ self.secondary_cta_text }}</a>
+            {% endif %}
+        </div>
+        
+        {% if self.show_terminal_simulator %}
+        <div class="mt-20 max-w-4xl mx-auto hidden md:block">
+            <div class="mockup-code bg-base-300 text-left shadow-2xl border border-base-content/5">
+                <pre data-prefix="$" class="text-success"><code>npm install @nodeflow/edge-agent</code></pre> 
+                <pre data-prefix=">" class="text-warning"><code>installing dependencies...</code></pre> 
+                <pre data-prefix=">" class="text-success"><code>gateway connected to nodeflow cloud successfully!</code></pre>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>

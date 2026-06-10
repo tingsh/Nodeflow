@@ -1,0 +1,13 @@
+{% load i18n %}
+<section class="py-10 bg-gray-50/50 border-y border-gray-200/50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        {% if self.tagline %}
+            <p class="text-[9px] font-black uppercase tracking-[0.3em] text-gray-400 mb-6">{{ self.tagline }}</p>
+        {% endif %}
+        <div class="flex flex-wrap justify-center items-center gap-10 lg:gap-20 opacity-40 grayscale filter">
+            {% for company in self.companies %}
+                <span class="text-md font-black font-heading tracking-tighter text-gray-900">{{ company }}</span>
+            {% endfor %}
+        </div>
+    </div>
+</section>

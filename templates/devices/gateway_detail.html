@@ -249,17 +249,14 @@
                         <i class="fa fa-play text-xs text-gray-400"></i>
                     </button>
 
-                    {% if gateway.firmware_version != '1.2.0' and gateway.firmware_version %}
-                    <div class="border-t border-gray-100 dark:border-gray-700 pt-4 mt-4" x-data="otaFirmware()">
-                        <button @click="showConfirmation = true" class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 transition text-sm font-bold text-white shadow-lg shadow-indigo-600/20">
-                            <span><i class="fa fa-cloud-arrow-down mr-2"></i> Update Firmware (to v1.2.0)</span>
+                    {% if update_available %}
+                    <div class="border-t border-gray-100 dark:border-gray-700 pt-4 mt-4" id="ota-update-container" x-data="{ showOtaModal: false, confirmText: '', expectedText: '{{ gateway.serial_number }}' }">
+                        <button 
+                            @click="showOtaModal = true"
+                            class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 transition text-sm font-bold text-white shadow-lg shadow-indigo-600/20">
+                            <span><i class="fa fa-cloud-arrow-down mr-2"></i> Update Firmware (to v{{ latest_release.version }})</span>
                             <i class="fa fa-play text-xs text-indigo-200"></i>
                         </button>
-
-                        <!-- Confirmation Modal -->
-                        <div x-show="showConfirmation" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" x-cloak>
-                            <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 max-w-md w-full border border-base-content/10 shadow-2xl" @click.away="showConfirmation = false">
-                                <div class="flex items-center gap-3 text-amber-500 mb-4">
                                     <i class="fa fa-exclamation-triangle text-2xl animate-bounce"></i>
                                     <h4 class="text-lg font-black uppercase tracking-wide">Confirm Firmware Update</h4>
                                 </div>

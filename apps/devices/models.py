@@ -245,6 +245,22 @@ class DeviceCommand(BaseTeamModel):
         return f"CMD: {self.command_key}={self.value} on {self.device.name} ({self.status})"
 
 
+class FirmwareRelease(models.Model):
+    """Firmware binaries uploaded by administrators for OTA updates."""
+
+    version = models.CharField(max_length=50, unique=True, help_text=_("Version string, e.g. '1.1.0'"))
+    release_notes = models.TextField(blank=True)
+    file = models.FileField(upload_to="firmware/", help_text=_("The firmware binary tarball (.tar.gz)"))
+    is_active = models.BooleanField(default=False, help_text=_("Whether this release is available to gateways"))
+    released_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-released_at"]
+
+    def __str__(self):
+        return f"Firmware v{self.version} ({'Active' if self.is_active else 'Draft'})"
+
+
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 

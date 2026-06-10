@@ -1,0 +1,36 @@
+{% extends "web/base.html" %}
+{% load static %}
+{% load i18n %}
+{% load wagtailcore_tags %}
+
+{% block page_title %}{{ page.title }}{% endblock %}
+
+{% block body %}
+{% if page.hero_title or page.hero_subtitle %}
+    <!-- Structured Page Header -->
+    <div class="relative pt-32 pb-20 overflow-hidden bg-base-100">
+        <div class="absolute inset-0 pointer-events-none">
+            <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[100vw] h-[500px] bg-gradient-to-b from-indigo-500/5 to-transparent"></div>
+        </div>
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+            {% if page.hero_tagline %}
+                <span class="text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-4 block">{{ page.hero_tagline }}</span>
+            {% endif %}
+            <h1 class="text-5xl md:text-7xl font-black text-base-content font-heading tracking-tight mb-6">
+                {{ page.hero_title|safe }}
+            </h1>
+            {% if page.hero_subtitle %}
+                <p class="text-xl text-base-content/60 max-w-3xl mx-auto font-light leading-relaxed">
+                    {{ page.hero_subtitle }}
+                </p>
+            {% endif %}
+        </div>
+    </div>
+{% endif %}
+
+<!-- Render Wagtail StreamField Body -->
+{% for block in page.body %}
+    {% include_block block %}
+{% endfor %}
+
+{% endblock %}

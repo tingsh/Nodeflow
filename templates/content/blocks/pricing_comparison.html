@@ -1,0 +1,52 @@
+{% load i18n %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+    {% if self.title %}
+        <h2 class="text-3xl font-black text-center mb-16 font-heading tracking-tight">{{ self.title }}</h2>
+    {% endif %}
+    <div class="overflow-x-auto rounded-3xl border border-base-content/5 shadow-sm">
+        <table class="table w-full bg-base-100">
+            <thead>
+                <tr class="bg-base-200/50">
+                    <th class="py-6 px-8 text-xs font-black uppercase tracking-widest text-base-content/50">Feature</th>
+                    <th class="py-6 px-8 text-center text-xs font-black uppercase tracking-widest text-base-content/50">Starter</th>
+                    <th class="py-6 px-8 text-center text-xs font-black uppercase tracking-widest text-base-content/50">Professional</th>
+                    <th class="py-6 px-8 text-center text-xs font-black uppercase tracking-widest text-base-content/50">Business</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-base-content/5">
+                {% for feature in self.features %}
+                    <tr class="hover:bg-base-200/30 transition-colors">
+                        <td class="py-6 px-8 font-bold text-sm text-base-content/80">{{ feature.name }}</td>
+                        <td class="text-center">
+                            {% if feature.starter == 'check' or feature.starter == 'Check' or feature.starter == 'yes' %}
+                                <i class="fa fa-check text-green-500"></i>
+                            {% elif feature.starter == '-' or feature.starter == 'no' %}
+                                <i class="fa fa-times text-base-content/20"></i>
+                            {% else %}
+                                <span class="text-sm font-medium text-base-content/70">{{ feature.starter }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center bg-indigo-50/30">
+                            {% if feature.professional == 'check' or feature.professional == 'Check' or feature.professional == 'yes' %}
+                                <i class="fa fa-check text-green-500"></i>
+                            {% elif feature.professional == '-' or feature.professional == 'no' %}
+                                <i class="fa fa-times text-base-content/20"></i>
+                            {% else %}
+                                <span class="text-sm font-medium text-base-content/70">{{ feature.professional }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if feature.business == 'check' or feature.business == 'Check' or feature.business == 'yes' %}
+                                <i class="fa fa-check text-green-500"></i>
+                            {% elif feature.business == '-' or feature.business == 'no' %}
+                                <i class="fa fa-times text-base-content/20"></i>
+                            {% else %}
+                                <span class="text-sm font-medium text-base-content/70">{{ feature.business }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>

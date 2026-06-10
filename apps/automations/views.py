@@ -1,9 +1,11 @@
+import json
 from django.contrib import messages
 from django.db import transaction
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
+from apps.devices.models import Device
 from apps.teams.mixins import PermissionRequiredMixin
 
 from .forms import ActionFormSet, AutomationForm, ConditionFormSet
@@ -73,6 +75,28 @@ class AutomationCreateView(PermissionRequiredMixin, CreateView):
         else:
             context["conditions"] = ConditionFormSet(form_kwargs={"team": self.request.team})
             context["actions"] = ActionFormSet(form_kwargs={"team": self.request.team})
+        
+        # Prepare devices data for the step-by-step logic builder
+        devices_data = {}
+        for device in Device.objects.filter(team=self.request.team).select_related('template'):
+            keys = []
+            if device.template and isinstance(device.template.register_map, dict):
+                keys = list(device.template.register_map.keys())
+            if not keys:
+                keys = ["temp", "humidity", "pressure", "voltage", "current", "status"]
+            
+            writable_keys = []
+            if device.template and isinstance(device.template.register_map, dict):
+                writable_keys = [k for k, v in device.template.register_map.items() if isinstance(v, dict) and v.get("writable")]
+            if not writable_keys:
+                writable_keys = ["turn_on", "turn_off", "set_speed", "reset"]
+                
+            devices_data[str(device.id)] = {
+                "name": device.name,
+                "telemetry_keys": keys,
+                "command_keys": writable_keys,
+            }
+        context["devices_json"] = json.dumps(devices_data)
         context["active_tab"] = "automations"
         return context
 
@@ -121,6 +145,28 @@ class AutomationUpdateView(PermissionRequiredMixin, UpdateView):
         else:
             context["conditions"] = ConditionFormSet(instance=self.object, form_kwargs={"team": self.request.team})
             context["actions"] = ActionFormSet(instance=self.object, form_kwargs={"team": self.request.team})
+        
+        # Prepare devices data for the step-by-step logic builder
+        devices_data = {}
+        for device in Device.objects.filter(team=self.request.team).select_related('template'):
+            keys = []
+            if device.template and isinstance(device.template.register_map, dict):
+                keys = list(device.template.register_map.keys())
+            if not keys:
+                keys = ["temp", "humidity", "pressure", "voltage", "current", "status"]
+            
+            writable_keys = []
+            if device.template and isinstance(device.template.register_map, dict):
+                writable_keys = [k for k, v in device.template.register_map.items() if isinstance(v, dict) and v.get("writable")]
+            if not writable_keys:
+                writable_keys = ["turn_on", "turn_off", "set_speed", "reset"]
+                
+            devices_data[str(device.id)] = {
+                "name": device.name,
+                "telemetry_keys": keys,
+                "command_keys": writable_keys,
+            }
+        context["devices_json"] = json.dumps(devices_data)
         context["active_tab"] = "automations"
         return context
 

@@ -1,0 +1,38 @@
+{% load i18n %}
+<div class="bg-base-100 py-32">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-20">
+        {% if self.title %}
+            <h1 class="text-5xl md:text-6xl font-black text-base-content font-heading tracking-tight mb-6">{{ self.title }}</h1>
+        {% endif %}
+        {% if self.subtitle %}
+            <p class="text-xl text-base-content/60 max-w-2xl mx-auto">{{ self.subtitle }}</p>
+        {% endif %}
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {% for tier in self.tiers %}
+                <div class="bg-base-100 rounded-4xl p-10 border {% if tier.is_popular %}border-indigo-600 shadow-2xl transform md:-translate-y-4 relative z-10{% else %}border-base-content/10 shadow-lg{% endif %}">
+                    {% if tier.badge %}
+                        <div class="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-indigo-600 text-white text-[10px] font-black rounded-full uppercase tracking-widest shadow-lg">{{ tier.badge }}</div>
+                    {% endif %}
+                    <div class="mb-8">
+                        <h3 class="text-xl font-black text-base-content mb-2">{{ tier.name }}</h3>
+                    </div>
+                    <div class="flex items-baseline mb-8">
+                        <span class="text-5xl font-black font-mono">{{ tier.price }}</span>
+                        <span class="text-sm font-bold text-base-content/40 ml-2 uppercase tracking-widest">{{ tier.period }}</span>
+                    </div>
+                    <ul class="space-y-4 mb-10 text-sm">
+                        {% for feature in tier.features %}
+                            <li class="flex items-center text-base-content/70 font-medium">
+                                <i class="fa fa-check text-indigo-500 mr-3"></i> {{ feature }}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                    <a href="{{ tier.cta_url }}" class="btn btn-block {% if tier.is_popular %}btn-primary{% else %}btn-outline{% endif %} rounded-2xl h-14 font-black uppercase tracking-widest text-xs">{{ tier.cta_text }}</a>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>

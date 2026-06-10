@@ -151,11 +151,18 @@ class GatewayDetailView(PermissionRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         from apps.telemetry.models import GatewayLog
+        from .models import FirmwareRelease
 
         gateway = self.object
         context["recent_logs"] = GatewayLog.objects.filter(gateway=gateway)[:20]
         context["recent_rpc"] = RpcCommand.objects.filter(gateway=gateway)[:10]
         context["recent_configs"] = GatewayConfig.objects.filter(gateway=gateway)[:5]
+
+        latest_release = FirmwareRelease.objects.filter(is_active=True).first()
+        if latest_release and latest_release.version != gateway.firmware_version:
+            context["update_available"] = True
+            context["latest_release"] = latest_release
+
         return context
 
 
@@ -904,3 +911,38 @@ class TemplateLibraryView(PermissionRequiredMixin, ListView):
         context["protocols"] = DeviceTemplate.PROTOCOL_CHOICES
         context["categories"] = DeviceTemplate.VERTICAL_CHOICES
         return context
+
+
+@require_permission("manage_devices")
+@require_POST
+def gateway_ota_update(request, team_slug, pk):
+    """Trigger an OTA Firmware update on the gateway."""
+    from apps.telemetry.mqtt_publisher import publish_rpc_command
+    from .models import FirmwareRelease
+
+    gateway = Gateway.objects.get(pk=pk, team=request.team)
+    version = request.POST.get("version")
+
+    release = FirmwareRelease.objects.filter(version=version, is_active=True).first()
+    if not release:
+        return HttpResponse("Firmware release not found.", status=404)
+
+    url = request.build_absolute_uri(release.file.url)
+    params = {
+        "version": release.version,
+        "url": url,
+        "token": "nodeflow_internal_token_mock",
+    }
+
+    rpc = publish_rpc_command(gateway, "update_firmware", params)
+
+    return HttpResponse(
+        f'<div class="p-4 bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-xl flex items-center gap-3">'
+        f'<i class="fa fa-spinner fa-spin"></i>'
+        f'<div>'
+        f'<p class="font-bold">Update Initiated</p>'
+        f'<p class="text-sm opacity-90">Sending v{release.version} to gateway. Do not disconnect power.</p>'
+        f'</div>'
+        f'</div>'
+    )
+

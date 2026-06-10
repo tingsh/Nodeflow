@@ -1,0 +1,18 @@
+{% load i18n %}
+<div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-32">
+    {% if self.title %}
+        <h2 class="text-4xl font-black text-center mb-16 font-heading tracking-tight">{{ self.title }}</h2>
+    {% endif %}
+    <div class="space-y-4">
+        {% for faq in self.faqs %}
+            <div tabindex="0" class="collapse collapse-arrow border border-base-content/10 bg-base-100 rounded-2xl">
+                <div class="collapse-title text-lg font-bold">
+                    {{ faq.question }}
+                </div>
+                <div class="collapse-content">
+                    <p class="text-base-content/70 text-sm leading-relaxed">{{ faq.answer }}</p>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</div>

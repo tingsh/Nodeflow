@@ -1,0 +1,38 @@
+{% load i18n %}
+<section class="{% if self.bg_color == 'light_gray' %}bg-base-200/30 py-32{% elif self.bg_color == 'dark_indigo' %}bg-indigo-900 text-white py-32{% else %}py-32{% endif %}">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="lg:grid lg:grid-cols-2 lg:gap-16 items-center">
+            
+            <div class="{% if self.align_image == 'left' %}lg:order-last{% endif %}">
+                {% if self.badge %}
+                    <span class="text-indigo-500 font-black text-xs uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded-full mb-6 inline-block">{{ self.badge }}</span>
+                {% endif %}
+                <h2 class="text-4xl font-black font-heading mb-6 {% if self.bg_color == 'dark_indigo' %}text-white{% else %}text-base-content{% endif %}">{{ self.title }}</h2>
+                <div class="text-lg leading-relaxed mb-8 {% if self.bg_color == 'dark_indigo' %}text-indigo-100/70{% else %}text-base-content/70{% endif %}">
+                    {{ self.description }}
+                </div>
+                
+                {% if self.check_items %}
+                <ul class="space-y-4">
+                    {% for item in self.check_items %}
+                    <li class="flex items-start">
+                        <i class="fa fa-check-circle text-indigo-500 mt-1 mr-3"></i>
+                        <span class="{% if self.bg_color == 'dark_indigo' %}text-white/80{% else %}text-base-content/80{% endif %} font-medium">{{ item }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+            
+            <div class="mt-12 lg:mt-0 relative">
+                <div class="absolute inset-0 bg-indigo-500/10 blur-3xl rounded-full transform scale-90"></div>
+                <div class="bg-base-100 rounded-3xl shadow-2xl border border-base-content/5 p-4 relative z-10 overflow-hidden aspect-video flex flex-col justify-center items-center text-base-content">
+                    <div class="w-16 h-16 bg-base-200 text-indigo-500 rounded-full flex items-center justify-center text-3xl mb-4">
+                        <i class="fa {{ self.icon|default:'fa-chart-line' }}"></i>
+                    </div>
+                    <p class="text-lg font-black font-heading text-base-content/50 uppercase tracking-widest">{{ self.mockup_title|default:"Platform View" }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
