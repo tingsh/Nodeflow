@@ -96,3 +96,35 @@ class BlogPageGalleryImage(Orderable):
         FieldPanel("image"),
         FieldPanel("caption"),
     ]
+
+
+class HomePage(BaseContentPage):
+    """
+    The homepage of the Nodeflow site.
+    """
+    body = StreamField(_get_default_block_types(), blank=True)
+    content_panels = Page.content_panels + [
+        FieldPanel("body", classname="full"),
+    ]
+
+    def serve(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            from django.http import HttpResponseRedirect
+            from django.urls import reverse
+            team = request.team
+            if team:
+                return HttpResponseRedirect(reverse("web_team:home", args=[team.slug]))
+            else:
+                from apps.teams.helpers import get_open_invitations_for_user
+                from django.contrib import messages
+                from django.utils.translation import gettext_lazy as _
+                if (open_invitations := get_open_invitations_for_user(request.user)) and len(open_invitations) > 1:
+                    invitation = open_invitations[0]
+                    return HttpResponseRedirect(reverse("teams:accept_invitation", args=[invitation["id"]]))
+
+                messages.info(
+                    request,
+                    _("Teams are enabled but you have no teams. Create a team below to access the rest of the dashboard."),
+                )
+                return HttpResponseRedirect(reverse("teams:manage_teams"))
+        return super().serve(request, *args, **kwargs)

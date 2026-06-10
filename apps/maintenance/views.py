@@ -1,5 +1,5 @@
-from django.contrib import messages
-from django.shortcuts import get_object_or_404, redirect
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
@@ -32,6 +32,26 @@ class TicketListView(PermissionRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "maintenance"
         context["status_filter"] = self.request.GET.get("status", "")
+
+        # Fetch and group all tickets for the Kanban view
+        all_tickets = MaintenanceTicket.objects.filter(team=self.request.team).order_by("-created_at")
+        context["open_tickets"] = all_tickets.filter(status=MaintenanceTicket.StatusChoices.OPEN)
+        context["in_progress_tickets"] = all_tickets.filter(status=MaintenanceTicket.StatusChoices.IN_PROGRESS)
+        context["waiting_tickets"] = all_tickets.filter(status=MaintenanceTicket.StatusChoices.WAITING)
+        context["completed_tickets"] = all_tickets.filter(status__in=[
+            MaintenanceTicket.StatusChoices.RESOLVED,
+            MaintenanceTicket.StatusChoices.CLOSED
+        ])
+
+        # Calculate banner stats
+        context["stats"] = {
+            "total": all_tickets.count(),
+            "critical_count": all_tickets.filter(priority=MaintenanceTicket.PriorityChoices.CRITICAL).exclude(status__in=["resolved", "closed"]).count(),
+            "open_count": all_tickets.filter(status=MaintenanceTicket.StatusChoices.OPEN).count(),
+            "in_progress_count": all_tickets.filter(status=MaintenanceTicket.StatusChoices.IN_PROGRESS).count(),
+            "waiting_count": all_tickets.filter(status=MaintenanceTicket.StatusChoices.WAITING).count(),
+            "completed_count": all_tickets.filter(status__in=["resolved", "closed"]).count(),
+        }
         return context
 
 
@@ -138,8 +158,12 @@ class ScheduleListView(PermissionRequiredMixin, ListView):
         return PreventiveSchedule.objects.filter(team=self.request.team).order_by("next_due_at")
 
     def get_context_data(self, **kwargs):
+        from django.utils import timezone
+        from datetime import timedelta
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "maintenance"
+        context["now"] = timezone.now()
+        context["due_soon_threshold"] = timezone.now() + timedelta(days=3)
         return context
 
 
@@ -204,3 +228,95 @@ class TemplateCreateView(PermissionRequiredMixin, CreateView):
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "maintenance"
         return context
+
+
+@require_POST
+@login_and_team_required
+def update_ticket_status(request, team_slug, pk):
+    """Update maintenance ticket status, log a system comment, and return the Kanban partial."""
+    from apps.teams.roles import has_permission
+    if not has_permission(request.user, request.team, "manage_maintenance"):
+        return HttpResponse("Forbidden", status=403)
+
+    ticket = get_object_or_404(MaintenanceTicket, team=request.team, pk=pk)
+    new_status = request.POST.get("status") or request.GET.get("status")
+
+    if new_status in MaintenanceTicket.StatusChoices.values:
+        old_status = ticket.get_status_display()
+        ticket.status = new_status
+        ticket.save()
+
+        # Generate audit/activity feed comment
+        from .models import TicketComment
+        TicketComment.objects.create(
+            team=request.team,
+            ticket=ticket,
+            author=request.user,
+            content=f"Changed status from '{old_status}' to '{ticket.get_status_display()}'.",
+            is_system_generated=True
+        )
+
+        if request.headers.get("HX-Request"):
+            # Return updated Kanban board HTML fragment
+            all_tickets = MaintenanceTicket.objects.filter(team=request.team).order_by("-created_at")
+            context = {
+                "request": request,
+                "tickets": all_tickets,
+                "open_tickets": all_tickets.filter(status=MaintenanceTicket.StatusChoices.OPEN),
+                "in_progress_tickets": all_tickets.filter(status=MaintenanceTicket.StatusChoices.IN_PROGRESS),
+                "waiting_tickets": all_tickets.filter(status=MaintenanceTicket.StatusChoices.WAITING),
+                "completed_tickets": all_tickets.filter(status__in=[
+                    MaintenanceTicket.StatusChoices.RESOLVED,
+                    MaintenanceTicket.StatusChoices.CLOSED
+                ]),
+                "stats": {
+                    "total": all_tickets.count(),
+                    "critical_count": all_tickets.filter(priority=MaintenanceTicket.PriorityChoices.CRITICAL).exclude(status__in=["resolved", "closed"]).count(),
+                    "open_count": all_tickets.filter(status=MaintenanceTicket.StatusChoices.OPEN).count(),
+                    "in_progress_count": all_tickets.filter(status=MaintenanceTicket.StatusChoices.IN_PROGRESS).count(),
+                    "waiting_count": all_tickets.filter(status=MaintenanceTicket.StatusChoices.WAITING).count(),
+                    "completed_count": all_tickets.filter(status__in=["resolved", "closed"]).count(),
+                }
+            }
+            return render(request, "maintenance/partials/kanban_board.html", context)
+
+        return redirect("web_team:maintenance:ticket_list", team_slug=request.team.slug)
+
+    return HttpResponse("Invalid status", status=400)
+
+
+@require_POST
+@login_and_team_required
+def toggle_checklist_item(request, team_slug, pk, item_index):
+    """Toggle a specific checklist item's completion state and log audit trail."""
+    from apps.teams.roles import has_permission
+    if not has_permission(request.user, request.team, "manage_maintenance"):
+        return HttpResponse("Forbidden", status=403)
+
+    ticket = get_object_or_404(MaintenanceTicket, team=request.team, pk=pk)
+
+    try:
+        checklist = list(ticket.checklist_state)
+        if 0 <= item_index < len(checklist):
+            item = checklist[item_index]
+            item["done"] = not item.get("done", False)
+            ticket.checklist_state = checklist
+            ticket.save()
+
+            # Create system comment for audit log
+            from .models import TicketComment
+            state_label = "completed" if item["done"] else "incomplete"
+            TicketComment.objects.create(
+                team=request.team,
+                ticket=ticket,
+                author=request.user,
+                content=f"Marked task '{item['task']}' as {state_label}.",
+                is_system_generated=True
+            )
+
+            if request.headers.get("HX-Request"):
+                return render(request, "maintenance/partials/checklist.html", {"ticket": ticket})
+    except Exception as e:
+        return HttpResponse(str(e), status=400)
+
+    return redirect("web_team:maintenance:ticket_detail", team_slug=request.team.slug, pk=ticket.id)

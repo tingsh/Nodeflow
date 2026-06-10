@@ -33,7 +33,7 @@ PERMISSIONS = {
     "acknowledge_alerts": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER, ROLE_OPERATOR],
     "send_commands": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER],
     "send_critical_commands": [ROLE_OWNER, ROLE_ADMIN],
-    "manage_automations": [ROLE_OWNER, ROLE_ADMIN],
+    "manage_automations": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER],
     "view_automations": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER],
     "manage_team": [ROLE_OWNER, ROLE_ADMIN],
     "manage_billing": [ROLE_OWNER],

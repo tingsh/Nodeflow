@@ -191,6 +191,12 @@ class Command(BaseCommand):
             "platform": "platform_info",
             "connected_devices": "connected_devices",
             "active_connectors": "active_connectors",
+            "active_interface": "active_interface",
+            "failover_count": "failover_count",
+            "ethernet_status": "ethernet_status",
+            "wifi_status": "wifi_status",
+            "fourg_status": "fourg_status",
+            "signal_strength": "signal_strength",
         }
 
         for attr_key, model_field in field_mapping.items():

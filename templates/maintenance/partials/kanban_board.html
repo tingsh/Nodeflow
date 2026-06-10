@@ -1,0 +1,95 @@
+{% load i18n %}
+
+<div id="kanban-board" class="grid grid-cols-1 md:grid-cols-4 gap-6 mt-6 pb-12">
+    <!-- COLUMN 1: OPEN -->
+    <div class="bg-gray-50 dark:bg-gray-900/40 p-4 rounded-2xl flex flex-col min-h-[550px] border border-gray-200/50 dark:border-gray-800/40 transition-colors"
+         ondragover="event.preventDefault(); this.classList.add('bg-indigo-50/50', 'dark:bg-indigo-950/10', 'border-indigo-300/40')"
+         ondragleave="this.classList.remove('bg-indigo-50/50', 'dark:bg-indigo-950/10', 'border-indigo-300/40')"
+         ondrop="this.classList.remove('bg-indigo-50/50', 'dark:bg-indigo-950/10', 'border-indigo-300/40'); onDrop(event, 'open')">
+        <div class="flex items-center justify-between mb-4 px-1">
+            <h3 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center">
+                <span class="h-2 w-2 rounded-full bg-yellow-400 mr-2 shadow-sm shadow-yellow-400/50"></span>
+                {% translate "Open / Backlog" %}
+            </h3>
+            <span class="badge badge-sm bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-none font-bold">{{ open_tickets|length }}</span>
+        </div>
+        <div class="space-y-3 flex-1 overflow-y-auto">
+            {% for ticket in open_tickets %}
+                {% include "maintenance/partials/kanban_card.html" with ticket=ticket %}
+            {% empty %}
+                <div class="text-center py-12 text-gray-400 dark:text-gray-600 text-xs border border-dashed border-gray-200 dark:border-gray-800/60 rounded-xl bg-white/50 dark:bg-gray-900/10">
+                    <i class="fa fa-clipboard mr-1.5 opacity-60"></i> {% translate "No open tickets" %}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- COLUMN 2: IN PROGRESS -->
+    <div class="bg-gray-50 dark:bg-gray-900/40 p-4 rounded-2xl flex flex-col min-h-[550px] border border-gray-200/50 dark:border-gray-800/40 transition-colors"
+         ondragover="event.preventDefault(); this.classList.add('bg-indigo-50/50', 'dark:bg-indigo-950/10', 'border-indigo-300/40')"
+         ondragleave="this.classList.remove('bg-indigo-50/50', 'dark:bg-indigo-950/10', 'border-indigo-300/40')"
+         ondrop="this.classList.remove('bg-indigo-50/50', 'dark:bg-indigo-950/10', 'border-indigo-300/40'); onDrop(event, 'in_progress')">
+        <div class="flex items-center justify-between mb-4 px-1">
+            <h3 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center">
+                <span class="h-2 w-2 rounded-full bg-blue-500 mr-2 shadow-sm shadow-blue-500/50"></span>
+                {% translate "In Progress" %}
+            </h3>
+            <span class="badge badge-sm bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-none font-bold">{{ in_progress_tickets|length }}</span>
+        </div>
+        <div class="space-y-3 flex-1 overflow-y-auto">
+            {% for ticket in in_progress_tickets %}
+                {% include "maintenance/partials/kanban_card.html" with ticket=ticket %}
+            {% empty %}
+                <div class="text-center py-12 text-gray-400 dark:text-gray-600 text-xs border border-dashed border-gray-200 dark:border-gray-800/60 rounded-xl bg-white/50 dark:bg-gray-900/10">
+                    <i class="fa fa-spinner fa-spin mr-1.5 opacity-60"></i> {% translate "No in-progress tickets" %}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- COLUMN 3: WAITING -->
+    <div class="bg-gray-50 dark:bg-gray-900/40 p-4 rounded-2xl flex flex-col min-h-[550px] border border-gray-200/50 dark:border-gray-800/40 transition-colors"
+         ondragover="event.preventDefault(); this.classList.add('bg-indigo-50/50', 'dark:bg-indigo-950/10', 'border-indigo-300/40')"
+         ondragleave="this.classList.remove('bg-indigo-50/50', 'dark:bg-indigo-950/10', 'border-indigo-300/40')"
+         ondrop="this.classList.remove('bg-indigo-50/50', 'dark:bg-indigo-950/10', 'border-indigo-300/40'); onDrop(event, 'waiting')">
+        <div class="flex items-center justify-between mb-4 px-1">
+            <h3 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center">
+                <span class="h-2 w-2 rounded-full bg-purple-500 mr-2 shadow-sm shadow-purple-500/50"></span>
+                {% translate "Waiting / Blocked" %}
+            </h3>
+            <span class="badge badge-sm bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-none font-bold">{{ waiting_tickets|length }}</span>
+        </div>
+        <div class="space-y-3 flex-1 overflow-y-auto">
+            {% for ticket in waiting_tickets %}
+                {% include "maintenance/partials/kanban_card.html" with ticket=ticket %}
+            {% empty %}
+                <div class="text-center py-12 text-gray-400 dark:text-gray-600 text-xs border border-dashed border-gray-200 dark:border-gray-800/60 rounded-xl bg-white/50 dark:bg-gray-900/10">
+                    <i class="fa fa-hourglass-half mr-1.5 opacity-60"></i> {% translate "No waiting tickets" %}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- COLUMN 4: COMPLETED -->
+    <div class="bg-gray-50 dark:bg-gray-900/40 p-4 rounded-2xl flex flex-col min-h-[550px] border border-gray-200/50 dark:border-gray-800/40 transition-colors"
+         ondragover="event.preventDefault(); this.classList.add('bg-indigo-50/50', 'dark:bg-indigo-950/10', 'border-indigo-300/40')"
+         ondragleave="this.classList.remove('bg-indigo-50/50', 'dark:bg-indigo-950/10', 'border-indigo-300/40')"
+         ondrop="this.classList.remove('bg-indigo-50/50', 'dark:bg-indigo-950/10', 'border-indigo-300/40'); onDrop(event, 'resolved')">
+        <div class="flex items-center justify-between mb-4 px-1">
+            <h3 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center">
+                <span class="h-2 w-2 rounded-full bg-green-500 mr-2 shadow-sm shadow-green-500/50"></span>
+                {% translate "Resolved / Closed" %}
+            </h3>
+            <span class="badge badge-sm bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-none font-bold">{{ completed_tickets|length }}</span>
+        </div>
+        <div class="space-y-3 flex-1 overflow-y-auto">
+            {% for ticket in completed_tickets %}
+                {% include "maintenance/partials/kanban_card.html" with ticket=ticket %}
+            {% empty %}
+                <div class="text-center py-12 text-gray-400 dark:text-gray-600 text-xs border border-dashed border-gray-200 dark:border-gray-800/60 rounded-xl bg-white/50 dark:bg-gray-900/10">
+                    <i class="fa fa-check-circle mr-1.5 opacity-60"></i> {% translate "No completed tickets" %}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>

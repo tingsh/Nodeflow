@@ -60,6 +60,14 @@ class Gateway(BaseTeamModel):
     active_connectors = models.JSONField(default=list, blank=True)
     connected_devices = models.JSONField(default=list, blank=True)
 
+    # Network Watchdog fields
+    active_interface = models.CharField(max_length=20, blank=True, default="eth0")
+    failover_count = models.IntegerField(default=0)
+    ethernet_status = models.CharField(max_length=20, blank=True, default="unknown")
+    wifi_status = models.CharField(max_length=20, blank=True, default="unknown")
+    fourg_status = models.CharField(max_length=20, blank=True, default="unknown")
+    signal_strength = models.IntegerField(null=True, blank=True)
+
     def __str__(self):
         return f"{self.name} ({self.serial_number})"
 

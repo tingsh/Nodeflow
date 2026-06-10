@@ -64,6 +64,7 @@ class AutomationAction(BaseTeamModel):
         SEND_COMMAND = "send_command", _("Send Command to Device (RPC)")
         NOTIFY_EMAIL = "notify_email", _("Send Email Notification")
         WEBHOOK = "webhook", _("Fire HTTP Webhook")
+        CREATE_TICKET = "create_ticket", _("Create Maintenance Ticket")
 
     automation = models.ForeignKey(Automation, on_delete=models.CASCADE, related_name="actions")
     action_type = models.CharField(max_length=20, choices=ActionTypeChoices.choices)

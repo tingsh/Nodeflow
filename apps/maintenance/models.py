@@ -34,9 +34,15 @@ class PreventiveSchedule(BaseTeamModel):
     device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name="maintenance_schedules")
     template = models.ForeignKey(TicketTemplate, on_delete=models.SET_NULL, null=True, blank=True)
     title = models.CharField(max_length=200)
-    interval = models.CharField(max_length=20, choices=IntervalChoices.choices, default=IntervalChoices.MONTHLY)
-    next_due_at = models.DateTimeField()
+    interval = models.CharField(max_length=20, choices=IntervalChoices.choices, default=IntervalChoices.MONTHLY, null=True, blank=True)
+    next_due_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
+
+    # Usage-based PM settings
+    is_usage_based = models.BooleanField(default=False)
+    usage_telemetry_key = models.CharField(max_length=100, default="run_hours", blank=True)
+    usage_threshold = models.FloatField(default=0.0, blank=True, null=True)
+    last_trigger_usage_value = models.FloatField(default=0.0, blank=True, null=True)
 
     def __str__(self):
         return f"PM: {self.title} on {self.device.name}"

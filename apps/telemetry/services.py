@@ -133,9 +133,10 @@ def get_site_summary_stats(site):
         # Get total kWh for the current day across all devices in the site
         cursor.execute(
             """
-            SELECT SUM(kwh_total) 
-            FROM daily_energy_stats 
-            WHERE device_id IN (SELECT id FROM devices_device WHERE site_id = %s)
+            SELECT SUM(avg_value) / 1000 
+            FROM hourly_telemetry_stats 
+            WHERE key = 'active_power'
+            AND device_id IN (SELECT id FROM devices_device WHERE site_id = %s)
             AND bucket >= CURRENT_DATE;
         """,
             [site.id],
@@ -145,9 +146,10 @@ def get_site_summary_stats(site):
         # Get current avg power (from the last hour bucket)
         cursor.execute(
             """
-            SELECT SUM(avg_power)
-            FROM hourly_power_stats
-            WHERE device_id IN (SELECT id FROM devices_device WHERE site_id = %s)
+            SELECT SUM(avg_value)
+            FROM hourly_telemetry_stats
+            WHERE key = 'active_power'
+            AND device_id IN (SELECT id FROM devices_device WHERE site_id = %s)
             AND bucket >= NOW() - INTERVAL '1 hour';
         """,
             [site.id],

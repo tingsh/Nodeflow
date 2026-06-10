@@ -1,0 +1,19 @@
+{% extends "web/base.html" %}
+{% load static %}
+{% load i18n %}
+
+{% block page_title %}{% translate "Nodeflow | AI-Powered Industrial IoT Platform" %}{% endblock %}
+
+{% block body %}
+    {% if page.body %}
+        <!-- Render Wagtail CMS Blocks -->
+        <div class="prose max-w-none dark:prose-invert px-4 sm:px-6 lg:px-8 py-12">
+            {% for block in page.body %}
+                {{ block }}
+            {% endfor %}
+        </div>
+    {% else %}
+        <!-- Render default landing page -->
+        {% include "web/landing_page_content.html" %}
+    {% endif %}
+{% endblock %}

@@ -10,6 +10,8 @@ urlpatterns = [
     path("tickets/create/", views.TicketCreateView.as_view(), name="ticket_create"),
     path("tickets/<int:pk>/", views.TicketDetailView.as_view(), name="ticket_detail"),
     path("tickets/<int:pk>/edit/", views.TicketUpdateView.as_view(), name="ticket_edit"),
+    path("tickets/<int:pk>/status/", views.update_ticket_status, name="ticket_status_update"),
+    path("tickets/<int:pk>/checklist/<int:item_index>/toggle/", views.toggle_checklist_item, name="ticket_checklist_toggle"),
     path("tickets/<int:pk>/comment/", views.add_ticket_comment, name="ticket_comment"),
     # Templates
     path("templates/", views.TemplateListView.as_view(), name="template_list"),

@@ -79,8 +79,8 @@ urlpatterns = [
     path("cms/login/", RedirectView.as_view(pattern_name="account_login")),
     path("cms/", include(wagtailadmin_urls)),
     path("documents/", include(wagtaildocs_urls)),
-    path("content/", include(wagtail_urls)),
     path("chat/", include("apps.chat.urls")),
+    path("", include(wagtail_urls)),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 if settings.ENABLE_DEBUG_TOOLBAR:

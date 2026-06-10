@@ -10,8 +10,8 @@
         {{ project_meta.DESCRIPTION }}
       </p>
       <div class="flex flex-col mb-8 lg:mb-16 space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4">
-        <a href="{% url 'account_signup' %}" class="btn btn-lg btn-primary">{% translate "Get started" %}</a>
-        <a href="{% url 'account_login' %}" class="btn btn-lg">{% translate "Sign in" %}</a>
+        <a href="{{ signup_url }}" class="btn btn-lg btn-primary">{% translate "Get started" %}</a>
+        <a href="{{ login_url }}" class="btn btn-lg">{% translate "Sign in" %}</a>
       </div>
     </div>
     <div class="hidden lg:mt-0 lg:col-span-5 lg:flex">

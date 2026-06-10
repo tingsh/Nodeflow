@@ -1,0 +1,275 @@
+{% load static %}
+{% load i18n %}
+
+<!-- Hero Section -->
+<section class="relative pt-24 pb-36 overflow-hidden bg-base-100 flex items-center min-h-[92vh]">
+    <!-- Deep Gradient Background -->
+    <div class="absolute top-0 left-1/4 w-[600px] h-[600px] rounded-full bg-indigo-500/10 blur-[150px] pointer-events-none"></div>
+    <div class="absolute bottom-0 right-1/4 w-[500px] h-[500px] rounded-full bg-purple-500/10 blur-[120px] pointer-events-none"></div>
+
+    <div class="max-w-[1400px] mx-auto px-4 sm:px-8 lg:px-12 relative z-10 w-full">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
+            <!-- Left Text Column -->
+            <div class="lg:col-span-7 text-left max-w-3xl" data-aos="fade-right">
+                <div class="inline-flex items-center px-3.5 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 mb-6 backdrop-blur-md">
+                    <span class="flex h-2 w-2 mr-2.5">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                    </span>
+                    <span class="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400">{% translate "Industrial Intelligence" %}</span>
+                </div>
+                <h1 class="text-4xl sm:text-6xl md:text-7xl font-black text-gray-900 dark:text-white font-heading tracking-tighter leading-[0.95] mb-6">
+                    {% translate "Your Factory," %}<br/>
+                    <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-sky-500 to-indigo-500 dark:from-indigo-400 dark:via-sky-400 dark:to-indigo-400 animate-gradient">{% translate "Perfectly Synchronized." %}</span>
+                </h1>
+                <p class="text-lg text-gray-500 dark:text-gray-400 max-w-xl mb-10 font-medium leading-relaxed">
+                    {% translate "Connect industrial PLCs, meters, and sensors to a secure unified cloud plane. Harness AI-guided template registry, local edge network failover, and zero-downtime upgrades in 24 hours." %}
+                </p>
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <a href="{% url 'account_signup' %}" class="btn btn-primary btn-lg rounded-2xl px-10 h-16 font-black uppercase tracking-wider bg-indigo-600 border-indigo-600 hover:bg-indigo-700 text-white shadow-xl shadow-indigo-600/30">
+                        {% translate "Activate Cloud Access" %}
+                    </a>
+                    <a href="#features" class="btn btn-ghost btn-lg rounded-2xl px-10 h-16 font-black uppercase tracking-wider border border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-900/50 backdrop-blur-sm text-gray-700 dark:text-gray-200">
+                        {% translate "Explore Platform" %}
+                    </a>
+                </div>
+            </div>
+
+            <!-- Right Terminal Simulator Column -->
+            <div class="lg:col-span-5 w-full" data-aos="fade-left">
+                <!-- Terminal Window Wrapper -->
+                <div class="w-full max-w-lg mx-auto bg-slate-950 border border-slate-800/80 rounded-3xl p-6 shadow-2xl relative overflow-hidden backdrop-blur-lg">
+                    <!-- Top Window controls -->
+                    <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-900">
+                        <div class="flex items-center space-x-1.5">
+                            <span class="h-2.5 w-2.5 rounded-full bg-red-500/80"></span>
+                            <span class="h-2.5 w-2.5 rounded-full bg-yellow-500/80"></span>
+                            <span class="h-2.5 w-2.5 rounded-full bg-green-500/80"></span>
+                        </div>
+                        <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest font-mono">nodeflow-edge-daemon</span>
+                    </div>
+                    
+                    <!-- Code Terminal Output Lines -->
+                    <div class="font-mono text-xs space-y-2.5 min-h-[260px] flex flex-col justify-start" id="terminal-lines">
+                        <div class="text-slate-600">// Initializing nodeflow-edge daemon...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Trusted By / Social Proof -->
+<section class="py-10 bg-gray-50/50 dark:bg-gray-900/20 border-y border-gray-200/50 dark:border-gray-800/50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <p class="text-[9px] font-black uppercase tracking-[0.3em] text-gray-400 dark:text-gray-500 mb-6">{% translate "Empowering Industry Leaders Across ASEAN" %}</p>
+        <div class="flex flex-wrap justify-center items-center gap-10 lg:gap-20 opacity-40 dark:opacity-30 grayscale filter">
+            <span class="text-md font-black font-heading tracking-tighter text-gray-900 dark:text-white">SOLAR-AXIS</span>
+            <span class="text-md font-black font-heading tracking-tighter text-gray-900 dark:text-white">MECH-IND</span>
+            <span class="text-md font-black font-heading tracking-tighter text-gray-900 dark:text-white">FLOW-CORP</span>
+            <span class="text-md font-black font-heading tracking-tighter text-gray-900 dark:text-white">NANO-GRID</span>
+            <span class="text-md font-black font-heading tracking-tighter text-gray-900 dark:text-white">ECO-THERM</span>
+        </div>
+    </div>
+</section>
+
+<!-- Features Grid (Restructured with Three Pillars) -->
+<section id="features" class="py-28 bg-white dark:bg-gray-950">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center mb-20" data-aos="fade-up">
+            <h2 class="text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-3">{% translate "Core Capabilities" %}</h2>
+            <h3 class="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white font-heading tracking-tight">{% translate "Engineered for Extreme Operational Resilience." %}</h3>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <!-- PILLAR 1: INSTANT AUTO-DASHBOARDS -->
+            <div class="card bg-gray-50 dark:bg-gray-900/40 p-8 rounded-3xl border border-gray-200/50 dark:border-gray-800/40 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between" data-aos="fade-up">
+                <div>
+                    <div class="w-12 h-12 bg-indigo-50 dark:bg-indigo-950/40 rounded-2xl flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-6 shadow-sm border border-indigo-100/30">
+                        <i class="fa fa-chart-line text-lg"></i>
+                    </div>
+                    <h4 class="text-xl font-bold text-gray-900 dark:text-white mb-3">{% translate "Instant Auto-Dashboards" %}</h4>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
+                        {% translate "Plug your equipment in, and watch Nodeflow handle the configuration. Our schema parser matches registered templates (Omron, Schneider, Delta, Siemens) and auto-creates live WebSocket-streamed dashboards instantly." %}
+                    </p>
+                </div>
+                <div class="mt-6 pt-4 border-t border-gray-200/50 dark:border-gray-800/40">
+                    <a href="{% url 'web:product' %}#dashboards" class="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center hover:underline">
+                        {% translate "Learn template matching" %} <i class="fa fa-arrow-right ml-1 text-[9px]"></i>
+                    </a>
+                </div>
+            </div>
+
+            <!-- PILLAR 2: EDGE HARDWARE & RESILIENCE -->
+            <div class="card bg-gray-50 dark:bg-gray-900/40 p-8 rounded-3xl border border-gray-200/50 dark:border-gray-800/40 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between" data-aos="fade-up" data-aos-delay="100">
+                <div>
+                    <div class="w-12 h-12 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-6 shadow-sm border border-emerald-100/30">
+                        <i class="fa fa-shield-halved text-lg"></i>
+                    </div>
+                    <h4 class="text-xl font-bold text-gray-900 dark:text-white mb-3">{% translate "Multi-WAN Edge Watchdog" %}</h4>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
+                        {% translate "Zero data loss, even during connection dropouts. Our 3-tier Network Watchdog monitors links and dynamically metric-swaps default routes between Ethernet, Wi-Fi, and 4G/LTE without disconnecting local Modbus TCP polling loops." %}
+                    </p>
+                </div>
+                <div class="mt-6 pt-4 border-t border-gray-200/50 dark:border-gray-800/40">
+                    <a href="{% url 'web:product' %}#edge-resilience" class="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center hover:underline">
+                        {% translate "Explore WAN watchdog" %} <i class="fa fa-arrow-right ml-1 text-[9px]"></i>
+                    </a>
+                </div>
+            </div>
+
+            <!-- PILLAR 3: ZERO-DOWNTIME OTA UPDATES -->
+            <div class="card bg-gray-50 dark:bg-gray-900/40 p-8 rounded-3xl border border-gray-200/50 dark:border-gray-800/40 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between" data-aos="fade-up" data-aos-delay="200">
+                <div>
+                    <div class="w-12 h-12 bg-purple-50 dark:bg-purple-950/40 rounded-2xl flex items-center justify-center text-purple-600 dark:text-purple-400 mb-6 shadow-sm border border-purple-100/30">
+                        <i class="fa fa-rotate text-lg"></i>
+                    </div>
+                    <h4 class="text-xl font-bold text-gray-900 dark:text-white mb-3">{% translate "Zero-Downtime OTA" %}</h4>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
+                        {% translate "Deploy edge configuration and gateway updates without stopping telemetry loops. Our atomic system updates execute software transitions side-by-side (blue/green swaps) and rollback instantly on deployment faults." %}
+                    </p>
+                </div>
+                <div class="mt-6 pt-4 border-t border-gray-200/50 dark:border-gray-800/40">
+                    <a href="{% url 'web:product' %}#edge-resilience" class="text-xs font-bold text-purple-600 dark:text-purple-400 flex items-center hover:underline">
+                        {% translate "See upgrade blueprints" %} <i class="fa fa-arrow-right ml-1 text-[9px]"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- AI Spotlight Section -->
+<section class="py-28 bg-slate-950 overflow-hidden bg-noise relative">
+    <!-- Overlay Glow -->
+    <div class="absolute -right-1/4 top-1/4 w-[600px] h-[600px] rounded-full bg-indigo-600/10 blur-[150px]"></div>
+    
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <div class="lg:grid lg:grid-cols-2 lg:gap-24 items-center">
+            <div data-aos="fade-right">
+                <h2 class="text-indigo-400 font-bold uppercase tracking-widest text-xs mb-3">{% translate "Built-in Intelligence" %}</h2>
+                <h3 class="text-3xl sm:text-5xl font-black text-white font-heading tracking-tight mb-6">
+                    {% translate "Stop searching for logs." %}<br/><span class="text-white/40">{% translate "Start asking questions." %}</span>
+                </h3>
+                <p class="text-base text-slate-400 leading-relaxed mb-10 font-medium">
+                    {% translate "Traditional IoT platforms force you to query raw Timescale databases or export thousands of rows into Excel. With Nodeflow AI, query machinery trends, energy consumption, and alert history in plain English." %}
+                </p>
+                <div class="space-y-4">
+                    <div class="flex items-start gap-4 p-5 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors group">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-500 flex items-center justify-center text-white shrink-0 shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform"><i class="fa fa-bolt"></i></div>
+                        <div>
+                            <h4 class="text-white font-bold mb-1 italic">{% translate "\"How much power did Compressor 2 use yesterday compared to last Tuesday?\"" %}</h4>
+                            <p class="text-slate-500 text-xs font-semibold">{% translate "Nodeflow parses telemetry streams and calculates efficiencies instantly." %}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-16 lg:mt-0 relative" data-aos="fade-left">
+                <div class="relative bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl">
+                    <div class="space-y-6">
+                        <div class="p-4 bg-indigo-600 rounded-2xl rounded-tr-none text-white text-xs font-semibold w-[80%] ml-auto shadow-lg shadow-indigo-600/20 font-mono">
+                            {% translate "Show yesterday's efficiency trends for Factory Floor A." %}
+                        </div>
+                        <div class="p-5 bg-slate-950 border border-slate-800/80 rounded-2xl rounded-tl-none text-slate-300 text-xs font-mono w-[90%] space-y-3">
+                            <div class="flex items-center gap-2 mb-1">
+                                <div class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                                <span class="text-[9px] font-black uppercase tracking-widest text-indigo-400">Nodeflow AI</span>
+                            </div>
+                            <p class="leading-relaxed">{% translate "Analyzing Timescale data: Factory Floor A peaked at 88.4% capacity at 14:15. Total energy saved vs grid baseline: 142 kWh." %}</p>
+                            <div class="pt-3 border-t border-slate-900 flex items-center justify-between text-[9px] font-bold text-slate-500">
+                                <a href="{% url 'account_signup' %}" class="hover:text-indigo-400 transition-colors cursor-pointer">{% translate "VIEW CHART" %} →</a>
+                                <a href="{% url 'account_signup' %}" class="hover:text-indigo-400 transition-colors cursor-pointer">{% translate "EXPORT REPORT" %} →</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Final CTA Section -->
+<section class="py-28 bg-gray-50 dark:bg-gray-950">
+    <div class="max-w-4xl mx-auto px-4 text-center animate-pulse-slow" data-aos="zoom-in">
+        <h2 class="text-3xl sm:text-5xl font-black text-gray-900 dark:text-white font-heading tracking-tight mb-6">{% translate "Ready to secure your operations?" %}</h2>
+        <p class="text-base text-gray-500 dark:text-gray-400 mb-10 font-medium">{% translate "Connect your first edge gateway in 24 hours. Activate your pilot program today." %}</p>
+        <div class="flex flex-col sm:flex-row justify-center gap-4">
+            <a href="{% url 'account_signup' %}" class="btn btn-primary btn-lg rounded-2xl px-10 h-16 font-black uppercase tracking-wider bg-indigo-600 border-indigo-600 hover:bg-indigo-700 text-white shadow-xl shadow-indigo-600/30">
+                {% translate "Activate Pilot Program" %}
+            </a>
+            <a href="{% url 'web:pricing' %}" class="btn btn-ghost btn-lg rounded-2xl px-10 h-16 font-black uppercase tracking-wider border border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-900/50 backdrop-blur-sm text-gray-700 dark:text-gray-200">
+                {% translate "See Plans & Pricing" %}
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- Terminal Simulator Logic -->
+<script>
+    (function() {
+        let lineIdx = 0;
+        let activeTimer = null;
+
+        function initTerminal() {
+            const container = document.getElementById("terminal-lines");
+            if (!container) return;
+
+            // Clear any existing contents and start fresh
+            container.innerHTML = '<div class="text-slate-600">// Initializing nodeflow-edge daemon...</div>';
+            lineIdx = 0;
+            if (activeTimer) {
+                clearTimeout(activeTimer);
+            }
+
+            const terminalLines = [
+                { text: "System check: OK. Starting NetworkWatchdog daemon...", delay: 800 },
+                { text: "Watchdog: Eth ok (Metric 100). Signal quality: -55dBm.", delay: 800 },
+                { text: "Scanning RS485 loop (Modbus TCP)...", delay: 1000 },
+                { text: "Device detected at Slave ID 1: Omron MX2 VFD Pump", delay: 800 },
+                { text: "Template match: 'Omron_MX2_VFD' -> 100% confidence", delay: 1200 },
+                { text: "Uploading Register Map Schema to Nodeflow Cloud...", delay: 800 },
+                { text: "Dashboard Engine auto-generating widgets... SUCCESS", delay: 1000 },
+                { text: "Streaming telemetry: speed=1500RPM, active_power=4.2kW", delay: 800 }
+            ];
+
+            function typeTerminal() {
+                const currentContainer = document.getElementById("terminal-lines");
+                if (!currentContainer) return; // Exit if user navigated away
+
+                if (lineIdx < terminalLines.length) {
+                    const line = terminalLines[lineIdx];
+                    const div = document.createElement("div");
+                    
+                    if (line.text.includes("OK") || line.text.includes("SUCCESS")) {
+                        div.className = "text-green-400 animate-fade-in";
+                    } else if (line.text.includes("Template match") || line.text.includes("auto-generating")) {
+                        div.className = "text-purple-400 font-bold animate-fade-in";
+                    } else if (line.text.includes("Device detected")) {
+                        div.className = "text-sky-400 font-semibold animate-fade-in";
+                    } else {
+                        div.className = "text-slate-300 animate-fade-in";
+                    }
+                    
+                    div.innerHTML = `<span class="text-slate-700">>>></span> ` + line.text;
+                    currentContainer.appendChild(div);
+                    lineIdx++;
+                    activeTimer = setTimeout(typeTerminal, line.delay);
+                } else {
+                    activeTimer = setTimeout(() => {
+                        initTerminal();
+                    }, 6000);
+                }
+            }
+            
+            activeTimer = setTimeout(typeTerminal, 1000);
+        }
+
+        // Run immediately if DOM is ready, otherwise wait
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            initTerminal();
+        } else {
+            document.addEventListener('DOMContentLoaded', initTerminal);
+        }
+    })();
+</script>

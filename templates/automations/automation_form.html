@@ -1,7 +1,7 @@
-{% extends "web/app_base.html" %}
+{% extends "web/app/app_base.html" %}
 {% load form_tags %}
 
-{% block app_content %}
+{% block app %}
 <div class="pg-content w-full flex flex-col pt-8 lg:max-w-4xl mx-auto px-4 md:px-8 mb-20">
   
   <div class="mb-6">
@@ -122,9 +122,16 @@
                 </div>
                 
                 <!-- Email Fields -->
-                <div class="col-span-1 md:col-span-2" x-show="actionType == 'notify'" x-transition>
+                <div class="col-span-1 md:col-span-2" x-show="actionType == 'notify_email'" x-transition>
                   <div class="text-sm font-semibold text-base-content/50 uppercase tracking-widest mt-4 mb-4">Notification Configuration:</div>
                   <div class="col-span-1 md:col-span-2">{% render_field form.notify_emails %}</div>
+                </div>
+
+                <!-- Create Ticket Fields -->
+                <div class="col-span-1 md:col-span-2" x-show="actionType == 'create_ticket'" x-transition>
+                  <div class="text-sm font-semibold text-base-content/50 uppercase tracking-widest mt-4 mb-4">Maintenance Ticket Configuration:</div>
+                  <p class="text-xs text-base-content/60 mb-2">A ticket will be automatically created and assigned to the triggered device when conditions are met.</p>
+                  <div>{% render_field form.target_device %}</div>
                 </div>
               </div>
 

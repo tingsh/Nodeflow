@@ -5,7 +5,8 @@
       
       <!-- Col 1: Brand -->
       <div class="col-span-2 lg:col-span-1">
-        <a href="{% url 'web:home' %}" class="flex items-center mb-6">
+        <a href="{% url 'web:home' %}" class="flex items-center mb-6" 
+           onclick="if (window.location.pathname === '/') { event.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }">
           <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white mr-3">
             <i class="fa fa-bolt text-sm"></i>
           </div>

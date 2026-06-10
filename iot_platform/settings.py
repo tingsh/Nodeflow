@@ -271,6 +271,10 @@ AUTH_USER_MODEL = "users.CustomUser"
 LOGIN_URL = "account_login"
 LOGIN_REDIRECT_URL = "/"
 
+# Domain and Subdomain settings for production routing
+APP_DOMAIN = env("APP_DOMAIN", default=None)
+SESSION_COOKIE_DOMAIN = env("SESSION_COOKIE_DOMAIN", default=None)
+
 # Password validation
 # https://docs.djangoproject.com/en/stable/ref/settings/#auth-password-validators
 
