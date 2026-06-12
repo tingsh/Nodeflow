@@ -123,6 +123,14 @@ body.htmx-request {
 }
 
 /* Button & Active States */
+.btn {
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
 .btn-primary {
   transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -130,4 +138,14 @@ body.htmx-request {
 .btn-primary:hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4);
+}
+
+/* Glassmorphism Card Hover Polish */
+.glass-card, [class*="bg-base-100"][onclick] {
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover, [class*="bg-base-100"][onclick]:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px -5px rgba(0, 0, 0, 0.4), 0 0 15px -3px rgba(99, 102, 241, 0.1);
 }

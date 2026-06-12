@@ -12,7 +12,7 @@
            @toggle-sidebar.window="sidebarOpen = !sidebarOpen">
     <div class="max-w-[1800px] mx-auto px-4 sm:px-8 lg:px-12 flex flex-row min-h-screen">
       <!-- Sidebar Container -->
-      <div class="transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0"
+      <div class="w-64 opacity-100 transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0"
            :class="sidebarOpen ? 'w-64 opacity-100' : 'w-0 opacity-0 pointer-events-none'">
         <div class="w-64"> <!-- Content wrapper to prevent squishing -->
           {% block sidebar-nav %}
@@ -28,4 +28,19 @@
       </div>
     </div>
   </section>
+  <!-- Global Quick Add Modal (placed at root to avoid stacking context issues) -->
+  <dialog id="quick-add-modal" class="modal modal-bottom sm:modal-middle">
+    <div class="modal-box p-0 bg-base-100 rounded-3xl overflow-hidden max-w-2xl border border-base-content/5 shadow-2xl">
+      <div id="modal-content">
+          <!-- Loaded via HTMX -->
+          <div class="p-12 text-center">
+              <span class="loading loading-ring loading-lg text-primary-500"></span>
+              <p class="text-xs font-bold uppercase tracking-widest text-base-content/40 mt-4">Preparing Device Library...</p>
+          </div>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop bg-base-content/20 backdrop-blur-sm">
+      <button>close</button>
+    </form>
+  </dialog>
 {% endblock %}

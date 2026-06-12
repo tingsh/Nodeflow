@@ -121,11 +121,11 @@
     </div>
     {% endif %}
 
-    <!-- Infrastructure Hub -->
+    <!-- Gateways & Devices -->
     <div class="space-y-10">
         <h3 class="text-2xl font-extrabold text-base-content font-heading tracking-tight flex items-center">
             <i class="fa fa-network-wired mr-3 text-primary-500/50"></i>
-            Infrastructure Hub
+            Gateways & Devices
         </h3>
 
         <div class="space-y-8" id="gateways-container" 
@@ -175,21 +175,4 @@
         {% endwith %}
     </div>
 </div>
-
-<!-- Quick Add Modal (DaisyUI) -->
-<dialog id="quick-add-modal" class="modal modal-bottom sm:modal-middle">
-  <div class="modal-box p-0 bg-base-100 rounded-3xl overflow-hidden max-w-2xl border border-base-content/5 shadow-2xl">
-    <div id="modal-content">
-        <!-- Loaded via HTMX -->
-        <div class="p-12 text-center">
-            <span class="loading loading-ring loading-lg text-primary-500"></span>
-            <p class="text-xs font-bold uppercase tracking-widest text-base-content/40 mt-4">Preparing Device Library...</p>
-        </div>
-    </div>
-  </div>
-  <form method="dialog" class="modal-backdrop bg-base-content/20 backdrop-blur-sm">
-    <button>close</button>
-  </form>
-</dialog>
-
 {% endblock %}

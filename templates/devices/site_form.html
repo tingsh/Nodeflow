@@ -4,52 +4,52 @@
 <div class="px-4 sm:px-6 lg:px-8 py-8">
     <div class="md:flex md:items-center md:justify-between mb-8">
         <div class="min-w-0 flex-1">
-            <h2 class="text-2xl font-bold leading-7 text-gray-900 dark:text-white sm:truncate sm:text-3xl sm:tracking-tight">
+            <h2 class="text-3xl font-black text-base-content font-heading tracking-tight">
                 {% if object %}Edit {{ object.name }}{% else %}Add New Site{% endif %}
             </h2>
         </div>
     </div>
 
-    <div class="bg-white dark:bg-gray-800 shadow sm:rounded-lg">
-        <div class="px-4 py-5 sm:p-6">
+    <div class="bg-base-100 border border-base-content/10 rounded-2xl shadow-lg">
+        <div class="p-6 sm:p-8">
             <form method="post" class="space-y-6">
                 {% csrf_token %}
                 
                 <div class="grid grid-cols-1 gap-y-6 sm:grid-cols-2 gap-x-6 max-w-4xl">
                     {% for field in form %}
                     <div class="{% if field.name == 'address' or field.name == 'connection_config' or field.name == 'timezone' %}sm:col-span-2{% else %}sm:col-span-1{% endif %}">
-                        <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        <label for="{{ field.id_for_label }}" class="block text-xs font-black uppercase tracking-widest text-base-content/60 mb-2">
                             {{ field.label }}
                         </label>
-                        <div class="mt-1 shadow-sm">
+                        <div class="mt-1">
                             {% if field.field.widget.input_type == 'select' %}
-                                <select name="{{ field.name }}" id="{{ field.id_for_label }}" class="block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm">
+                                <select name="{{ field.name }}" id="{{ field.id_for_label }}" class="select select-bordered w-full rounded-xl bg-base-100 border-base-content/20 text-base-content focus:outline-none focus:border-indigo-500 transition-colors">
                                     {% for choice in field.field.choices %}
                                         <option value="{{ choice.0 }}" {% if choice.0 == field.value %}selected{% endif %}>{{ choice.1 }}</option>
                                     {% endfor %}
                                 </select>
                             {% elif field.field.widget.input_type == 'textarea' or field.name == 'connection_config' %}
-                                <textarea name="{{ field.name }}" id="{{ field.id_for_label }}" rows="3" class="block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm">{{ field.value|default:"" }}</textarea>
+                                <textarea name="{{ field.name }}" id="{{ field.id_for_label }}" rows="3" class="textarea textarea-bordered w-full rounded-xl bg-base-100 border-base-content/20 text-base-content focus:outline-none focus:border-indigo-500 transition-colors">{{ field.value|default:"" }}</textarea>
                             {% else %}
                                 <input type="{{ field.field.widget.input_type|default:'text' }}" name="{{ field.name }}" id="{{ field.id_for_label }}" value="{{ field.value|default:'' }}"
-                                       class="block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm">
+                                       class="input input-bordered w-full rounded-xl bg-base-100 border-base-content/20 text-base-content focus:outline-none focus:border-indigo-500 transition-colors">
                             {% endif %}
                         </div>
                         {% if field.help_text %}
-                            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ field.help_text }}</p>
+                            <p class="mt-2 text-xs text-base-content/50">{{ field.help_text }}</p>
                         {% endif %}
                         {% if field.errors %}
-                            <p class="mt-2 text-sm text-red-600 dark:text-red-400">{{ field.errors.0 }}</p>
+                            <p class="mt-2 text-sm text-error font-semibold">{{ field.errors.0 }}</p>
                         {% endif %}
                     </div>
                     {% endfor %}
                 </div>
 
-                <div class="flex justify-end space-x-3 pt-5 border-t border-gray-200 dark:border-gray-700">
-                    <a href="javascript:history.back()" class="rounded-md border border-gray-300 bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
+                <div class="flex justify-end space-x-3 pt-5 border-t border-base-content/10">
+                    <a href="javascript:history.back()" class="btn btn-ghost rounded-xl">
                         Cancel
                     </a>
-                    <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
+                    <button type="submit" class="btn btn-primary rounded-xl px-6 shadow-lg shadow-indigo-600/20">
                         {% if object %}Update{% else %}Create{% endif %}
                     </button>
                 </div>

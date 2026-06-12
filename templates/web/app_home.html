@@ -17,7 +17,7 @@
                   <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                   <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                 </span>
-                <span class="text-[10px] font-black text-green-600 dark:text-green-400 font-mono tracking-widest uppercase">{{ devices_online }} / {{ devices_count }} Online</span>
+                <span class="text-[11px] font-black text-green-600 dark:text-green-400 font-mono tracking-widest uppercase">{{ devices_online }} / {{ devices_count }} Online</span>
             </div>
         </div>
     </div>
@@ -53,31 +53,31 @@
         <!-- Energy -->
         <div class="bg-base-100 p-5 rounded-2xl border border-base-content/5 shadow-sm group hover:border-indigo-500/30 transition-all cursor-pointer glass-card" onclick="window.location.href='{% url 'web_team:devices:device_list' team.slug %}'">
             <div class="flex items-center justify-between mb-3">
-                <p class="text-[10px] font-black text-base-content/30 uppercase tracking-widest">Energy (24h)</p>
+                <p class="text-xs font-black text-base-content/50 uppercase tracking-widest">Energy (24h)</p>
                 <div class="w-8 h-8 rounded-xl bg-indigo-500/10 flex items-center justify-center">
                     <i class="fa fa-bolt text-indigo-500 text-sm"></i>
                 </div>
             </div>
             <h2 class="text-3xl font-black text-base-content font-mono">{{ total_energy }}</h2>
-            <span class="text-[10px] font-bold text-base-content/30 uppercase">kWh</span>
+            <span class="text-[11px] font-bold text-base-content/50 uppercase">kWh</span>
         </div>
 
         <!-- Active Alerts -->
         <div class="bg-base-100 p-5 rounded-2xl border border-base-content/5 shadow-sm group hover:border-red-500/30 transition-all cursor-pointer" onclick="window.location.href='{% url 'web_team:alerts:alert_list' team.slug %}'">
             <div class="flex items-center justify-between mb-3">
-                <p class="text-[10px] font-black text-base-content/30 uppercase tracking-widest">Active Alerts</p>
-                <div class="w-8 h-8 rounded-xl {% if active_alerts_count > 0 %}bg-red-500/10{% else %}bg-green-500/10{% endif %} flex items-center justify-center">
+                <p class="text-xs font-black text-base-content/50 uppercase tracking-widest">Active Alerts</p>
+                <div class="w-8 h-8 rounded-xl bg-red-500/10 flex items-center justify-center">
                     <i class="fa fa-bell {% if active_alerts_count > 0 %}text-red-500 animate-pulse{% else %}text-green-500{% endif %} text-sm"></i>
                 </div>
             </div>
             <h2 class="text-3xl font-black {% if active_alerts_count > 0 %}text-red-500{% else %}text-base-content{% endif %} font-mono">{{ active_alerts_count }}</h2>
-            <span class="text-[10px] font-bold text-base-content/30 uppercase">Triggered</span>
+            <span class="text-[11px] font-bold text-base-content/50 uppercase">Triggered</span>
         </div>
 
         <!-- Devices Online -->
         <div class="bg-base-100 p-5 rounded-2xl border border-base-content/5 shadow-sm group hover:border-emerald-500/30 transition-all cursor-pointer" onclick="window.location.href='{% url 'web_team:devices:device_list' team.slug %}'">
             <div class="flex items-center justify-between mb-3">
-                <p class="text-[10px] font-black text-base-content/30 uppercase tracking-widest">Fleet</p>
+                <p class="text-xs font-black text-base-content/50 uppercase tracking-widest">Fleet</p>
                 <div class="w-8 h-8 rounded-xl bg-emerald-500/10 flex items-center justify-center">
                     <i class="fa fa-microchip text-emerald-500 text-sm"></i>
                 </div>
@@ -85,11 +85,11 @@
             <div class="flex items-baseline space-x-3">
                 <div>
                     <span class="text-3xl font-black text-base-content font-mono">{{ devices_online }}</span>
-                    <span class="text-[10px] font-bold text-green-500 block uppercase">Online</span>
+                    <span class="text-[11px] font-bold text-green-500 block uppercase">Online</span>
                 </div>
                 <div>
                     <span class="text-xl font-black text-base-content/30 font-mono">{{ devices_offline }}</span>
-                    <span class="text-[10px] font-bold text-base-content/30 block uppercase">Offline</span>
+                    <span class="text-[11px] font-bold text-base-content/50 block uppercase">Offline</span>
                 </div>
             </div>
         </div>
@@ -97,7 +97,7 @@
         <!-- Open Tickets -->
         <div class="bg-base-100 p-5 rounded-2xl border border-base-content/5 shadow-sm group hover:border-amber-500/30 transition-all cursor-pointer" onclick="window.location.href='{% url 'web_team:maintenance:ticket_list' team.slug %}'">
             <div class="flex items-center justify-between mb-3">
-                <p class="text-[10px] font-black text-base-content/30 uppercase tracking-widest">Maintenance</p>
+                <p class="text-xs font-black text-base-content/50 uppercase tracking-widest">Maintenance</p>
                 <div class="w-8 h-8 rounded-xl bg-amber-500/10 flex items-center justify-center">
                     <i class="fa fa-wrench text-amber-500 text-sm"></i>
                 </div>
@@ -105,12 +105,12 @@
             <div class="flex items-baseline space-x-3">
                 <div>
                     <span class="text-3xl font-black text-base-content font-mono">{{ open_tickets }}</span>
-                    <span class="text-[10px] font-bold text-base-content/30 block uppercase">Open</span>
+                    <span class="text-[11px] font-bold text-base-content/50 block uppercase">Open</span>
                 </div>
                 {% if overdue_pms > 0 %}
                 <div>
                     <span class="text-xl font-black text-red-500 font-mono">{{ overdue_pms }}</span>
-                    <span class="text-[10px] font-bold text-red-500/70 block uppercase">Overdue</span>
+                    <span class="text-[11px] font-bold text-red-500/80 block uppercase">Overdue</span>
                 </div>
                 {% endif %}
             </div>
@@ -119,13 +119,13 @@
         <!-- Automations -->
         <div class="bg-base-100 p-5 rounded-2xl border border-base-content/5 shadow-sm group hover:border-purple-500/30 transition-all cursor-pointer glass-card" onclick="window.location.href='{% url 'web_team:automations:list' team.slug %}'">
             <div class="flex items-center justify-between mb-3">
-                <p class="text-[10px] font-black text-base-content/30 uppercase tracking-widest">Automations</p>
+                <p class="text-xs font-black text-base-content/50 uppercase tracking-widest">Automations</p>
                 <div class="w-8 h-8 rounded-xl bg-purple-500/10 flex items-center justify-center">
                     <i class="fa fa-bolt text-purple-500 text-sm"></i>
                 </div>
             </div>
             <h2 class="text-3xl font-black text-base-content font-mono">{{ active_automations }}</h2>
-            <span class="text-[10px] font-bold text-base-content/30 uppercase">of {{ total_automations }} active</span>
+            <span class="text-[11px] font-bold text-base-content/50 uppercase">of {{ total_automations }} active</span>
         </div>
     </div>
 
@@ -149,7 +149,7 @@
         <div class="lg:col-span-1 bg-base-100 rounded-3xl border border-base-content/5 shadow-sm overflow-hidden flex flex-col">
             <div class="px-6 py-5 border-b border-base-content/5 flex justify-between items-center bg-base-200/20">
                 <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">Live Alerts</h3>
-                <a href="{% url 'web_team:alerts:alert_list' team.slug %}" class="text-[10px] font-bold text-indigo-500 hover:underline uppercase">View All</a>
+                <a href="{% url 'web_team:alerts:alert_list' team.slug %}" class="text-xs font-bold text-indigo-500 hover:underline uppercase">View All</a>
             </div>
             <div class="flex-1 overflow-auto max-h-[350px]">
                 <ul class="divide-y divide-base-content/5">
@@ -168,16 +168,16 @@
                             <div class="flex-1 min-w-0">
                                 <p class="text-sm font-bold text-base-content truncate">{{ alert.rule.name }}</p>
                                 <div class="flex items-center gap-2 mt-1.5">
-                                    <span class="text-[9px] font-black text-indigo-500/80 uppercase bg-indigo-500/5 px-1.5 py-0.5 rounded">{{ alert.device.name }}</span>
-                                    <span class="text-[9px] font-black text-base-content/25 font-mono">{{ alert.triggered_at|timesince }} ago</span>
+                                    <span class="text-[10px] font-black text-indigo-500 uppercase bg-indigo-500/5 px-1.5 py-0.5 rounded">{{ alert.device.name }}</span>
+                                    <span class="text-[10px] font-black text-base-content/45 font-mono">{{ alert.triggered_at|timesince }} ago</span>
                                 </div>
                             </div>
                         </div>
                     </li>
                     {% empty %}
-                    <li class="px-6 py-12 text-center text-base-content/25">
-                        <i class="fa fa-shield-check text-3xl mb-2 block"></i>
-                        <p class="text-[10px] font-black uppercase">All Clear</p>
+                    <li class="px-6 py-12 text-center text-base-content/45">
+                        <i class="fa fa-shield-check text-3xl mb-2 block text-base-content/30"></i>
+                        <p class="text-xs font-black uppercase tracking-wider">All Clear</p>
                     </li>
                     {% endfor %}
                 </ul>
@@ -209,12 +209,12 @@
                          onclick="window.location.href='{% url 'web_team:devices:site_detail' team.slug site.pk %}'">
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                         <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]"></span>
-                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-white bg-slate-900/90 border border-white/10 px-1.5 py-0.5 rounded shadow-lg backdrop-blur-sm whitespace-nowrap opacity-75 group-hover/dot:opacity-100 transition-opacity">{{ site.name }}</span>
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-white bg-slate-900/90 border border-white/10 px-1.5 py-0.5 rounded shadow-lg backdrop-blur-sm whitespace-nowrap opacity-75 group-hover/dot:opacity-100 transition-opacity">{{ site.name }}</span>
                     </div>
                 {% empty %}
                     <div class="text-center z-10">
                         <i class="fa fa-map-marked-alt text-2xl text-slate-700 animate-pulse"></i>
-                        <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">Waiting for sites...</p>
+                        <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">Waiting for sites...</p>
                     </div>
                 {% endfor %}
             </div>
@@ -230,16 +230,16 @@
                                 </div>
                                 <div>
                                     <h4 class="text-sm font-bold text-base-content group-hover:text-indigo-500 transition-colors">{{ site.name }}</h4>
-                                    <p class="text-[10px] text-base-content/40 uppercase font-black">{{ site.devices.count }} devices</p>
+                                    <p class="text-xs text-base-content/50 uppercase font-black">{{ site.devices.count }} devices</p>
                                 </div>
                             </div>
-                            <i class="fa fa-chevron-right text-[10px] opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all"></i>
+                            <i class="fa fa-chevron-right text-xs opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all"></i>
                         </div>
                     </li>
                     {% empty %}
-                    <li class="px-6 py-10 text-center text-base-content/30">
-                        <i class="fa fa-folder-open mb-2 text-xl block"></i>
-                        <p class="text-[10px] font-bold uppercase">No Sites Configured</p>
+                    <li class="px-6 py-10 text-center text-base-content/50">
+                        <i class="fa fa-folder-open mb-2 text-xl block text-base-content/30"></i>
+                        <p class="text-xs font-black uppercase">No Sites Configured</p>
                     </li>
                     {% endfor %}
                 </ul>
@@ -250,7 +250,7 @@
         <div class="bg-base-100 rounded-3xl border border-base-content/5 shadow-sm overflow-hidden flex flex-col">
             <div class="px-6 py-5 border-b border-base-content/5 flex justify-between items-center bg-base-200/20">
                 <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">Device Fleet</h3>
-                <a href="{% url 'web_team:devices:device_list' team.slug %}" class="text-[10px] font-bold text-indigo-500 hover:underline uppercase">All Devices</a>
+                <a href="{% url 'web_team:devices:device_list' team.slug %}" class="text-xs font-bold text-indigo-500 hover:underline uppercase">All Devices</a>
             </div>
             <div class="flex-1 overflow-auto max-h-[320px] p-3">
                 <div class="grid grid-cols-2 gap-2">
@@ -264,22 +264,22 @@
                                 <span class="relative inline-flex rounded-full h-2 w-2 bg-slate-300"></span>
                                 {% endif %}
                             </span>
-                            <span class="text-[11px] font-bold text-base-content truncate group-hover:text-indigo-500 transition-colors">{{ device.name }}</span>
+                            <span class="text-xs font-black text-base-content truncate group-hover:text-indigo-500 transition-colors">{{ device.name }}</span>
                         </div>
                         {% if device.id in device_readings %}
-                        <div class="text-[10px] text-base-content/40 font-mono">
+                        <div class="text-[11px] text-base-content/50 font-mono">
                             {{ device_readings|dictsort:"key" }}
-                            <span class="font-bold text-base-content/60">{{ device_readings.key }}</span>
+                            <span class="font-bold text-base-content/75">{{ device_readings.key }}</span>
                         </div>
                         {% endif %}
-                        <div class="text-[9px] text-base-content/25 mt-1 font-mono">
+                        <div class="text-[10px] text-base-content/45 mt-1 font-mono">
                             {% if device.last_telemetry_at %}{{ device.last_telemetry_at|timesince }} ago{% else %}No data{% endif %}
                         </div>
                     </div>
                     {% empty %}
-                    <div class="col-span-2 py-8 text-center text-base-content/30">
-                        <i class="fa fa-microchip text-xl mb-2 block"></i>
-                        <p class="text-[10px] font-black uppercase">No Devices Yet</p>
+                    <div class="col-span-2 py-8 text-center text-base-content/50">
+                        <i class="fa fa-microchip text-xl mb-2 block text-base-content/30"></i>
+                        <p class="text-xs font-black uppercase">No Devices Yet</p>
                     </div>
                     {% endfor %}
                 </div>
@@ -301,7 +301,7 @@
                     </div>
                     <div>
                         <h4 class="font-bold text-sm">Add Hardware</h4>
-                        <p class="text-white/60 text-[10px]">Provision new gateways & devices</p>
+                        <p class="text-white/70 text-xs">Provision new gateways & devices</p>
                     </div>
                 </a>
 
@@ -313,7 +313,7 @@
                     </div>
                     <div>
                         <h4 class="font-bold text-sm text-base-content">Create Alert Rule</h4>
-                        <p class="text-base-content/50 text-[10px]">Set threshold triggers</p>
+                        <p class="text-base-content/65 text-xs">Set threshold triggers</p>
                     </div>
                 </a>
                 {% endif %}
@@ -326,7 +326,7 @@
                     </div>
                     <div>
                         <h4 class="font-bold text-sm text-base-content">Create Automation</h4>
-                        <p class="text-base-content/50 text-[10px]">Build IF-THEN logic rules</p>
+                        <p class="text-base-content/65 text-xs">Build IF-THEN logic rules</p>
                     </div>
                 </a>
                 {% endif %}
@@ -337,7 +337,7 @@
                     </div>
                     <div>
                         <h4 class="font-bold text-sm text-base-content">View Reports</h4>
-                        <p class="text-base-content/50 text-[10px]">Analyze telemetry trends</p>
+                        <p class="text-base-content/65 text-xs">Analyze telemetry trends</p>
                     </div>
                 </a>
             </div>
