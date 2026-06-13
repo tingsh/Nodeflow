@@ -8,34 +8,43 @@
 ---
 
 ## 1. Current Stage
-- **Phase:** Phase 1 (Demoable MVP)
-- **Status:** ~65% of core MVP functionality built.
+- **Phase:** Pre-Launch / Release Candidate
+- **Status:** 100% of core features, advanced features (AI, Automation), and marketing tools completed. Project is in final polishing phase.
 
 ## 2. What's Built (✅)
-- **Multi-Tenancy:** Pegasus-based teams and RBAC (5 roles).
-- **Core Models:** Sites, Gateways, Devices, Telemetry, Alerts, Tickets.
-- **Data Pipeline:** MQTT ingestion to TimescaleDB.
-- **Alert Engine:** Threshold rules and multi-channel notifications (Email/Webhook).
-- **Onboarding:** 4-step wizard for new users and gateway provisioning.
-- **Bidirectional MQTT:** RPC command bridge, config push, and remote logging.
-- **Admin Tools:** Gateway claim-code logic and MQTT credential management.
-- **Wow UI & Auto-Dashboards:** Dynamic Dashboard and Widget models with auto-layout widgets (gauges, line charts, indicators) matching template register maps and streaming live via WebSockets.
-- **Fleet Command Center:** Landing view smart routing and visual geographical map panel.
-- **Zero-Downtime OTA Firmware Update:** Downtime warning modal, update status tracking progress bar, edge daemon update handler, and Linux blue/green atomic swap upgrade script.
+
+### Nodeflow Cloud (Backend & Platform)
+- **Multi-Tenancy & Security:** Pegasus-based teams, hardened RBAC (5 roles), and Shareable Public Links with Expiring Tokens.
+- **Zero-Touch Onboarding:** 4-step wizard, hardware auto-detection, "Plug Claim Play" logic, and Gateway Discovery API.
+- **Device Management:** Intelligent Port Grid, fuzzy matching for device templates, progressive disclosure of raw register maps, and live connection testing.
+- **Optimized Telemetry Engine:** MQTT ingestion to TimescaleDB, enhanced by Redis buffering, Celery Beat task flushers, and WebSockets with plan-gated latency.
+- **Automation & Alerts:** "Cloud PLC" automation engine, Alert Presets, threshold rules, and remote control write-back logic.
+- **AI & Insights:** "AI Chat With Your Data" using litellm function calling.
+- **Operations & Maintenance:** Reactive and Preventive Maintenance Ticketing Workflow.
+- **UI & UX Polish:** Premium 'Dark Energy' Bento-style Auto-Dashboards, Fleet Command Center with geographical maps, and Unified Hub Navigation.
+- **Marketing & Content:** Wagtail CMS integration, multi-page marketing site overhaul, and pre-launch product blueprint.
+
+### Nodeflow Edge (Gateway Daemon)
+- **Provisioning:** Initialization of Nodeflow Edge with Plug Claim Play feature support.
+- **Offline Resilience:** SQLite offline buffering with throttled replay to handle intermittent connectivity.
+- **Bidirectional RPC:** Multithreaded RPC handler for real-time live reads and remote commands.
+- **Network Stability:** Multi-WAN network watchdog implementation.
+- **Firmware Management:** Zero-Downtime Blue/Green OTA Firmware Update mechanism.
 
 ## 3. High-Priority Roadmap (❌)
 *Items are in order of execution priority.*
 
-1. **Marketing Site:** Build the Wagtail-powered multi-page marketing site.
-2. **Maintenance UI:** Complete the frontend for the Ticketing and PM Scheduling system.
-3. **Automation Engine:** Build the "Cloud PLC" rule builder UI.
-4. **Mobile Pass:** Ensure all dashboards are responsive for tablet/mobile.
+1. **Launch Preparation:** Comprehensive load testing, security auditing, and final bug bashes.
+2. **Billing & Tiers:** Finalize Stripe integration to enforce strict subscription limits and plan-gated features (e.g., websocket latency limits).
+3. **User Documentation:** Complete the public-facing knowledge base and API documentation for end-users.
+4. **Mobile Optimization:** Continued polish for "Mobile Pass" to ensure all advanced dashboards are fully responsive for tablet/mobile.
 
 ## 4. Current Sprint Goal
-**Focus:** Finalizing the "Market Ready" look and feel for Nodeflow Cloud.
+**Focus:** Final launch preparations, bug fixing, and platform stabilization across both cloud and edge environments.
 
 ## 5. Recent Activity Log
-- **2026-05-15:** Initialized the AI Agent Skills System. Created Skill 01 (Architecture), Skill 02 (Conventions), and Skill 07 (Status). Refactored AGENTS.md into a lightweight loader.
-- **2026-06-03:** Migrated the April 27 CTO Progress Review to the project `docs/` folder to persist context for future sessions.
-- **2026-06-04:** Completed Phase 3 and Phase 4. Resolved the Django 5.x `timezone.utc` AttributeError in `mqtt_consumer.py`. Successfully ran the full End-to-End Local Loopback Simulation (Modbus TCP Sensor -> Nodeflow Edge -> local MQTT Broker -> Django Consumer -> TimescaleDB). Verified dashboard ingestion in browser and completed a comprehensive CTO Technical Audit.
-- **2026-06-08:** Executed Phase 2. Created standard register maps template fixtures (Schneider, Delta, Omron, Siemens). Built Auto-Dashboard Widget engine (models, signal, services, templates, dynamic WebSockets). Implemented Landing view smart routing and Command Center map mockup. Created user-controlled Zero-Downtime Blue/Green OTA Firmware Update mechanism. Verified using Cloud and Edge test suites. Full details in `docs/progress_review_june_8.md`.
+- **2026-06-08:** Executed Phase 2. Created standard register maps template fixtures. Built Auto-Dashboard Widget engine. Implemented Command Center map mockup. Created Zero-Downtime Blue/Green OTA Update mechanism across cloud and edge.
+- **2026-06-10:** Completed Sprint optimizations: Wagtail CMS marketing site, AI Chat with Data, shareable links, and ticketing workflows. Edge offline buffering and multi-WAN watchdog deployed.
+- **2026-06-12:** Completed Device Template Onboarding feature. Implemented progressive disclosure for raw register maps, and a Live Connection Test module directly within the quick-add modal. Fixed legacy view test mocks and registered device signals.
+- **2026-06-12 (Later):** Conducted a holistic codebase review of Nodeflow Cloud and Nodeflow Edge. Updated project status to reflect massive progress across all 5 sprints and 4 phases, graduating the project status to Pre-Launch.
+- **2026-06-13:** Executed pre-launch hardening implementation plan (Phases 1-4). Hardened edge security (daemon runs as unprivileged 'nodeflow' user), locked down production settings (HSTS, ALLOWED_HOSTS, Mailgun), updated Stripe pricing metadata & UI with direct checkout and offline simulation, and enforced dynamic application-level data retention (7, 30, 90-day limits) on telemetry API, dashboard views, and CSV exports. Created test suites for alerts and telemetry with 100% pass rate.

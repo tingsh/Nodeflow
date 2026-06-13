@@ -183,7 +183,7 @@ ACTIVE_PLAN_INTERVALS = [
 # with plans on your side
 ACTIVE_PRODUCTS = [
     ProductMetadata(
-        stripe_id="",
+        stripe_id="prod_starter_placeholder",
         slug="starter",
         name=_("Starter"),
         description=_("Ideal for submetering pilots"),
@@ -195,7 +195,7 @@ ACTIVE_PRODUCTS = [
         ],
     ),
     ProductMetadata(
-        stripe_id="",
+        stripe_id="prod_pro_placeholder",
         slug="professional",
         name=_("Professional"),
         description=_("Full energy automation for SMEs"),
@@ -209,14 +209,14 @@ ACTIVE_PRODUCTS = [
         ],
     ),
     ProductMetadata(
-        stripe_id="",
+        stripe_id="prod_biz_placeholder",
         slug="business",
         name=_("Business"),
         description=_("For large industrial operations"),
         features=[
             _("Unlimited Gateways"),
             _("Up to 100 Devices"),
-            _("1-Year Data Retention"),
+            _("90-Day Data Retention"),
             _("Multi-site Management"),
             _("SLA Support"),
         ],

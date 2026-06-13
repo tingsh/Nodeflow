@@ -45,6 +45,26 @@ def device_metrics_api(request, team_slug, device_id):
     return JsonResponse({"metrics": result})
 
 
+def get_retention_limit_days(team) -> int:
+    if not team or not team.has_active_subscription():
+        return 7  # Default to Starter tier for unsubscribed teams
+
+    try:
+        from apps.subscriptions.metadata import get_product_with_metadata
+        subscription = team.active_stripe_subscription
+        for item in subscription.items.select_related("price__product"):
+            product_metadata = get_product_with_metadata(item.price.product).metadata
+            if product_metadata.slug == "starter":
+                return 7
+            elif product_metadata.slug == "professional":
+                return 30
+            elif product_metadata.slug == "business":
+                return 90
+    except Exception:
+        pass
+    return 7
+
+
 @login_and_team_required
 def device_telemetry_history_api(request, team_slug, device_id):
     """
@@ -55,9 +75,12 @@ def device_telemetry_history_api(request, team_slug, device_id):
     key = request.GET.get("key")
     hours = int(request.GET.get("hours", 24))
 
-    # Safety cap: don't allow querying too much at once for the chart
-    if hours > 24 * 30:
-        hours = 24 * 30
+    plan_days = get_retention_limit_days(request.team)
+    max_hours = plan_days * 24
+
+    # Safety cap: don't allow querying beyond the plan's limit
+    if hours > max_hours:
+        hours = max_hours
 
     if not key:
         return JsonResponse({"error": "Metric key is required"}, status=400)
@@ -86,12 +109,14 @@ class Echo:
 def export_telemetry_csv(request, team_slug, device_id):
     """
     Streams a CSV export of telemetry data for a device.
-    Caps at 30 days.
+    Caps based on plan.
     """
     device = get_object_or_404(Device, id=device_id, team__slug=team_slug)
     days = int(request.GET.get("days", 7))
-    if days > 30:
-        days = 30
+    
+    plan_days = get_retention_limit_days(request.team)
+    if days > plan_days:
+        days = plan_days
 
     start_time = timezone.now() - timedelta(days=days)
     queryset = (

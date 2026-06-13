@@ -11,64 +11,37 @@
     <!-- Pricing Tiers -->
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <!-- Starter -->
-            <div class="bg-base-100 rounded-4xl p-10 border border-base-content/5 shadow-sm hover:shadow-2xl transition-all group" data-aos="fade-up">
+            {% for plan in active_products %}
+            <div class="bg-base-100 rounded-4xl p-10 border {% if plan.is_default %}border-2 border-indigo-600 shadow-2xl relative transform scale-105 z-10{% else %}border border-base-content/5 shadow-sm hover:shadow-2xl transition-all group{% endif %}" data-aos="fade-up">
+                {% if plan.is_default %}
+                    <div class="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-indigo-600 text-white text-[10px] font-black rounded-full uppercase tracking-widest shadow-lg shadow-indigo-600/30">Most Popular</div>
+                {% endif %}
+                
                 <div class="mb-10">
-                    <h3 class="text-lg font-bold text-base-content mb-1">Starter</h3>
-                    <p class="text-xs text-base-content/40 uppercase font-black tracking-widest">SME Entry Level</p>
+                    <h3 class="text-lg font-bold text-base-content mb-1">{{ plan.name }}</h3>
+                    <p class="text-xs text-base-content/40 uppercase font-black tracking-widest">
+                        {% if plan.slug == 'starter' %}SME Entry Level{% elif plan.slug == 'professional' %}Growth Phase{% else %}Enterprise Ready{% endif %}
+                    </p>
                 </div>
+                
                 <div class="flex items-baseline mb-10">
-                    <span class="text-5xl font-black font-mono text-base-content">$99</span>
+                    <span class="text-5xl font-black font-mono text-base-content">
+                        {% if plan.slug == 'starter' %}$99{% elif plan.slug == 'professional' %}$299{% else %}$699{% endif %}
+                    </span>
                     <span class="text-xs font-bold text-base-content/30 ml-2 uppercase tracking-widest">/mo</span>
                 </div>
+                
+                <p class="text-sm text-base-content/60 mb-6 font-light">{{ plan.description }}</p>
+                
                 <ul class="space-y-4 mb-10 text-sm">
-                    <li class="flex items-center text-base-content/70"><i class="fa fa-check text-indigo-500 mr-3"></i> 1 Edge Gateway</li>
-                    <li class="flex items-center text-base-content/70"><i class="fa fa-check text-indigo-500 mr-3"></i> 5 Monitored Devices</li>
-                    <li class="flex items-center text-base-content/70"><i class="fa fa-check text-indigo-500 mr-3"></i> 7-Day Data History</li>
-                    <li class="flex items-center text-base-content/70"><i class="fa fa-check text-indigo-500 mr-3"></i> Standard Support</li>
+                    {% for feature in plan.features %}
+                        <li class="flex items-center text-base-content/70"><i class="fa fa-check text-indigo-500 mr-3"></i> {{ feature }}</li>
+                    {% endfor %}
                 </ul>
-                <a href="{% url 'account_signup' %}" class="btn btn-block btn-ghost bg-base-200 border-none rounded-2xl h-14 font-black transition-all group-hover:bg-indigo-500 group-hover:text-white uppercase tracking-widest text-xs">Get Started</a>
+                
+                <a href="{% url 'subscriptions:checkout' plan.slug %}" class="btn btn-block {% if plan.is_default %}btn-primary shadow-xl shadow-indigo-600/30{% else %}btn-ghost bg-base-200 border-none group-hover:bg-indigo-500 group-hover:text-white{% endif %} rounded-2xl h-14 font-black transition-all uppercase tracking-widest text-xs">Select Plan</a>
             </div>
-
-            <!-- Professional -->
-            <div class="bg-base-100 rounded-4xl p-10 border-2 border-indigo-600 shadow-2xl relative transform scale-105 z-10" data-aos="fade-up" data-aos-delay="100">
-                <div class="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-indigo-600 text-white text-[10px] font-black rounded-full uppercase tracking-widest shadow-lg shadow-indigo-600/30">Most Popular</div>
-                <div class="mb-10">
-                    <h3 class="text-lg font-bold text-base-content mb-1">Professional</h3>
-                    <p class="text-xs text-base-content/40 uppercase font-black tracking-widest">Growth Phase</p>
-                </div>
-                <div class="flex items-baseline mb-10">
-                    <span class="text-5xl font-black font-mono text-base-content">$299</span>
-                    <span class="text-xs font-bold text-base-content/30 ml-2 uppercase tracking-widest">/mo</span>
-                </div>
-                <ul class="space-y-4 mb-10 text-sm">
-                    <li class="flex items-center font-bold text-base-content"><i class="fa fa-check text-indigo-500 mr-3"></i> 3 Edge Gateways</li>
-                    <li class="flex items-center font-bold text-base-content"><i class="fa fa-check text-indigo-500 mr-3"></i> 20 Monitored Devices</li>
-                    <li class="flex items-center font-bold text-base-content"><i class="fa fa-check text-indigo-500 mr-3"></i> 30-Day Data History</li>
-                    <li class="flex items-center font-bold text-indigo-600"><i class="fa fa-sparkles mr-3"></i> AI Data Assistant</li>
-                    <li class="flex items-center font-bold text-base-content"><i class="fa fa-check text-indigo-500 mr-3"></i> Logic Automations</li>
-                </ul>
-                <a href="{% url 'account_signup' %}" class="btn btn-block btn-primary rounded-2xl h-14 font-black shadow-xl shadow-indigo-600/30 uppercase tracking-widest text-xs">Talk to Sales</a>
-            </div>
-
-            <!-- Business -->
-            <div class="bg-base-100 rounded-4xl p-10 border border-base-content/5 shadow-sm hover:shadow-2xl transition-all group" data-aos="fade-up" data-aos-delay="200">
-                <div class="mb-10">
-                    <h3 class="text-lg font-bold text-base-content mb-1">Business</h3>
-                    <p class="text-xs text-base-content/40 uppercase font-black tracking-widest">Enterprise Ready</p>
-                </div>
-                <div class="flex items-baseline mb-10">
-                    <span class="text-5xl font-black font-mono text-base-content">$699</span>
-                    <span class="text-xs font-bold text-base-content/30 ml-2 uppercase tracking-widest">/mo</span>
-                </div>
-                <ul class="space-y-4 mb-10 text-sm">
-                    <li class="flex items-center text-base-content/70"><i class="fa fa-check text-indigo-500 mr-3"></i> 10 Edge Gateways</li>
-                    <li class="flex items-center text-base-content/70"><i class="fa fa-check text-indigo-500 mr-3"></i> 100 Monitored Devices</li>
-                    <li class="flex items-center text-base-content/70"><i class="fa fa-check text-indigo-500 mr-3"></i> 1-Year Data History</li>
-                    <li class="flex items-center text-base-content/70"><i class="fa fa-check text-indigo-500 mr-3"></i> White-label Option</li>
-                </ul>
-                <a href="/about/" class="btn btn-block btn-ghost bg-base-200 border-none rounded-2xl h-14 font-black transition-all group-hover:bg-indigo-500 group-hover:text-white uppercase tracking-widest text-xs">Contact Sales</a>
-            </div>
+            {% endfor %}
         </div>
     </div>
 
@@ -140,7 +113,7 @@
                     Is there a limit on how much data I can store?
                 </div>
                 <div class="collapse-content text-xs text-base-content/60 leading-relaxed">
-                    <p>We don't limit storage by gigabytes. Instead, we limit by retention time (7 days, 30 days, or 1 year) based on your plan. All critical alerts are logged indefinitely.</p>
+                    <p>We don't limit storage by gigabytes. Instead, we limit by retention time (7 days, 30 days, or 90 days) based on your plan. All critical alerts are logged indefinitely.</p>
                 </div>
             </div>
             <div class="collapse collapse-plus bg-base-200/50 rounded-2xl">

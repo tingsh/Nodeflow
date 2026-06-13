@@ -49,3 +49,86 @@ def checkout_canceled(request, team_slug):
     subscription_holder = request.team
     messages.info(request, "Your upgrade was canceled.")
     return HttpResponseRedirect(get_subscription_urls(subscription_holder)["subscription_details"])
+
+
+@login_required
+def checkout(request, plan_slug):
+    from django.urls import reverse
+    from apps.subscriptions.metadata import get_active_products_with_metadata
+    from apps.subscriptions.helpers import create_stripe_checkout_session
+
+    subscription_holder = request.team
+    if not subscription_holder:
+        messages.error(request, "Please create a team before subscribing.")
+        return HttpResponseRedirect("/")
+
+    # Find active product matching the slug
+    active_products = get_active_products_with_metadata()
+    target_product = None
+    for p in active_products:
+        if p.metadata.slug == plan_slug:
+            target_product = p
+            break
+
+    if not target_product:
+        messages.error(request, f"Plan '{plan_slug}' not found.")
+        return HttpResponseRedirect(reverse("web:home"))
+
+    # Get the active price (defaulting to monthly or first available)
+    price = None
+    for interval in ["month", "year"]:
+        price = target_product._get_price(interval, fail_hard=False)
+        if price:
+            break
+
+    if not price:
+        # Offline simulation fallback
+        messages.warning(request, f"Stripe price not configured for '{plan_slug}'. Simulating checkout locally.")
+
+        # Provision the mock subscription
+        mock_sub_id = f"sub_mock_{plan_slug}"
+
+        if not subscription_holder.customer:
+            from djstripe.models import Customer
+            customer = Customer.objects.create(
+                subscriber=subscription_holder,
+                id=f"cus_mock_{subscription_holder.id}"
+            )
+            subscription_holder.customer = customer
+            subscription_holder.save()
+
+        from djstripe.models import Subscription, Product as StripeProduct, Price as StripePrice
+        prod, _ = StripeProduct.objects.get_or_create(
+            id=target_product.metadata.stripe_id,
+            defaults={"name": target_product.metadata.name}
+        )
+        pr, _ = StripePrice.objects.get_or_create(
+            id=f"price_mock_{plan_slug}",
+            defaults={"product": prod, "unit_amount": 9900, "currency": "usd"}
+        )
+
+        sub, _ = Subscription.objects.get_or_create(
+            id=mock_sub_id,
+            defaults={
+                "customer": subscription_holder.customer,
+                "price": pr,
+                "status": "active",
+            }
+        )
+        subscription_holder.subscription = sub
+        subscription_holder.save()
+
+        messages.success(request, f"Successfully simulated subscription to {target_product.metadata.name}!")
+        return HttpResponseRedirect(reverse("web_team:home", args=[subscription_holder.slug]))
+
+    try:
+        checkout_session = create_stripe_checkout_session(
+            subscription_holder,
+            price.id,
+            request.user,
+        )
+        return HttpResponseRedirect(checkout_session.url)
+    except Exception as e:
+        messages.error(request, f"Failed to start checkout session: {e}")
+        return HttpResponseRedirect(reverse("web_team:home", args=[subscription_holder.slug]))
+

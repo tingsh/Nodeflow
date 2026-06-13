@@ -81,6 +81,26 @@ def device_metrics_api(request, team_slug, device_id):
     return JsonResponse({"metrics": metrics})
 
 
+def get_retention_limit_days(team) -> int:
+    if not team or not team.has_active_subscription():
+        return 7  # Default to Starter tier for unsubscribed teams
+
+    try:
+        from apps.subscriptions.metadata import get_product_with_metadata
+        subscription = team.active_stripe_subscription
+        for item in subscription.items.select_related("price__product"):
+            product_metadata = get_product_with_metadata(item.price.product).metadata
+            if product_metadata.slug == "starter":
+                return 7
+            elif product_metadata.slug == "professional":
+                return 30
+            elif product_metadata.slug == "business":
+                return 90
+    except Exception:
+        pass
+    return 7
+
+
 @login_required
 def device_telemetry_history_api(request, team_slug, device_id):
     """
@@ -91,6 +111,12 @@ def device_telemetry_history_api(request, team_slug, device_id):
     device = get_object_or_404(Device, id=device_id, team__slug=team_slug)
     key = request.GET.get("key", "active_power")
     hours = int(request.GET.get("hours", 24))
+
+    plan_days = get_retention_limit_days(request.team)
+    max_hours = plan_days * 24
+
+    if hours > max_hours:
+        hours = max_hours
 
     qs = TelemetryData.objects.filter(device=device)
     if key:
@@ -116,7 +142,14 @@ def export_telemetry_csv(request, team_slug, device_id):
     """
     Exports device telemetry to CSV.
     """
+    from django.utils import timezone
+
     device = get_object_or_404(Device, id=device_id, team__slug=team_slug)
+    days = int(request.GET.get("days", 7))
+
+    plan_days = get_retention_limit_days(request.team)
+    if days > plan_days:
+        days = plan_days
 
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{device.name}_telemetry.csv"'
@@ -124,7 +157,8 @@ def export_telemetry_csv(request, team_slug, device_id):
     writer = csv.writer(response)
     writer.writerow(["Timestamp", "Key", "Value"])
 
-    qs = TelemetryData.objects.filter(device=device).order_by("-timestamp")
+    cutoff = timezone.now() - timezone.timedelta(days=days)
+    qs = TelemetryData.objects.filter(device=device, timestamp__gte=cutoff).order_by("-timestamp")
     for point in qs[:5000]:  # Limit export for safety
         val = point.value_numeric if point.value_numeric is not None else (point.value_string or point.value_bool)
         writer.writerow([point.timestamp, point.key, val])

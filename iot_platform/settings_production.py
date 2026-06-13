@@ -18,28 +18,28 @@ CSRF_COOKIE_SECURE = True
 # Without uncommenting the lines below, you will get security warnings when running ./manage.py check --deploy
 # https://docs.djangoproject.com/en/stable/ref/middleware/#http-strict-transport-security
 
-# # Increase this number once you're confident everything works https://stackoverflow.com/a/49168623/8207
-# SECURE_HSTS_SECONDS = 60
-# # Uncomment these two lines if you are sure that you don't host any subdomains over HTTP.
-# # You will get security warnings if you don't do this.
-# SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-# SECURE_HSTS_PRELOAD = True
+# Increase this number once you're confident everything works https://stackoverflow.com/a/49168623/8207
+SECURE_HSTS_SECONDS = 31536000
+# Uncomment these two lines if you are sure that you don't host any subdomains over HTTP.
+# You will get security warnings if you don't do this.
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
 
 USE_HTTPS_IN_ABSOLUTE_URLS = True
 
 # If you don't want to use environment variables to set production hosts you can add them here
-# ALLOWED_HOSTS = ["example.com"]
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["yourdomain.com"])
 
 # Your email config goes here.
 # see https://github.com/anymail/django-anymail for more details / examples
 # To use mailgun, uncomment the lines below and make sure your key and domain
 # are available in the environment.
-# EMAIL_BACKEND = "anymail.backends.mailgun.EmailBackend"
+EMAIL_BACKEND = "anymail.backends.mailgun.EmailBackend"
 
-# ANYMAIL = {
-#     "MAILGUN_API_KEY": env("MAILGUN_API_KEY", default=None),
-#     "MAILGUN_SENDER_DOMAIN": env("MAILGUN_SENDER_DOMAIN", default=None),
-# }
+ANYMAIL = {
+    "MAILGUN_API_KEY": env("MAILGUN_API_KEY", default=None),
+    "MAILGUN_SENDER_DOMAIN": env("MAILGUN_SENDER_DOMAIN", default=None),
+}
 
 ADMINS = [
     ("Your Name", "tingshouheng@gmail.com"),

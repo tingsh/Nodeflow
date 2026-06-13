@@ -21,6 +21,8 @@ def project_meta(request):
         login_url = reverse("account_login")
         signup_url = reverse("account_signup")
 
+    from apps.subscriptions.metadata import ACTIVE_PRODUCTS
+
     return {
         "project_meta": project_data,
         "server_url": get_server_root(),
@@ -36,6 +38,7 @@ def project_meta(request):
         "use_i18n": getattr(settings, "USE_I18N", False) and len(getattr(settings, "LANGUAGES", [])) > 1,
         "login_url": login_url,
         "signup_url": signup_url,
+        "active_products": ACTIVE_PRODUCTS,
     }
 
 
