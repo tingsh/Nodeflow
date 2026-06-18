@@ -83,7 +83,7 @@
                     </div>
                 </div>
                 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
                     <!-- Telemetry Key -->
                     <div>
                         <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Telemetry Key</label>
@@ -103,19 +103,25 @@
                         <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Threshold Value</label>
                         <input type="number" step="any" name="threshold" value="{{ form.threshold.value|default:'' }}" class="input input-bordered w-full rounded-2xl font-bold" required>
                     </div>
+                    <!-- Duration (Seconds) -->
+                    <div>
+                        <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Duration (Seconds)</label>
+                        <input type="number" name="duration_seconds" value="{{ form.duration_seconds.value|default:0 }}" class="input input-bordered w-full rounded-2xl font-bold" min="0" required>
+                    </div>
                 </div>
+                <p class="text-[10px] text-base-content/30 mt-2">Time in seconds the condition must consistently persist before triggering the alert (0 for instant trigger).</p>
             </div>
         </div>
 
         <!-- Step 3: Notifications -->
-        <div class="bg-base-100 rounded-3xl border border-base-content/5 shadow-sm p-8">
+        <div class="bg-base-100 rounded-3xl border border-base-content/5 shadow-sm p-8" x-data="{ webhookEnabled: {% if form.notify_webhook.value %}true{% else %}false{% endif %} }">
             <div class="flex items-center space-x-3 mb-8">
                 <div class="w-8 h-8 rounded-full bg-indigo-500 text-white flex items-center justify-center font-black text-xs">3</div>
                 <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">Response Actions</h3>
             </div>
             
             <div class="space-y-6">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <label class="flex items-center justify-between p-4 bg-base-100 border border-base-content/5 rounded-2xl hover:border-indigo-500/30 transition-all cursor-pointer group">
                         <div class="flex items-center space-x-4">
                             <div class="p-3 bg-base-200 rounded-xl group-hover:bg-indigo-500/10 transition-all">
@@ -141,6 +147,25 @@
                         </div>
                         <input type="checkbox" name="notify_whatsapp" class="checkbox checkbox-success" {% if form.notify_whatsapp.value %}checked{% endif %}>
                     </label>
+
+                    <label class="flex items-center justify-between p-4 bg-base-100 border border-base-content/5 rounded-2xl hover:border-orange-500/30 transition-all cursor-pointer group">
+                        <div class="flex items-center space-x-4">
+                            <div class="p-3 bg-base-200 rounded-xl group-hover:bg-orange-500/10 transition-all">
+                                <i class="fa-solid fa-globe text-base-content/40 group-hover:text-orange-500"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-sm font-bold text-base-content">Connect External Apps</h4>
+                                <p class="text-[10px] text-base-content/40 uppercase font-black">Slack, Teams, Excel, or custom APIs</p>
+                            </div>
+                        </div>
+                        <input type="checkbox" name="notify_webhook_toggle" class="checkbox checkbox-warning" :checked="webhookEnabled" @change="webhookEnabled = $el.checked; if(!webhookEnabled) { document.getElementById('webhook-url-input').value = ''; }">
+                    </label>
+                </div>
+
+                <div x-show="webhookEnabled" x-transition class="mt-4" style="display: none;">
+                    <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Integration Link (Webhook URL)</label>
+                    <input type="url" name="notify_webhook" id="webhook-url-input" value="{{ form.notify_webhook.value|default:'' }}" class="input input-bordered w-full rounded-2xl font-bold font-mono text-sm" placeholder="https://hooks.slack.com/services/... or https://hooks.zapier.com/..." :required="webhookEnabled">
+                    <p class="text-[10px] text-base-content/30 mt-2">Paste the incoming integration link from Zapier, Slack, Microsoft Teams, Make, or your custom server. Nodeflow will send alert details directly to this address.</p>
                 </div>
 
                 <div class="bg-base-200/50 p-6 rounded-2xl border border-base-content/5 mt-4" x-data="recipientSearch()">
@@ -203,8 +228,8 @@
 
                 <div>
                     <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Cooldown (Minutes)</label>
-                    <input type="number" name="cooldown_minutes" value="{{ form.cooldown_minutes.value|default:60 }}" class="input input-bordered w-full rounded-2xl font-bold">
-                    <p class="text-[10px] text-base-content/30 mt-2">Wait period before re-triggering the same alert.</p>
+                    <input type="number" name="cooldown_minutes" value="{{ form.cooldown_minutes.value|default:60 }}" class="input input-bordered w-full rounded-2xl font-bold" min="1" required>
+                    <p class="text-[10px] text-base-content/30 mt-2">Wait period before re-triggering notifications for the same active alert.</p>
                 </div>
             </div>
         </div>

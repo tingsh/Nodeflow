@@ -59,7 +59,9 @@ class AlertRuleCreateView(PermissionRequiredMixin, CreateView):
         "is_active",
         "notify_email",
         "notify_whatsapp",
+        "notify_webhook",
         "cooldown_minutes",
+        "duration_seconds",
         "recipients",
     ]
     template_name = "alerts/rule_form.html"
@@ -90,7 +92,9 @@ class AlertRuleUpdateView(PermissionRequiredMixin, UpdateView):
         "is_active",
         "notify_email",
         "notify_whatsapp",
+        "notify_webhook",
         "cooldown_minutes",
+        "duration_seconds",
         "recipients",
     ]
     template_name = "alerts/rule_form.html"

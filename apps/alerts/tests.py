@@ -173,3 +173,169 @@ def test_search_team_members_htmx():
     assert response.status_code == 200
     assert b"John Doe" not in response.content
 
+
+@pytest.mark.django_db
+@override_settings(SITE_URL="http://testserver", CELERY_TASK_ALWAYS_EAGER=True)
+def test_alert_auto_resolution():
+    team = Team.objects.create(name="Test Team", slug="test-team")
+    site = Site.objects.create(team=team, name="Test Site")
+    device = Device.objects.create(
+        team=team, site=site, name="Test Device", device_type="plc", protocol="modbus_tcp", status="online"
+    )
+    user = CustomUser.objects.create_user(username="test_user", email="test@test.com", password="pwd")
+    team.members.add(user)
+
+    rule = AlertRule.objects.create(
+        team=team,
+        name="Boiler Temp Alert",
+        device=device,
+        telemetry_key="temp",
+        condition="gt",
+        threshold=100.0,
+        is_active=True,
+        notify_email=True,
+        cooldown_minutes=15
+    )
+    rule.recipients.add(user)
+
+    # 1. Trigger the alert
+    check_alerts_for_payload(device, "temp", 105.0)
+    alerts = Alert.objects.filter(rule=rule, device=device)
+    assert alerts.count() == 1
+    alert = alerts.first()
+    assert alert.status == "active"
+    
+    # 2. Reset outbox
+    mail.outbox.clear()
+
+    # 3. Telemetry goes back to normal (e.g. 95.0) -> resolves alert
+    check_alerts_for_payload(device, "temp", 95.0)
+    alert.refresh_from_db()
+    assert alert.status == "resolved"
+    assert alert.resolved_at is not None
+
+    # Assert resolved email was sent
+    assert len(mail.outbox) == 1
+    email = mail.outbox[0]
+    assert "[RESOLVED]" in email.subject
+    assert "test@test.com" in email.to
+
+
+@pytest.mark.django_db
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+def test_cooldown_hardening():
+    team = Team.objects.create(name="Test Team", slug="test-team")
+    site = Site.objects.create(team=team, name="Test Site")
+    device = Device.objects.create(
+        team=team, site=site, name="Test Device", device_type="plc", protocol="modbus_tcp", status="online"
+    )
+    user = CustomUser.objects.create_user(username="test_user", email="test@test.com", password="pwd")
+    team.members.add(user)
+
+    rule = AlertRule.objects.create(
+        team=team,
+        name="Voltage Alert",
+        device=device,
+        telemetry_key="voltage",
+        condition="gt",
+        threshold=240.0,
+        is_active=True,
+        notify_email=True,
+        cooldown_minutes=15
+    )
+    rule.recipients.add(user)
+
+    # 1. Trigger the alert
+    check_alerts_for_payload(device, "voltage", 245.0)
+    assert Alert.objects.filter(rule=rule, device=device).count() == 1
+    alert = Alert.objects.filter(rule=rule, device=device).first()
+    assert alert.status == "active"
+
+    # 2. Acknowledge the alert
+    alert.status = "acknowledged"
+    alert.save()
+
+    # 3. Send out-of-bounds telemetry again. Should not trigger a duplicate alert since cooldown is active.
+    check_alerts_for_payload(device, "voltage", 246.0)
+    assert Alert.objects.filter(rule=rule, device=device).count() == 1  # Still just 1 alert
+
+
+@pytest.mark.django_db
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+def test_duration_seconds_evaluation():
+    from django.utils import timezone
+    from datetime import timedelta
+    from apps.telemetry.models import TelemetryData
+    
+    team = Team.objects.create(name="Test Team", slug="test-team")
+    site = Site.objects.create(team=team, name="Test Site")
+    device = Device.objects.create(
+        team=team, site=site, name="Test Device", device_type="plc", protocol="modbus_tcp", status="online"
+    )
+    user = CustomUser.objects.create_user(username="test_user", email="test@test.com", password="pwd")
+    team.members.add(user)
+
+    rule = AlertRule.objects.create(
+        team=team,
+        name="Persistent Current Alert",
+        device=device,
+        telemetry_key="current",
+        condition="gt",
+        threshold=10.0,
+        is_active=True,
+        notify_email=True,
+        cooldown_minutes=15,
+        duration_seconds=30  # Needs to exceed for 30s
+    )
+    rule.recipients.add(user)
+
+    # 1. First out-of-bounds point. No history in window, shouldn't trigger yet.
+    TelemetryData.objects.create(device=device, key="current", value_numeric=12.0, timestamp=timezone.now())
+    check_alerts_for_payload(device, "current", 12.0)
+    assert Alert.objects.filter(rule=rule, device=device).count() == 0
+
+    # 2. Add points spanning the 30s window
+    now = timezone.now()
+    TelemetryData.objects.create(device=device, key="current", value_numeric=11.5, timestamp=now - timedelta(seconds=20))
+    TelemetryData.objects.create(device=device, key="current", value_numeric=11.8, timestamp=now - timedelta(seconds=35))
+    
+    check_alerts_for_payload(device, "current", 12.0)
+    assert Alert.objects.filter(rule=rule, device=device).count() == 1
+
+
+@pytest.mark.django_db
+@patch("apps.alerts.tasks.requests.post")
+def test_async_webhook_dispatch(mock_post):
+    from apps.alerts.tasks import dispatch_alert_webhook_task
+    
+    team = Team.objects.create(name="Test Team", slug="test-team")
+    site = Site.objects.create(team=team, name="Test Site")
+    device = Device.objects.create(
+        team=team, site=site, name="Test Device", device_type="plc", protocol="modbus_tcp", status="online"
+    )
+
+    rule = AlertRule.objects.create(
+        team=team,
+        name="Webhook Alert",
+        device=device,
+        telemetry_key="temp",
+        condition="gt",
+        threshold=50.0,
+        is_active=True,
+        notify_webhook="https://mywebhooks.com/receiver",
+        cooldown_minutes=15
+    )
+
+    alert = Alert.objects.create(
+        team=team, rule=rule, device=device, trigger_value=55.0, status="active"
+    )
+
+    dispatch_alert_webhook_task(alert.id, is_resolved=False)
+
+    assert mock_post.called
+    args, kwargs = mock_post.call_args
+    assert args[0] == "https://mywebhooks.com/receiver"
+    payload = kwargs["json"]
+    assert payload["alert_id"] == alert.id
+    assert payload["status"] == "active"
+

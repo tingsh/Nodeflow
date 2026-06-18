@@ -1,11 +1,11 @@
-NODEFLOW ALERT: {{ rule.severity|upper }}
+{% if is_resolved %}NODEFLOW ALERT RESOLVED{% else %}NODEFLOW ALERT: {{ rule.severity|upper }}{% endif %}
 -----------------------------------
 
 Alert Rule: {{ rule.name }}
 Device: {{ device.name }}
 Site: {{ site.name }}
 
-TRIGGER VALUE: {{ alert.trigger_value }}
+{% if is_resolved %}CURRENT VALUE{% else %}TRIGGER VALUE{% endif %}: {{ alert.trigger_value }}
 Condition: {{ rule.get_condition_display }} {{ rule.threshold }}
 Timestamp: {{ timestamp|date:"Y-m-d H:i:s" }}
 

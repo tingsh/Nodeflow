@@ -9,6 +9,7 @@
         .header.critical { background-color: #e53e3e; }
         .header.warning { background-color: #dd6b20; }
         .header.info { background-color: #3182ce; }
+        .header.resolved { background-color: #10b981; }
         .content { padding: 32px; }
         .footer { padding: 20px; background-color: #edf2f7; text-align: center; font-size: 12px; color: #718096; }
         .value-card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; margin: 20px 0; text-align: center; }
@@ -23,15 +24,15 @@
 </head>
 <body>
     <div class="container">
-        <div class="header {{ rule.severity }}">
-            <h1 style="margin: 0; font-size: 24px;">{{ rule.severity|upper }} Alert</h1>
+        <div class="header {% if is_resolved %}resolved{% else %}{{ rule.severity }}{% endif %}">
+            <h1 style="margin: 0; font-size: 24px;">{% if is_resolved %}RESOLVED{% else %}{{ rule.severity|upper }}{% endif %} Alert</h1>
         </div>
         <div class="content">
             <h2 style="margin-top: 0; color: #1e293b;">{{ rule.name }}</h2>
-            <p>An alert has been triggered for your device <strong>{{ device.name }}</strong> at <strong>{{ site.name }}</strong>.</p>
+            <p>{% if is_resolved %}The alert has resolved for your device <strong>{{ device.name }}</strong> at <strong>{{ site.name }}</strong>.{% else %}An alert has been triggered for your device <strong>{{ device.name }}</strong> at <strong>{{ site.name }}</strong>.{% endif %}</p>
             
             <div class="value-card">
-                <div class="value-label">Trigger Value</div>
+                <div class="value-label">{% if is_resolved %}Current Value{% else %}Trigger Value{% endif %}</div>
                 <div class="value-amount">{{ alert.trigger_value }}</div>
             </div>
 

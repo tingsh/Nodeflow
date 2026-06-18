@@ -4,13 +4,14 @@ from celery import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
+from django.utils import timezone
 from .models import Alert
 
 logger = logging.getLogger("iot_platform")
 
 
 @shared_task
-def dispatch_alert_email_task(alert_id):
+def dispatch_alert_email_task(alert_id, is_resolved=False):
     try:
         alert = Alert.objects.get(id=alert_id)
     except Alert.DoesNotExist:
@@ -22,15 +23,21 @@ def dispatch_alert_email_task(alert_id):
         logger.warning(f"No email recipients configured for alert {alert.id}")
         return
 
-    subject = f"[{alert.rule.severity.upper()}] Nodeflow Alert: {alert.rule.name}"
+    if is_resolved:
+        subject = f"[RESOLVED] Nodeflow Alert: {alert.rule.name}"
+    else:
+        subject = f"[{alert.rule.severity.upper()}] Nodeflow Alert: {alert.rule.name}"
+
     context = {
         "alert": alert,
         "rule": alert.rule,
         "device": alert.device,
         "site": alert.device.site,
-        "timestamp": alert.triggered_at,
-        "dashboard_url": f"{settings.SITE_URL}/a/{alert.team.slug}/alerts/",
+        "timestamp": timezone.now() if is_resolved else alert.triggered_at,
+        "dashboard_url": f"{settings.PROJECT_METADATA['URL']}/a/{alert.team.slug}/alerts/",
+        "is_resolved": is_resolved,
     }
+
     html_message = render_to_string("alerts/email/alert_notification.html", context)
     plain_message = render_to_string("alerts/email/alert_notification.txt", context)
 
@@ -43,13 +50,13 @@ def dispatch_alert_email_task(alert_id):
             html_message=html_message,
             fail_silently=False,
         )
-        logger.info(f"Alert email sent asynchronously to {len(recipient_list)} recipients.")
+        logger.info(f"Alert email sent asynchronously to {len(recipient_list)} recipients (is_resolved={is_resolved}).")
     except Exception as e:
         logger.error(f"Failed to send alert email for alert {alert.id}: {e}")
 
 
 @shared_task
-def dispatch_alert_whatsapp_task(alert_id):
+def dispatch_alert_whatsapp_task(alert_id, is_resolved=False):
     try:
         alert = Alert.objects.get(id=alert_id)
     except Alert.DoesNotExist:
@@ -61,8 +68,10 @@ def dispatch_alert_whatsapp_task(alert_id):
         logger.warning(f"No WhatsApp recipients configured for alert {alert.id}")
         return
 
+    status_text = "RESOLVED" if is_resolved else alert.rule.severity.upper()
+    emoji = "✅" if is_resolved else "🚨"
     message_text = (
-        f"🚨 *NODEFLOW ALERT*\n"
+        f"{emoji} *NODEFLOW ALERT {status_text}*\n"
         f"Rule: {alert.rule.name}\n"
         f"Device: {alert.device.name}\n"
         f"Value: {alert.trigger_value}\n"
@@ -97,6 +106,40 @@ def dispatch_alert_whatsapp_task(alert_id):
         }
         try:
             requests.post(url, headers=headers, json=payload, timeout=5).raise_for_status()
-            logger.info(f"WhatsApp alert successfully dispatched to {clean_number}")
+            logger.info(f"WhatsApp alert successfully dispatched to {clean_number} (is_resolved={is_resolved})")
         except Exception as e:
             logger.error(f"WhatsApp Meta API failed for {number}: {e}")
+
+
+@shared_task
+def dispatch_alert_webhook_task(alert_id, is_resolved=False):
+    try:
+        alert = Alert.objects.get(id=alert_id)
+    except Alert.DoesNotExist:
+        logger.error(f"Alert {alert_id} not found for Webhook dispatch.")
+        return
+
+    url = alert.rule.notify_webhook
+    if not url:
+        logger.warning(f"No Webhook URL configured for alert {alert.id}")
+        return
+
+    payload = {
+        "alert_id": alert.id,
+        "rule_name": alert.rule.name,
+        "severity": alert.rule.severity,
+        "device": {"id": alert.device.id, "name": alert.device.name},
+        "site": {"id": alert.device.site.id, "name": alert.device.site.name},
+        "trigger_value": alert.trigger_value,
+        "condition": alert.rule.condition,
+        "threshold": alert.rule.threshold,
+        "timestamp": alert.triggered_at.isoformat(),
+        "status": "resolved" if is_resolved else alert.status,
+    }
+
+    try:
+        response = requests.post(url, json=payload, timeout=5)
+        response.raise_for_status()
+        logger.info(f"Alert Webhook successfully dispatched to {url} (is_resolved={is_resolved})")
+    except Exception as e:
+        logger.error(f"Alert Webhook dispatch failed for alert {alert.id}: {e}")
