@@ -23,6 +23,8 @@ class CustomUser(AbstractUser):
     language = models.CharField(max_length=10, blank=True, null=True)
     timezone = models.CharField(max_length=100, blank=True, default="")
     phone_number = models.CharField(max_length=20, blank=True, help_text="Format: +65XXXXXXXX for Singapore numbers.")
+    job_title = models.CharField(max_length=100, blank=True, default="")
+    department = models.CharField(max_length=100, blank=True, default="")
 
     def __str__(self):
         return f"{self.get_full_name()} <{self.email or self.username}>"

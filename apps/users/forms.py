@@ -47,12 +47,19 @@ class TurnstileSignupForm(SignupForm):
 
 class CustomUserChangeForm(UserChangeForm):
     email = forms.EmailField(label=_("Email"), required=True)
+    phone_number = forms.CharField(
+        label=_("WhatsApp Number"),
+        required=False,
+        help_text=_("Include country code (e.g. +1234567890) for alerts."),
+    )
+    job_title = forms.CharField(label=_("Job Title"), required=False)
+    department = forms.CharField(label=_("Department"), required=False)
     language = forms.ChoiceField(label=_("Language"))
     timezone = forms.ChoiceField(label=_("Time Zone"), required=False)
 
     class Meta:
         model = CustomUser
-        fields = ("email", "first_name", "last_name", "language", "timezone")
+        fields = ("email", "first_name", "last_name", "phone_number", "job_title", "department", "language", "timezone")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

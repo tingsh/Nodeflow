@@ -48,6 +48,11 @@ class AlertRule(BaseTeamModel):
     cooldown_minutes = models.IntegerField(
         default=15, help_text=_("Minutes to wait before re-triggering notifications for the same alert")
     )
+    recipients = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        help_text=_("Specific team members to notify.")
+    )
 
     def __str__(self):
         return f"{self.name} ({self.device.name if self.device else 'Site: ' + self.site.name})"

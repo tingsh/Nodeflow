@@ -1,16 +1,111 @@
 {% extends "web/app/app_base.html" %}
 {% load static %}
 {% load django_vite %}
+{% load i18n %}
+
 {% block app %}
-<section class="app-card">
-  {% include 'account/components/profile_form.html' %}
-</section>
-{% include 'account/components/2fa.html' %}
-<section class="app-card">
-  {% include 'account/components/social/social_accounts.html' %}
-</section>
-{% include 'account/components/api_keys.html' %}
+<div class="px-4 sm:px-6 lg:px-8 py-8 selection:bg-indigo-500/30 max-w-6xl mx-auto"
+     x-data="{ activeTab: localStorage.getItem('profile_active_tab') || 'profile' }"
+     x-effect="localStorage.setItem('profile_active_tab', activeTab)">
+
+    <!-- Profile Header -->
+    <div class="mb-10 bg-base-100 rounded-3xl border border-base-content/5 shadow-sm p-8 flex flex-col md:flex-row items-center md:justify-between gap-6">
+        <div class="flex flex-col md:flex-row items-center gap-6">
+            <div class="relative group">
+                <div class="avatar">
+                    <div class="w-24 h-24 rounded-full ring ring-indigo-500 ring-offset-base-100 ring-offset-2 overflow-hidden">
+                        <img class="avatar object-cover" src="{{ user.avatar_url }}" alt="{{ user.get_display_name }}" />
+                    </div>
+                </div>
+                <!-- Upload overlay -->
+                <label for="profile-upload" class="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                    <i class="fa fa-camera text-white text-lg"></i>
+                </label>
+                <input id="profile-upload" type="file" accept="image/*" class="hidden" />
+            </div>
+            
+            <div class="text-center md:text-left">
+                <h1 class="text-2xl font-black text-base-content font-heading tracking-tight">
+                    {{ user.get_display_name }}
+                </h1>
+                <p class="text-sm font-semibold text-indigo-500/80 mt-1">
+                    {% if user.job_title %}
+                        {{ user.job_title }}{% if user.department %} • {{ user.department }}{% endif %}
+                    {% else %}
+                        Team Member
+                    {% endif %}
+                </p>
+                <p class="text-xs text-base-content/40 mt-1">
+                    <i class="fa-solid fa-clock-o mr-1"></i> Member since {{ user.date_joined|date:"F Y" }}
+                </p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <label for="profile-upload" id="profile-upload-label" class="btn btn-outline btn-sm rounded-xl font-bold uppercase tracking-wider text-xs">
+                <i class="fa fa-upload mr-1"></i> {% translate "Change Picture" %}
+            </label>
+        </div>
+    </div>
+
+    <!-- Main Grid Dashboard -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        <!-- Sidebar Navigation -->
+        <div class="lg:col-span-1 flex flex-col gap-2">
+            <button @click="activeTab = 'profile'" 
+                    :class="activeTab === 'profile' ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-base-200/50 text-base-content/70'"
+                    class="btn justify-start w-full text-left font-bold rounded-2xl border-0 py-3 h-auto min-h-0">
+                <i class="fa-solid fa-user w-5 text-center mr-2"></i>
+                {% translate "Personal Details" %}
+            </button>
+            <button @click="activeTab = 'security'" 
+                    :class="activeTab === 'security' ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-base-200/50 text-base-content/70'"
+                    class="btn justify-start w-full text-left font-bold rounded-2xl border-0 py-3 h-auto min-h-0">
+                <i class="fa-solid fa-shield-halved w-5 text-center mr-2"></i>
+                {% translate "Security & 2FA" %}
+            </button>
+            <button @click="activeTab = 'apikeys'" 
+                    :class="activeTab === 'apikeys' ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-base-200/50 text-base-content/70'"
+                    class="btn justify-start w-full text-left font-bold rounded-2xl border-0 py-3 h-auto min-h-0">
+                <i class="fa-solid fa-key w-5 text-center mr-2"></i>
+                {% translate "API Credentials" %}
+            </button>
+            <button @click="activeTab = 'social'" 
+                    :class="activeTab === 'social' ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20' : 'hover:bg-base-200/50 text-base-content/70'"
+                    class="btn justify-start w-full text-left font-bold rounded-2xl border-0 py-3 h-auto min-h-0">
+                <i class="fa-solid fa-share-nodes w-5 text-center mr-2"></i>
+                {% translate "Linked Accounts" %}
+            </button>
+        </div>
+
+        <!-- Panel Content -->
+        <div class="lg:col-span-3">
+            <!-- Tab: Personal Details -->
+            <div x-show="activeTab === 'profile'" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0">
+                {% include 'account/components/profile_form.html' %}
+            </div>
+
+            <!-- Tab: Security & 2FA -->
+            <div x-show="activeTab === 'security'" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0" style="display: none;">
+                {% include 'account/components/2fa.html' %}
+            </div>
+
+            <!-- Tab: API Keys -->
+            <div x-show="activeTab === 'apikeys'" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0" style="display: none;">
+                {% include 'account/components/api_keys.html' %}
+            </div>
+
+            <!-- Tab: Linked Accounts -->
+            <div x-show="activeTab === 'social'" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0" style="display: none;">
+                <div class="bg-base-100 rounded-3xl border border-base-content/5 shadow-sm p-8">
+                    {% include 'account/components/social/social_accounts.html' %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
+
 {% block page_js %}
 {% vite_asset 'assets/javascript/app.js' %}
 <script>
@@ -26,7 +121,6 @@
       }
     };
     function updatePreview(file) {
-      // https://stackoverflow.com/a/4459419/8207
       let reader = new FileReader();
       reader.onload = function (e) {
         let avatars = document.getElementsByClassName('avatar');
@@ -38,11 +132,10 @@
     }
 
     function uploadImage(file) {
-      // update UI
       let uploadlabel = document.getElementById("profile-upload-label")
-      uploadlabel.innerHTML = '<span class="pg-icon"><i class="fa fa-refresh"></i></span><span>Uploading...</span>';
-      uploadlabel.classList.add('is-active');
-      // upload to server
+      uploadlabel.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i><span>Uploading...</span>';
+      uploadlabel.classList.add('loading');
+      
       let formData = new FormData();
       formData.append("avatar", file);
       formData.append('csrfmiddlewaretoken', App.Cookies.get('csrftoken'));
@@ -50,17 +143,23 @@
         function (response) {
           if (response.ok) {
             response.text().then(function (text) {
-              // update UI
-              uploadlabel.innerHTML = '<span class="pg-icon"><i class="fa fa-check"></i></span><span>' + text + '</span>';
-              uploadlabel.classList.remove('is-active');
-              uploadlabel.classList.add('pg-text-success');
+              uploadlabel.innerHTML = '<i class="fa fa-check mr-1"></i><span>' + text + '</span>';
+              uploadlabel.className = 'btn btn-success btn-sm rounded-xl text-white font-bold uppercase tracking-wider text-xs';
+              setTimeout(() => {
+                uploadlabel.innerHTML = '<i class="fa fa-upload mr-1"></i>{% translate "Change Picture" %}';
+                uploadlabel.className = 'btn btn-outline btn-sm rounded-xl font-bold uppercase tracking-wider text-xs';
+              }, 3000);
             });
           } else {
             response.json().then(function (errorResponse) {
               console.error(errorResponse);
               const errorText = errorResponse.errors;
-              uploadlabel.innerHTML = '<span title="' + errorText + '" ><span class="pg-icon"><i class="fa fa-times"></i></span><span>Upload failed!</span></span>';
-              uploadlabel.classList.add('pg-text-danger');
+              uploadlabel.innerHTML = '<i class="fa fa-times mr-1"></i><span>Failed</span>';
+              uploadlabel.className = 'btn btn-error btn-sm rounded-xl text-white font-bold uppercase tracking-wider text-xs';
+              setTimeout(() => {
+                uploadlabel.innerHTML = '<i class="fa fa-upload mr-1"></i>{% translate "Change Picture" %}';
+                uploadlabel.className = 'btn btn-outline btn-sm rounded-xl font-bold uppercase tracking-wider text-xs';
+              }, 3000);
             });
           }
         }

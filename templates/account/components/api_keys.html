@@ -1,44 +1,83 @@
 {% load i18n %}
-<section class="app-card">
-  <h2 class="pg-subtitle">{% translate "API Keys" %}</h2>
-  {% for key in api_keys %}
-    {% if forloop.first %}
-    <div class='table-responsive'>
-      <table class="table pg-table">
-        <thead>
-        <tr>
-          <th>{% translate "Prefix" %}</th>
-          <th>{% translate "Created" %}</th>
-          <th></th>
-        </tr>
-        </thead>
-        <tbody>
-      {% endif %}
-          <tr>
-            <td>{{ key.prefix }}</td>
-            <td>{{ key.created.date }}</td>
-            <td>
-              <form method="post" action="{% url 'users:revoke_api_key' %}">
+
+<div class="bg-base-100 rounded-3xl border border-base-content/5 shadow-sm p-8">
+    <div class="flex items-center justify-between mb-8">
+        <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 rounded-full bg-indigo-500 text-white flex items-center justify-center font-black text-xs">
+                <i class="fa fa-key"></i>
+            </div>
+            <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">{% translate "API Credentials" %}</h3>
+        </div>
+        <div>
+            <form method="post" action="{% url 'users:create_api_key' %}">
                 {% csrf_token %}
-                <input type="hidden" name="key_id" value="{{ key.id }}">
-                <div class="pg-inline-buttons">
-                  <input type="submit" class="pg-button-danger" value="{% translate "Revoke" %}" />
+                <button type="submit" class="btn btn-primary btn-sm rounded-xl font-black uppercase tracking-wider text-xs">
+                    <i class="fa fa-plus mr-1"></i> {% translate "New API Key" %}
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <p class="text-sm text-base-content/70 leading-relaxed max-w-2xl">
+            {% translate "API keys allow external applications (like your edge gateways or custom scripts) to securely publish telemetry data to your Nodeflow channels. Keep your API keys private." %}
+        </p>
+
+        {% for key in api_keys %}
+            {% if forloop.first %}
+            <div class="overflow-x-auto border border-base-content/5 rounded-2xl">
+                <table class="table w-full">
+                    <thead>
+                        <tr>
+                            <th class="bg-base-200/50 font-black text-xs uppercase tracking-widest text-base-content/50">{% translate "Name" %}</th>
+                            <th class="bg-base-200/50 font-black text-xs uppercase tracking-widest text-base-content/50">{% translate "Key Prefix" %}</th>
+                            <th class="bg-base-200/50 font-black text-xs uppercase tracking-widest text-base-content/50">{% translate "Created" %}</th>
+                            <th class="bg-base-200/50"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            {% endif %}
+                        <tr class="hover">
+                            <td class="font-bold text-sm text-base-content">
+                                {{ key.name }}
+                            </td>
+                            <td class="font-mono text-xs text-base-content/60 font-semibold">
+                                <code>{{ key.prefix }}••••••••••••••••</code>
+                            </td>
+                            <td class="text-xs text-base-content/50 font-medium">
+                                {{ key.created|date:"F j, Y" }}
+                            </td>
+                            <td class="text-right">
+                                <form method="post" action="{% url 'users:revoke_api_key' %}" onsubmit="return confirm('{% translate "Are you sure you want to revoke this API key? This action is immediate and cannot be undone." %}');">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="key_id" value="{{ key.id }}">
+                                    <button type="submit" class="btn btn-error btn-ghost btn-sm rounded-xl text-xs font-bold hover:bg-error/10">
+                                        <i class="fa fa-trash-can mr-1"></i> {% translate "Revoke" %}
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+            {% if forloop.last %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        {% empty %}
+            <div class="p-8 bg-base-200/30 border border-dashed border-base-content/10 rounded-2xl text-center max-w-2xl mx-auto">
+                <div class="w-12 h-12 rounded-full bg-base-200 flex items-center justify-center mx-auto mb-4">
+                    <i class="fa fa-key text-base-content/30 text-lg"></i>
                 </div>
-              </form>
-            </td>
-          </tr>
-      {% if forloop.last %}
-        </tbody>
-      </table>
+                <h4 class="text-sm font-bold text-base-content mb-1">{% translate "No API Credentials Found" %}</h4>
+                <p class="text-xs text-base-content/40 leading-relaxed max-w-sm mx-auto mb-6">
+                    {% translate "You haven't generated any API keys yet. Create one above to allow external devices or services to communicate with Nodeflow." %}
+                </p>
+                <form method="post" action="{% url 'users:create_api_key' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary rounded-2xl font-black shadow-xl shadow-indigo-500/20 uppercase tracking-widest text-xs px-6">
+                        <i class="fa fa-plus mr-1"></i> {% translate "Create First API Key" %}
+                    </button>
+                </form>
+            </div>
+        {% endfor %}
     </div>
-    {% endif %}
-  {% empty %}
-    <p>{% translate "You haven't created any API keys yet. Create one below." %}</p>
-  {% endfor %}
-  <form method="post" action="{% url 'users:create_api_key' %}">
-    {% csrf_token %}
-    <div class="mt-2">
-      <input type="submit" class="pg-button-secondary" value="{% translate "New API Key" %}" />
-    </div>
-  </form>
-</section>
+</div>

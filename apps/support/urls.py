@@ -6,4 +6,5 @@ app_name = "support"
 
 urlpatterns = [
     path("", views.hijack_user, name="hijack_user"),
+    path("contact/", views.contact_support, name="contact_support"),
 ]

@@ -13,9 +13,9 @@ from .models import Invitation, Membership, Team
 class TeamSignupForm(TurnstileSignupForm):
     invitation_id = forms.CharField(widget=forms.HiddenInput(), required=False)
     team_name = forms.CharField(
-        label=_("Team Name (Optional)"),
+        label=_("Company / Team Name"),
         max_length=100,
-        widget=forms.TextInput(attrs={"placeholder": _("Team Name (Optional)")}),
+        widget=forms.TextInput(attrs={"placeholder": _("Company / Team Name")}),
         required=False,
     )
     terms_agreement = forms.BooleanField(required=True)
@@ -40,13 +40,13 @@ class TeamSignupForm(TurnstileSignupForm):
     def _clean_team_name(self, cleaned_data):
         team_name = cleaned_data.get("team_name")
         invitation_id = cleaned_data.get("invitation_id")
+        
         # if invitation is not set then team name is required
         if not invitation_id and not team_name:
-            email = cleaned_data.get("email")
-            if email is not None:
-                team_name = f"{email.split('@')[0]}"
-        elif invitation_id:
-            assert not team_name
+            self.add_error("team_name", _("Please provide a Company or Team Name."))
+        elif invitation_id and team_name:
+            # ignore provided team name if accepting an invite
+            team_name = ""
 
         cleaned_data["team_name"] = team_name
 
@@ -143,6 +143,27 @@ class InvitationForm(forms.ModelForm):
 
 
 class MembershipForm(forms.ModelForm):
+    phone_number = forms.CharField(
+        label=_("WhatsApp / Phone Number"),
+        max_length=20,
+        required=False,
+        help_text=_("Format: +65XXXXXXXX for Singapore numbers."),
+        widget=forms.TextInput(attrs={"placeholder": "+65XXXXXXXX"})
+    )
+
     class Meta:
         model = Membership
         fields = ("role",)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.user_id:
+            self.fields["phone_number"].initial = self.instance.user.phone_number
+
+    def save(self, commit=True):
+        membership = super().save(commit=commit)
+        user = membership.user
+        user.phone_number = self.cleaned_data.get("phone_number", "")
+        if commit:
+            user.save(update_fields=["phone_number"])
+        return membership

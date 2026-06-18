@@ -1,47 +1,142 @@
 {% load i18n %}
-{% load form_tags %}
-<div class="pg-columns">
-  <div id="profile-picture" class="pg-column-one-quarter">
-    <div class="pg-text-centered">
-      <img class="avatar" src="{{ user.avatar_url }}">
-      <div id='profile-upload-holder'>
-        <label for="profile-upload" >
-          <a id="profile-upload-label" class="pg-button-light">
-            {% translate "Change Picture" %}
-          </a>
-        </label>
-        <input id="profile-upload" type="file" accept="image/*"/>
-      </div>
+
+<div class="bg-base-100 rounded-3xl border border-base-content/5 shadow-sm p-8">
+    <div class="flex items-center space-x-3 mb-8">
+        <div class="w-8 h-8 rounded-full bg-indigo-500 text-white flex items-center justify-center font-black text-xs">
+            <i class="fa fa-user"></i>
+        </div>
+        <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">{% translate "Personal Details" %}</h3>
     </div>
-  </div>
-  <div class="pg-column">
-    <h2 class="pg-subtitle">{% translate "My Details" %}</h2>
-    <form method="post">
-      {% csrf_token %}
-      {% render_text_input form.email %}
-      {% if user.emailaddress_set.count > 1 %}
-        <div class="pg-help"><a href="{% url "account_email" %}" class="link">{%  translate "Manage email addresses" %}</a></div>
-      {% endif %}
-      {% render_text_input form.first_name %}
-      {% render_text_input form.last_name %}
-      {% if form.fields.language.choices %}
-        {% render_select_input form.language %}
-      {% endif %}
-      {% render_select_input form.timezone %}
-      <div class="pg-help">
-        {% if user.timezone %}
-          {% blocktranslate trimmed with user_tz=user.timezone %}
-            Your current timezone is {{ user_tz }}, where it is {{ now }}.
-          {% endblocktranslate %}
-        {% else %}
-          {% blocktranslate trimmed %}
-            You have not set a timezone, and are using the system timezone of {{ current_tz }} where it is {{ now }}.
-          {% endblocktranslate %}
+
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+
+        <!-- Errors -->
+        {% if form.non_field_errors %}
+            <div class="alert alert-error rounded-2xl p-4 mb-4 text-sm font-bold text-error-content shadow-sm">
+                {% for error in form.non_field_errors %}
+                    <p>{{ error }}</p>
+                {% endfor %}
+            </div>
         {% endif %}
-      </div>
-      <div class="mt-2">
-        <input class="pg-button-primary" type="submit" value="{% translate "Save" %}">
-      </div>
+
+        <!-- Row 1: First Name & Last Name -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">{% translate "First Name" %}</label>
+                <input type="text" name="first_name" value="{{ form.first_name.value|default:'' }}" 
+                       class="input input-bordered w-full rounded-2xl font-bold" 
+                       placeholder="e.g. Shouheng">
+                {% if form.first_name.errors %}
+                    <p class="text-xs text-error font-bold mt-1">{{ form.first_name.errors.as_text }}</p>
+                {% endif %}
+            </div>
+            <div>
+                <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">{% translate "Last Name" %}</label>
+                <input type="text" name="last_name" value="{{ form.last_name.value|default:'' }}" 
+                       class="input input-bordered w-full rounded-2xl font-bold" 
+                       placeholder="e.g. Ting">
+                {% if form.last_name.errors %}
+                    <p class="text-xs text-error font-bold mt-1">{{ form.last_name.errors.as_text }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Row 2: Email & WhatsApp Number -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">{% translate "Email Address" %}</label>
+                <input type="email" name="email" value="{{ form.email.value|default:'' }}" 
+                       class="input input-bordered w-full rounded-2xl font-bold" required>
+                {% if form.email.errors %}
+                    <p class="text-xs text-error font-bold mt-1">{{ form.email.errors.as_text }}</p>
+                {% endif %}
+                {% if user.emailaddress_set.count > 1 %}
+                    <p class="text-[10px] font-black uppercase mt-2">
+                        <a href="{% url 'account_email' %}" class="link link-primary">{% translate "Manage email addresses" %}</a>
+                    </p>
+                {% endif %}
+            </div>
+            <div>
+                <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">{% translate "WhatsApp Number" %}</label>
+                <input type="text" name="phone_number" value="{{ form.phone_number.value|default:'' }}" 
+                       class="input input-bordered w-full rounded-2xl font-bold font-mono text-sm" 
+                       placeholder="e.g. +6588888888" 
+                       help_text="{{ form.phone_number.help_text }}">
+                <p class="text-[10px] text-base-content/30 mt-1">{% translate "Include country code (e.g. +65XXXXXXXX) for real-time alert routing." %}</p>
+                {% if form.phone_number.errors %}
+                    <p class="text-xs text-error font-bold mt-1">{{ form.phone_number.errors.as_text }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Row 3: Job Title & Department -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">{% translate "Job Title" %}</label>
+                <input type="text" name="job_title" value="{{ form.job_title.value|default:'' }}" 
+                       class="input input-bordered w-full rounded-2xl font-bold" 
+                       placeholder="e.g. IoT Engineer / Operations Lead">
+                {% if form.job_title.errors %}
+                    <p class="text-xs text-error font-bold mt-1">{{ form.job_title.errors.as_text }}</p>
+                {% endif %}
+            </div>
+            <div>
+                <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">{% translate "Department" %}</label>
+                <input type="text" name="department" value="{{ form.department.value|default:'' }}" 
+                       class="input input-bordered w-full rounded-2xl font-bold" 
+                       placeholder="e.g. Operations / Engineering">
+                {% if form.department.errors %}
+                    <p class="text-xs text-error font-bold mt-1">{{ form.department.errors.as_text }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Row 4: Language & Timezone -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {% if form.fields.language %}
+            <div>
+                <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">{% translate "Language" %}</label>
+                <select name="language" class="select select-bordered w-full rounded-2xl font-bold">
+                    {% for val, display in form.fields.language.choices %}
+                        <option value="{{ val }}" {% if form.language.value == val %}selected{% endif %}>{{ display }}</option>
+                    {% endfor %}
+                </select>
+                {% if form.language.errors %}
+                    <p class="text-xs text-error font-bold mt-1">{{ form.language.errors.as_text }}</p>
+                {% endif %}
+            </div>
+            {% endif %}
+            
+            <div>
+                <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">{% translate "Time Zone" %}</label>
+                <select name="timezone" class="select select-bordered w-full rounded-2xl font-bold">
+                    {% for val, display in form.fields.timezone.choices %}
+                        <option value="{{ val }}" {% if form.timezone.value == val %}selected{% endif %}>{{ display }}</option>
+                    {% endfor %}
+                </select>
+                {% if form.timezone.errors %}
+                    <p class="text-xs text-error font-bold mt-1">{{ form.timezone.errors.as_text }}</p>
+                {% endif %}
+                <p class="text-[10px] text-base-content/30 mt-1">
+                    {% if user.timezone %}
+                        {% blocktranslate trimmed with user_tz=user.timezone %}
+                            Current timezone: {{ user_tz }} (Local time: {{ now|date:"H:i" }})
+                        {% endblocktranslate %}
+                    {% else %}
+                        {% blocktranslate trimmed %}
+                            System default timezone: {{ current_tz }}
+                        {% endblocktranslate %}
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex items-center justify-end pt-6 border-t border-base-content/10">
+            <button type="submit" class="btn btn-primary px-8 rounded-2xl font-black shadow-xl shadow-indigo-500/20 uppercase tracking-widest text-xs">
+                <i class="fa fa-save mr-2"></i> {% translate "Save Changes" %}
+            </button>
+        </div>
     </form>
-  </div>
 </div>

@@ -84,6 +84,21 @@ class SubscriptionWrapper:
     def uses_secondary_currency(self):
         return any([p.currency != self.currency for p in self.prices])
 
+    @property
+    def product_metadata(self):
+        from apps.subscriptions.metadata import get_product_with_metadata
+
+        if self.products:
+            return get_product_with_metadata(self.products[0]).metadata
+        return None
+
+    @property
+    def default_payment_method(self):
+        pm = self.subscription.default_payment_method
+        if not pm and self.subscription.customer:
+            pm = self.subscription.customer.default_payment_method
+        return pm
+
 
 class InvoiceFacade:
     """

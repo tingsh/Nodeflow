@@ -22,24 +22,29 @@ def team_membership_details(request, team_slug, membership_id):
         return HttpResponseRedirect(reverse("single_team:manage_team", args=[request.team.slug]))
 
     if request.method == "POST":
-        # these conditions should not be possible in the UI, but we still need to check to prevent malicious behavior
-        if not can_manage_team:
+        post_data = request.POST.copy()
+        
+        # If editing self, lock the role to its current value
+        if editing_self:
+            post_data["role"] = membership.role
+            if "role" in request.POST and request.POST["role"] != membership.role:
+                messages.warning(request, _("You aren't allowed to change your own role."))
+
+        if not editing_self and not can_manage_team:
             return HttpResponseForbidden(_("You don't have permission to edit team members in that team."))
 
-        if editing_self:
-            messages.error(request, _("You aren't allowed to change your own role."))
-            membership_form = MembershipForm(instance=membership)
-        else:
-            membership_form = MembershipForm(request.POST, instance=membership)
-            if membership_form.is_valid():
-                membership = membership_form.save()
-                messages.success(
-                    request, _("Role for {member} updated.").format(member=membership.user.get_display_name())
-                )
+        membership_form = MembershipForm(post_data, instance=membership)
+        if membership_form.is_valid():
+            membership = membership_form.save()
+            messages.success(
+                request, _("Details for {member} updated.").format(member=membership.user.get_display_name())
+            )
     else:
         membership_form = MembershipForm(instance=membership)
+    
     if editing_self:
-        set_form_fields_disabled(membership_form)
+        # Only disable the role field, not the phone_number field
+        membership_form.fields['role'].disabled = True
     return render(
         request,
         "teams/team_membership_details.html",

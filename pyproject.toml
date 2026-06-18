@@ -43,7 +43,7 @@ dependencies = [
     "channels_redis",
     "dj-stripe>=2.9",
     "django-allauth[socialaccount,mfa]",
-    "django-anymail[mailgun]", # email services
+    "django-anymail[amazon-ses,mailgun]", # email services
     "django-celery-beat",
     "django-cors-headers",
     "django-environ",

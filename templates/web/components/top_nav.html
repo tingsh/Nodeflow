@@ -1,5 +1,6 @@
 {% load i18n %}
 {% load wagtailcore_tags %}
+{% load team_tags %}
 <div class="sticky top-0 z-[100] transition-all duration-300 w-full" 
      x-data="{ scrolled: false }" 
      x-init="window.pageYOffset > 50 ? scrolled = true : scrolled = false"
@@ -76,11 +77,90 @@
             <summary class="btn btn-ghost btn-sm btn-circle list-none cursor-pointer">
               <i class="fa fa-user-circle text-lg text-base-content/70"></i>
             </summary>
-            <ul class="menu dropdown-content bg-base-100 rounded-box z-50 w-52 p-2 shadow-lg border border-base-content/5 mt-4">
-              <li><a href="{% url 'users:user_profile' %}"><i class="fa fa-user h-4 w-4"></i> Profile</a></li>
-              {% include "web/components/team_nav.html" %}
-              <div class="my-1 border-t border-base-content/10"></div>
-              <li><a href="{% url 'account_logout' %}" class="text-error/80 hover:text-error hover:bg-error/10"><i class="fa fa-sign-out h-4 w-4"></i> Sign out</a></li>
+            <ul class="menu dropdown-content bg-base-100 rounded-2xl z-50 w-64 p-3 shadow-2xl border border-base-content/5 mt-4">
+              <!-- User Profile Identity Header -->
+              <div class="px-3 py-3 mb-2 bg-base-200/50 rounded-xl flex items-center gap-3">
+                <div class="avatar">
+                  <div class="w-10 h-10 rounded-full overflow-hidden ring-1 ring-base-content/10">
+                    <img src="{{ user.avatar_url }}" alt="{{ user.get_display_name }}" class="object-cover" />
+                  </div>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-bold text-base-content truncate leading-tight">{{ user.get_display_name }}</p>
+                  <p class="text-[10px] text-base-content/40 truncate mt-0.5">{{ user.email }}</p>
+                </div>
+              </div>
+
+              <li class="menu-title"><span class="text-[10px] font-black uppercase tracking-widest text-base-content/30">{% translate "Settings" %}</span></li>
+              <li>
+                <a href="{% url 'users:user_profile' %}" class="py-2.5 rounded-xl font-semibold text-xs">
+                  <i class="fa fa-user h-4 w-4 text-base-content/50"></i> Profile Details
+                </a>
+              </li>
+              
+              {% if team and request.user|is_member_of:team %}
+              <div class="my-1.5 border-t border-base-content/10"></div>
+              <li class="menu-title flex flex-row items-center justify-between">
+                <span class="text-[10px] font-black uppercase tracking-widest text-base-content/30 truncate max-w-[150px]">{{ team.name }}</span>
+                {% if request.team_membership %}
+                  <span class="badge badge-sm badge-outline font-bold text-[8px] uppercase tracking-wider opacity-60">{{ request.team_membership.get_role_display }}</span>
+                {% endif %}
+              </li>
+              <li>
+                <a href="{% url 'single_team:manage_team' team.slug %}" class="py-2.5 rounded-xl font-semibold text-xs">
+                  <i class="fa fa-sliders h-4 w-4 text-base-content/50"></i>
+                  {% translate "Team Settings" %}
+                </a>
+              </li>
+              {% if request.user|is_admin_of:team %}
+              <li>
+                <a href="{% url 'subscriptions_team:subscription_details' team.slug %}" class="py-2.5 rounded-xl font-semibold text-xs">
+                  <i class="fa fa-credit-card h-4 w-4 text-base-content/50"></i>
+                  {% translate "Billing & Usage" %}
+                </a>
+              </li>
+              {% endif %}
+              {% endif %}
+
+              {% if other_teams %}
+              <div class="my-1.5 border-t border-base-content/10"></div>
+              <li class="menu-title"><span class="text-[10px] font-black uppercase tracking-widest text-base-content/30">{% translate "Switch Team" %}</span></li>
+              {% for name, url in other_teams.items %}
+              <li>
+                <a href="{{ url }}" class="py-2 rounded-xl text-xs font-medium"><i class="fa fa-angles-right h-4 w-4 opacity-50"></i> {{ name }}</a>
+              </li>
+              {% endfor %}
+              {% endif %}
+
+              {% if user_pending_invitations %}
+              <li>
+                <a href="{% url 'teams:manage_teams' %}" class="py-2 rounded-xl text-xs font-medium">
+                  <i class="fa fa-envelope h-4 w-4 text-warning"></i>
+                  {% translate "Pending Invites" %}
+                </a>
+              </li>
+              {% endif %}
+
+              <div class="my-1.5 border-t border-base-content/10"></div>
+              <li class="menu-title"><span class="text-[10px] font-black uppercase tracking-widest text-base-content/30">{% translate "Resources" %}</span></li>
+              <li>
+                <a href="/content/docs/" class="py-2 rounded-xl text-xs font-semibold">
+                  <i class="fa-solid fa-book h-4 w-4 text-base-content/50"></i> {% translate "Documentation" %}
+                </a>
+              </li>
+              <li>
+                <a href="/content/faq/" class="py-2 rounded-xl text-xs font-semibold">
+                  <i class="fa-solid fa-circle-question h-4 w-4 text-base-content/50"></i> {% translate "Help Center / FAQ" %}
+                </a>
+              </li>
+              <li>
+                <button type="button" onclick="document.getElementById('contact-support-modal').showModal()" class="py-2 rounded-xl text-xs font-semibold flex items-center gap-2 w-full text-left">
+                  <i class="fa-solid fa-headset h-4 w-4 text-base-content/50"></i> {% translate "Contact Support" %}
+                </button>
+              </li>
+
+              <div class="my-1.5 border-t border-base-content/10"></div>
+              <li><a href="{% url 'account_logout' %}" class="py-2.5 rounded-xl font-bold text-xs text-error/80 hover:text-error hover:bg-error/10"><i class="fa-solid fa-arrow-right-from-bracket h-4 w-4"></i> Sign out</a></li>
             </ul>
           </details>
         {% else %}

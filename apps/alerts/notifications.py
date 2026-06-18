@@ -8,20 +8,23 @@ from django.template.loader import render_to_string
 logger = logging.getLogger("iot_platform")
 
 
+from .tasks import dispatch_alert_email_task, dispatch_alert_whatsapp_task
+
+
 def send_alert_notifications(alert):
     """
-    Dispatches notifications for a triggered alert.
+    Dispatches notifications for a triggered alert asynchronously.
     """
     rule = alert.rule
 
     if rule.notify_email:
-        send_alert_email(alert)
+        dispatch_alert_email_task.delay(alert.id)
 
     if rule.notify_webhook:
         send_alert_webhook(alert)
 
     if rule.notify_whatsapp:
-        send_alert_whatsapp(alert)
+        dispatch_alert_whatsapp_task.delay(alert.id)
 
 
 def send_alert_whatsapp(alert):

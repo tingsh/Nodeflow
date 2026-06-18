@@ -40,9 +40,13 @@ def accept_invitation(request, invitation_id):
                 messages.error(request, _("Sorry, it looks like that invitation link has expired."))
                 return HttpResponseRedirect(reverse("web:home"))
             else:
-                process_invitation(invitation, request.user)
+                try:
+                    from django.db import IntegrityError
+                    process_invitation(invitation, request.user)
+                    messages.success(request, _("You successfully joined {}").format(invitation.team.name))
+                except IntegrityError:
+                    messages.info(request, _("You are already a member of {}.").format(invitation.team.name))
                 clear_invite_from_session(request)
-                messages.success(request, _("You successfully joined {}").format(invitation.team.name))
                 return HttpResponseRedirect(reverse("web_team:home", args=[invitation.team.slug]))
 
     account_exists = CustomUser.objects.filter(email=invitation.email).exists()
@@ -77,10 +81,13 @@ class SignupAfterInvite(SignupView):
             raise Http404
         return invitation
 
+    def get_form_class(self):
+        from allauth.account.forms import SignupForm
+        return SignupForm
+
     def get_initial(self):
         initial = super().get_initial()
         if self.invitation:
-            initial["team_name"] = self.invitation.team.name
             initial["email"] = self.invitation.email
         return initial
 

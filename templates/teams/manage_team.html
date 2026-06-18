@@ -15,61 +15,109 @@
 {% endblock %}
 {% block app %}
 {% has_perm 'manage_team' as can_manage_team %}
-<section class="app-card">
-  <h3 class="pg-subtitle">
-    {% translate "Team Details" %}
-  </h3>
-  <form method="post">
-    {% csrf_token %}
-    {% render_form_fields team_form %}
-    {% if create or can_manage_team %}
-      <div class="mt-2 pg-inline-buttons">
-        <input class="pg-button-secondary" type="submit" value="{% translate 'Save Details' %}">
-      </div>
-    {% endif %}
-  </form>
-</section>
-{% if not create %}
-<section class="app-card">
-  <h3 class="pg-subtitle">{% translate "Team Members" %}</h3>
-  <div class='table-responsive'>
-    <table class="table pg-table">
-      <thead>
-      <tr>
-        <th>{% translate "Member" %}</th>
-        <th>{% translate "Role" %}</th>
-      </tr>
-      </thead>
-      <tbody>
-      {% for membership in team.sorted_memberships.all %}
-        <tr>
-          <td>
-            {% if can_manage_team or request.team_membership == membership %}
-              <a class="link" href="{% url 'single_team:team_membership_details' request.team.slug membership.pk %}">{{ membership.user }}</a>
-            {% else %}
-              {{ membership.user }}
-            {% endif %}
-          </td>
-          <td>
-              <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-700 dark:text-gray-300">
-                {{ membership.get_role_display }}
-              </span>
-          </td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
-{% include 'teams/components/team_invitations.html' %}
-{% if can_manage_team %}
-  <section class="app-card">
-    <h3 class="pg-subtitle">
-      {% translate "Danger Zone" %}
-    </h3>
-    <label for="delete-modal" class="pg-button-danger modal-button">{% translate 'Delete Team' %}</label>
+
+<div class="max-w-6xl mx-auto space-y-8">
+
+  <section class="card bg-base-100 shadow-xl border border-base-content/5">
+    <div class="card-body">
+      <h3 class="card-title text-xl mb-4">
+        <i class="fa fa-info-circle text-primary"></i> {% translate "Team Details" %}
+      </h3>
+      <form method="post" class="space-y-4">
+        {% csrf_token %}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {% render_form_fields team_form %}
+        </div>
+        {% if create or can_manage_team %}
+          <div class="card-actions justify-end mt-4">
+            <button type="submit" class="btn btn-primary">
+              <i class="fa fa-save mr-2"></i> {% translate 'Save Details' %}
+            </button>
+          </div>
+        {% endif %}
+      </form>
+    </div>
   </section>
-  {% include 'teams/components/delete_team_modal.html' %}
-{% endif %}
-{% endif %}
+
+  {% if not create %}
+  <section class="card bg-base-100 shadow-xl border border-base-content/5">
+    <div class="card-body">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="card-title text-xl">
+          <i class="fa fa-users text-primary"></i> {% translate "Team Members" %}
+        </h3>
+        {% if can_manage_team %}
+        <label for="invite-modal-toggle" class="btn btn-primary btn-sm">
+          <i class="fa fa-user-plus mr-1"></i> {% translate "Add Member" %}
+        </label>
+        {% endif %}
+      </div>
+      <div class="overflow-x-auto">
+        <table class="table w-full">
+          <thead>
+            <tr>
+              <th class="bg-base-200">{% translate "Member" %}</th>
+              <th class="bg-base-200">{% translate "Role" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for membership in team.sorted_memberships.all %}
+            <tr class="hover">
+              <td>
+                <div class="flex items-center space-x-3">
+                  <div class="avatar">
+                    <div class="mask mask-circle w-10 h-10">
+                      <img src="{{ membership.user.avatar_url }}" alt="Avatar" />
+                    </div>
+                  </div>
+                  <div>
+                    <div class="font-bold">
+                      {% if can_manage_team or request.team_membership == membership %}
+                        <a class="link link-hover link-primary" href="{% url 'single_team:team_membership_details' request.team.slug membership.pk %}">
+                          {{ membership.user.get_display_name }}
+                        </a>
+                      {% else %}
+                        {{ membership.user.get_display_name }}
+                      {% endif %}
+                    </div>
+                    <div class="text-sm opacity-50">{{ membership.user.email }}</div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                  <span class="badge badge-ghost badge-sm">
+                    {{ membership.get_role_display }}
+                  </span>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  {% include 'teams/components/team_invitations.html' %}
+
+  {% if can_manage_team %}
+    <section class="card bg-error/10 border border-error/20 mt-8">
+      <div class="card-body flex flex-col md:flex-row items-center justify-between">
+        <div>
+          <h3 class="card-title text-error mb-2">
+            <i class="fa fa-exclamation-triangle"></i> {% translate "Danger Zone" %}
+          </h3>
+          <p class="text-sm text-base-content/70">
+            {% translate "Once you delete a team, there is no going back. Please be certain." %}
+          </p>
+        </div>
+        <div class="mt-4 md:mt-0">
+          <label for="delete-modal" class="btn btn-error text-white">{% translate 'Delete Team' %}</label>
+        </div>
+      </div>
+    </section>
+    {% include 'teams/components/delete_team_modal.html' %}
+  {% endif %}
+  
+  {% endif %}
+</div>
 {% endblock %}

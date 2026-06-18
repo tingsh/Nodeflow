@@ -31,6 +31,8 @@ class ProductMetadata:
     price_displays: dict[str:str] = field(default_factory=dict)
     description: str = ""
     is_default: bool = False
+    gateway_limit: int = 0
+    device_limit: int = 0
 
     @classmethod
     def from_stripe_product(cls, stripe_product: Product, **kwargs) -> ProductMetadata:
@@ -56,6 +58,8 @@ class ProductMetadata:
                 "price_displays": serializers.DictField(child=serializers.CharField()),
                 "description": serializers.CharField(),
                 "is_default": serializers.BooleanField(),
+                "gateway_limit": serializers.IntegerField(),
+                "device_limit": serializers.IntegerField(),
             },
         )
 
@@ -183,10 +187,12 @@ ACTIVE_PLAN_INTERVALS = [
 # with plans on your side
 ACTIVE_PRODUCTS = [
     ProductMetadata(
-        stripe_id="prod_starter_placeholder",
+        stripe_id="prod_UiHJcACJMIlAqy",
         slug="starter",
         name=_("Starter"),
         description=_("Ideal for submetering pilots"),
+        gateway_limit=1,
+        device_limit=5,
         features=[
             _("1 Edge Gateway"),
             _("Up to 5 Devices"),
@@ -195,11 +201,13 @@ ACTIVE_PRODUCTS = [
         ],
     ),
     ProductMetadata(
-        stripe_id="prod_pro_placeholder",
-        slug="professional",
-        name=_("Professional"),
+        stripe_id="prod_UiHLBoQ2Z8HDNu",
+        slug="business",
+        name=_("Business"),
         description=_("Full energy automation for SMEs"),
         is_default=True,
+        gateway_limit=3,
+        device_limit=20,
         features=[
             _("3 Edge Gateways"),
             _("Up to 20 Devices"),
@@ -209,10 +217,12 @@ ACTIVE_PRODUCTS = [
         ],
     ),
     ProductMetadata(
-        stripe_id="prod_biz_placeholder",
-        slug="business",
-        name=_("Business"),
+        stripe_id="prod_UiHMGVWikKZ2Rg",
+        slug="enterprise",
+        name=_("Enterprise"),
         description=_("For large industrial operations"),
+        gateway_limit=9999,
+        device_limit=100,
         features=[
             _("Unlimited Gateways"),
             _("Up to 100 Devices"),

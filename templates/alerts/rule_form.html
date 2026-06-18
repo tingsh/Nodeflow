@@ -143,6 +143,64 @@
                     </label>
                 </div>
 
+                <div class="bg-base-200/50 p-6 rounded-2xl border border-base-content/5 mt-4" x-data="recipientSearch()">
+                    <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Select Recipients</label>
+                    {% if form.recipients.errors %}
+                        <div class="alert alert-error mb-4 rounded-xl py-2 px-4 text-sm font-bold text-error-content">
+                            {{ form.recipients.errors }}
+                        </div>
+                    {% endif %}
+                    
+                    <div class="flex flex-wrap gap-2 mb-3">
+                        <template x-for="user in selectedUsers" :key="user.id">
+                            <div class="badge badge-primary gap-2 p-3 font-bold">
+                                <span x-text="user.name"></span>
+                                <button type="button" @click="removeUser(user.id)" class="hover:bg-primary-focus rounded-full p-0.5">
+                                    <i class="fa fa-times text-xs"></i>
+                                </button>
+                                <input type="hidden" name="recipients" :value="user.id">
+                            </div>
+                        </template>
+                    </div>
+
+                    <div class="relative">
+                        <input type="text" name="q" placeholder="Search team members by name or email..." class="input input-bordered w-full rounded-2xl font-bold"
+                               hx-get="{% url 'web_team:alerts:search_users' request.team.slug %}" 
+                               hx-trigger="keyup changed delay:300ms" hx-target="#search-results"
+                               @click.outside="document.getElementById('search-results').innerHTML = ''">
+                        <div id="search-results"></div>
+                    </div>
+                </div>
+
+                <script>
+                function recipientSearch() {
+                    return {
+                        selectedUsers: [
+                            {% if form.instance.pk %}
+                                {% for recipient in form.instance.recipients.all %}
+                                    { id: {{ recipient.id }}, name: "{{ recipient.get_display_name|escapejs }}" },
+                                {% endfor %}
+                            {% elif form.recipients.value %}
+                                {% for recipient in form.recipients.field.queryset %}
+                                    {% if recipient.id in form.recipients.value or recipient.id|stringformat:"i" in form.recipients.value %}
+                                        { id: {{ recipient.id }}, name: "{{ recipient.get_display_name|escapejs }}" },
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        ],
+                        addUser(id, name, email) {
+                            if (!this.selectedUsers.find(u => u.id === id)) {
+                                this.selectedUsers.push({ id, name, email });
+                            }
+                            document.getElementById('search-results').innerHTML = '';
+                        },
+                        removeUser(id) {
+                            this.selectedUsers = this.selectedUsers.filter(u => u.id !== id);
+                        }
+                    }
+                }
+                </script>
+
                 <div>
                     <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Cooldown (Minutes)</label>
                     <input type="number" name="cooldown_minutes" value="{{ form.cooldown_minutes.value|default:60 }}" class="input input-bordered w-full rounded-2xl font-bold">

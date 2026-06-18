@@ -1,23 +1,43 @@
 {% extends "web/app/app_base.html" %}
 {% load static %}
 {% block app %}
-<section class="app-card">
-  <div class="pg-columns pg-columns-reversed">
-    <div class="pg-column-one-quarter">
-      <img src="{% static 'images/undraw/undraw_joyride.svg' %}" alt="Yay!">
+<section class="w-full">
+  <div class="relative py-12 text-center isolate">
+    <!-- Glowing subtle background effect -->
+    <div class="absolute inset-x-0 top-[-10rem] -z-10 transform-gpu overflow-hidden blur-3xl sm:top-[-20rem]" aria-hidden="true">
+      <div class="relative left-1/2 -z-10 aspect-[1155/678] w-[36.125rem] max-w-none -translate-x-1/2 rotate-[30deg] bg-gradient-to-tr from-[#10b981] to-[#3b82f6] opacity-20 sm:left-[calc(50%-40rem)] sm:w-[72.1875rem]" style="clip-path: polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)"></div>
     </div>
-    <div class="pg-column">
-      <h1 class="pg-title">My Subscription</h1>
-      <h2 class="pg-subtitle">You're subscribed to a plan. Thanks for the support!</h2>
-      <p class="pg-subtitle">Subscription Details</p>
-      {% include 'subscriptions/components/subscription_details.html' %}
+
+    <div class="mx-auto max-w-2xl">
+      <div class="mb-4 flex justify-center">
+        <span class="inline-flex items-center rounded-full bg-emerald-500/10 px-3 py-1 text-sm font-semibold text-emerald-400 ring-1 ring-inset ring-emerald-500/20">
+          Active Subscription
+        </span>
+      </div>
+      <h1 class="text-4xl font-extrabold tracking-tight sm:text-6xl text-slate-100">
+        Your <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-blue-500">Nodeflow Cloud</span> Plan
+      </h1>
+      <p class="mt-6 text-lg leading-8 text-slate-400">
+        You are successfully subscribed. Here are the details of your active plan.
+      </p>
     </div>
   </div>
-  {% if subscription %}
-  <form method="POST" action="{{ subscription_urls.create_stripe_portal_session }}" class="mt-2">
-    {% csrf_token %}
-    <button type="submit" class="pg-button-secondary">Manage billing</button>
-  </form>
-  {% endif %}
+  
+  <div class="mt-8 mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+    <div class="bg-slate-800/50 backdrop-blur-md rounded-2xl p-8 ring-1 ring-white/10 shadow-2xl">
+      {% include 'subscriptions/components/subscription_details.html' %}
+      
+      {% if subscription %}
+      <div class="mt-8 pt-6 border-t border-slate-700/50 flex justify-end">
+        <form method="POST" action="{{ subscription_urls.create_stripe_portal_session }}" hx-boost="false">
+          {% csrf_token %}
+          <button type="submit" class="rounded-md bg-indigo-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 transition-colors">
+            Manage billing
+          </button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+  </div>
 </section>
 {% endblock %}

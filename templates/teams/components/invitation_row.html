@@ -1,23 +1,29 @@
 {% load i18n team_permissions %}
-<tr>
-  <td>{{ invitation.email }}</td>
-  <td>{{ invitation.created_at }}</td>
+<tr class="hover">
+  <td class="font-medium text-base-content">{{ invitation.email }}</td>
+  <td class="text-base-content/70">{{ invitation.created_at|date:"M j, Y" }}</td>
   <td>
-    <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-700 dark:text-gray-300">
+    <span class="badge badge-ghost badge-sm">
       {{ invitation.get_role_display }}
     </span>
   </td>
 {% has_perm 'manage_team' as can_manage_team %}
 {% if can_manage_team %}
-  <td class="pg-inline-buttons pg-justify-content-end">
-    <form hx-post="{% url 'single_team:resend_invitation' request.team.slug invitation.id %}" hx-target="this" hx-swap="outerHTML">
-      {% csrf_token %}
-      <input class="pg-button-secondary" type="submit" value="{% translate "Resend Invitation" %}">
-    </form>
-    <form hx-post="{% url 'single_team:cancel_invitation' request.team.slug invitation.id %}" hx-target="closest tr" hx-swap="outerHTML swap:1s">
-      {% csrf_token %}
-      <input class="pg-button-secondary mx-2" type="submit" value="{% translate "Cancel Invitation" %}">
-    </form>
+  <td class="text-right">
+    <div class="flex items-center justify-end space-x-2">
+      <form hx-post="{% url 'single_team:resend_invitation' request.team.slug invitation.id %}" hx-target="this" hx-swap="outerHTML">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-outline">
+          <i class="fa fa-paper-plane mr-1"></i> {% translate "Resend" %}
+        </button>
+      </form>
+      <form hx-post="{% url 'single_team:cancel_invitation' request.team.slug invitation.id %}" hx-target="closest tr" hx-swap="outerHTML swap:1s">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-error btn-outline">
+          <i class="fa fa-times mr-1"></i> {% translate "Cancel" %}
+        </button>
+      </form>
+    </div>
   </td>
 {% endif %}
 </tr>

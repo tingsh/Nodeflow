@@ -24,6 +24,29 @@ from django.views.i18n import JavaScriptCatalog
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from wagtail import urls as wagtail_urls
 from wagtail.admin import urls as wagtailadmin_urls
+
+from django.http import HttpResponse, HttpResponseBadRequest
+from django.views.decorators.csrf import csrf_exempt
+
+@csrf_exempt
+def local_stripe_webhook(request):
+    import stripe, json
+    from django.conf import settings
+    from djstripe.models import Event
+    payload = request.body
+    sig_header = request.headers.get("stripe-signature")
+    try:
+        event_data = stripe.Webhook.construct_event(payload, sig_header, settings.DJSTRIPE_WEBHOOK_SECRET)
+    except Exception:
+        if getattr(settings, "DJSTRIPE_WEBHOOK_VALIDATION", "") is None:
+            event_data = json.loads(payload)
+        else:
+            return HttpResponseBadRequest()
+    try:
+        Event.process(event_data)
+    except Exception as e:
+        print(f"Error processing {event_data.get('type')}: {e}")
+    return HttpResponse(status=200)
 from wagtail.api.v2.views import PagesAPIViewSet
 from wagtail.contrib.sitemaps import Sitemap
 from wagtail.documents import urls as wagtaildocs_urls
@@ -71,6 +94,7 @@ urlpatterns = [
     path("api/schema/swagger-ui/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("api/schema/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
     # djstripe urls - for webhooks
+    path("stripe/webhook/", local_stripe_webhook),
     path("stripe/", include("djstripe.urls", namespace="djstripe")),
     # hijack urls for impersonation
     path("hijack/", include("hijack.urls", namespace="hijack")),
@@ -84,4 +108,4 @@ urlpatterns = [
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 if settings.ENABLE_DEBUG_TOOLBAR:
-    urlpatterns.append(path("__debug__/", include("debug_toolbar.urls")))
+    urlpatterns.insert(0, path("__debug__/", include("debug_toolbar.urls")))

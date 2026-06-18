@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse_lazy
 from django.utils import timezone
@@ -59,10 +60,15 @@ class AlertRuleCreateView(PermissionRequiredMixin, CreateView):
         "notify_email",
         "notify_whatsapp",
         "cooldown_minutes",
+        "recipients",
     ]
     template_name = "alerts/rule_form.html"
 
     def form_valid(self, form):
+        if (form.cleaned_data.get("notify_email") or form.cleaned_data.get("notify_whatsapp")) \
+           and not form.cleaned_data.get("recipients"):
+            form.add_error("recipients", "You must select at least one recipient if notifications are enabled.")
+            return self.form_invalid(form)
         form.instance.team = self.request.team
         return super().form_valid(form)
 
@@ -85,8 +91,16 @@ class AlertRuleUpdateView(PermissionRequiredMixin, UpdateView):
         "notify_email",
         "notify_whatsapp",
         "cooldown_minutes",
+        "recipients",
     ]
     template_name = "alerts/rule_form.html"
+
+    def form_valid(self, form):
+        if (form.cleaned_data.get("notify_email") or form.cleaned_data.get("notify_whatsapp")) \
+           and not form.cleaned_data.get("recipients"):
+            form.add_error("recipients", "You must select at least one recipient if notifications are enabled.")
+            return self.form_invalid(form)
+        return super().form_valid(form)
 
     def get_success_url(self):
         return reverse_lazy("web_team:alerts:alert_list", args=[self.request.team.slug])
@@ -117,3 +131,16 @@ def acknowledge_alert(request, team_slug, alert_id):
 
     # Return a partial or just the updated row
     return render(request, "alerts/partials/alert_row.html", {"alert": alert})
+
+
+@require_permission("manage_alerts")
+def search_team_members(request, team_slug):
+    q = request.GET.get("q", "").strip()
+    if not q:
+        return render(request, "alerts/partials/user_search_results.html", {"users": []})
+
+    users = request.team.members.filter(
+        Q(first_name__icontains=q) | Q(last_name__icontains=q) | Q(email__icontains=q) | Q(username__icontains=q)
+    )[:10]
+
+    return render(request, "alerts/partials/user_search_results.html", {"users": users})

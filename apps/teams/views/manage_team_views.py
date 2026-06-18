@@ -65,26 +65,7 @@ def manage_team(request, team_slug):
     )
 
 
-@login_required
-def create_team(request):
-    if request.method == "POST":
-        form = TeamChangeForm(request.POST)
-        if form.is_valid():
-            team = form.save()
-            team.members.add(request.user, through_defaults={"role": ROLE_OWNER})
-            team.save()
-            return HttpResponseRedirect(reverse("teams:manage_teams"))
-    else:
-        form = TeamChangeForm()
-    return render(
-        request,
-        "teams/manage_team.html",
-        {
-            "team_form": form,
-            "create": True,
-            "page_title": _("Create Team"),
-        },
-    )
+
 
 
 @team_admin_required
@@ -100,7 +81,7 @@ def delete_team(request, team_slug):
 def resend_invitation(request, team_slug, invitation_id):
     invitation = get_object_or_404(Invitation, team=request.team, id=invitation_id)
     send_invitation(invitation)
-    return HttpResponse('<span class="pg-button-light is-disbled btn-disabled">Sent!</span>')
+    return HttpResponse('<span class="btn btn-sm btn-disabled">Sent!</span>')
 
 
 @team_admin_required
@@ -130,6 +111,7 @@ def send_invitation_view(request, team_slug):
             "pending_invitations": Invitation.objects.filter(team=request.team, is_accepted=False).order_by(
                 "-created_at"
             ),
+            "role_descriptions": ROLE_DESCRIPTIONS,
         },
     )
 

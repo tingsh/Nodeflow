@@ -31,7 +31,11 @@ class Team(SubscriptionModelBase, BaseModel):
 
     @property
     def email(self):
-        return self.membership_set.filter(role=roles.ROLE_ADMIN).first().user.email
+        admin = self.membership_set.filter(role__in=[roles.ROLE_OWNER, roles.ROLE_ADMIN]).first()
+        if admin:
+            return admin.user.email
+        first_member = self.membership_set.first()
+        return first_member.user.email if first_member else ""
 
     @property
     def sorted_memberships(self):

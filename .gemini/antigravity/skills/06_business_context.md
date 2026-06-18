@@ -19,11 +19,16 @@ We provide a plug-and-play, AI-powered industrial monitoring platform for SMEs i
 2. **Vertical 2 (Future):** Cold Chain & Food Safety.
 3. **Vertical 3 (Future):** Predictive Maintenance for Facilities.
 
-## 3. Pricing Tiers (S$)
-- **Starter (S$99/mo):** 10 devices, basic alerts, 30 days data.
-- **Professional (S$299/mo):** 50 devices, AI insights, 1 year data.
-- **Business (S$699/mo):** 200 devices, full automations, white-label options.
-- **Enterprise:** Custom volume + Dedicated support.
+## 3. Pricing Tiers (Feature-Gated Strategy)
+- **Starter (S$99/mo):** Target: DIY, Hobbyists, Students, Paid Trials. 
+  - *Limits:* 1 User (No RBAC), 1 Gateway, 7-day data retention.
+  - *Goal:* Act as a low-friction entry point. The lack of multi-user access and long-term history acts as a "tripwire" to force real businesses to upgrade.
+- **Business (S$399/mo):** Target: Core SME Market (Factories, Commercial Buildings).
+  - *Limits:* Unlimited Users (RBAC), Up to 5 Gateways, 90-day data retention.
+  - *Features:* Unlocks Preventive Maintenance Ticketing and AI Chat with Data.
+- **Enterprise (S$699+/mo):** Target: Mid-Market, System Integrators, Multi-site customers.
+  - *Limits:* Unlimited/Custom Gateways, 1-3 years data retention.
+  - *Features:* Custom White-labeling, SSO/SAML, API Access, Dedicated Support.
 
 ## 4. Competitive Strategy
 - **VS. ThingsBoard:** We are easier to use, pre-configured for ASEAN hardware, and have integrated AI insights.

@@ -50,7 +50,47 @@
       {% endif %}
     </div>
   </div>
+  <div class="subscription-detail">
+    <div class="subscription-detail-label">
+      {% translate "Payment Method" %}
+    </div>
+    <div class="subscription-detail-value">
+      {% if subscription.default_payment_method and subscription.default_payment_method.type == 'card' %}
+        <div class="flex items-center gap-2">
+          <i class="fa-brands fa-cc-{{ subscription.default_payment_method.card.brand|lower }} text-2xl text-slate-400"></i>
+          <span>•••• {{ subscription.default_payment_method.card.last4 }}</span>
+        </div>
+        <div class="subdetail text-slate-500 text-sm mt-0.5">Expires {{ subscription.default_payment_method.card.exp_month }}/{{ subscription.default_payment_method.card.exp_year }}</div>
+      {% else %}
+        <span class="text-slate-400">No default payment method</span>
+      {% endif %}
+    </div>
+  </div>
   {% endif %}
+  {% if subscription.product_metadata %}
+  <h2 class="pg-subtitle mt-8 mb-4 text-slate-200">{% translate "Usage & Limits" %}</h2>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+    <div class="bg-slate-700/30 rounded-lg p-4 border border-slate-600/50">
+      <div class="flex justify-between items-end mb-2">
+        <span class="text-sm font-medium text-slate-300">Gateways</span>
+        <span class="text-xs text-slate-400">{{ team.gateway_set.count }} / {% if subscription.product_metadata.gateway_limit > 1000 %}Unlimited{% else %}{{ subscription.product_metadata.gateway_limit }}{% endif %}</span>
+      </div>
+      <div class="w-full bg-slate-800 rounded-full h-2">
+        <div class="bg-indigo-500 h-2 rounded-full" style="width: min(100%, {% widthratio team.gateway_set.count subscription.product_metadata.gateway_limit|default:1000 100 %}%);"></div>
+      </div>
+    </div>
+    <div class="bg-slate-700/30 rounded-lg p-4 border border-slate-600/50">
+      <div class="flex justify-between items-end mb-2">
+        <span class="text-sm font-medium text-slate-300">Devices</span>
+        <span class="text-xs text-slate-400">{{ team.device_set.count }} / {% if subscription.product_metadata.device_limit > 1000 %}Unlimited{% else %}{{ subscription.product_metadata.device_limit }}{% endif %}</span>
+      </div>
+      <div class="w-full bg-slate-800 rounded-full h-2">
+        <div class="bg-emerald-500 h-2 rounded-full" style="width: min(100%, {% widthratio team.device_set.count subscription.product_metadata.device_limit|default:1000 100 %}%);"></div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <h2 class="pg-subtitle">{% translate "Pricing" %}</h2>
   <table class="table pg-table">
     <thead>

@@ -95,6 +95,7 @@ def _view_subscription(request, subscription_holder: SubscriptionModelBase):
             "subscription": wrapped_subscription,
             "next_invoice": InvoiceFacade(next_invoice) if next_invoice else None,
             "subscription_urls": get_subscription_urls(subscription_holder),
+            "team": subscription_holder,
         },
     )
 

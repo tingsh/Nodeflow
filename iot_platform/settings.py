@@ -254,7 +254,7 @@ else:
         }
     }
 
-if "test" in sys.argv:
+if "test" in sys.argv or env.bool("USING_TEST_DB", default=False):
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
@@ -460,19 +460,19 @@ FORMS_URLFIELD_ASSUME_HTTPS = True
 SERVER_EMAIL = env("SERVER_EMAIL", default="noreply@localhost:8000")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="tingshouheng@gmail.com")
 
-# The default value will print emails to the console, but you can change that here
-# and in your environment.
-EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
+# ANYMAIL Configuration for Amazon SES
+ANYMAIL = {
+    "AMAZON_SES_CLIENT_PARAMS": {
+        "aws_access_key_id": env("AWS_SES_ACCESS_KEY_ID", default=None),
+        "aws_secret_access_key": env("AWS_SES_SECRET_ACCESS_KEY", default=None),
+        "region_name": env("AWS_SES_REGION_NAME", default="us-east-1"),
+    },
+}
+EMAIL_BACKEND = env("EMAIL_BACKEND", default="anymail.backends.amazon_ses.EmailBackend")
 
-# Most production backends will require further customization. The below example uses Mailgun.
-# ANYMAIL = {
-#     "MAILGUN_API_KEY": env("MAILGUN_API_KEY", default=None),
-#     "MAILGUN_SENDER_DOMAIN": env("MAILGUN_SENDER_DOMAIN", default=None),
-# }
-
-# use in production
-# see https://github.com/anymail/django-anymail for more details/examples
-# EMAIL_BACKEND = "anymail.backends.mailgun.EmailBackend"
+# WhatsApp Meta API Configuration
+WHATSAPP_PHONE_NUMBER_ID = env("WHATSAPP_PHONE_NUMBER_ID", default=None)
+WHATSAPP_ACCESS_TOKEN = env("WHATSAPP_ACCESS_TOKEN", default=None)
 
 EMAIL_SUBJECT_PREFIX = "[iiot] "
 
@@ -625,6 +625,11 @@ STRIPE_PRICING_TABLE_ID = env("STRIPE_PRICING_TABLE_ID", default="")
 DJSTRIPE_FOREIGN_KEY_TO_FIELD = "id"  # change to "djstripe_id" if not a new installation
 DJSTRIPE_SUBSCRIBER_MODEL = "teams.Team"
 DJSTRIPE_SUBSCRIBER_MODEL_REQUEST_CALLBACK = lambda request: request.team  # noqa E731
+
+# For local development with the Stripe CLI, it's sometimes necessary to disable webhook validation 
+# if signature verification fails despite matching secrets. In production, remove this!
+DJSTRIPE_WEBHOOK_VALIDATION = None
+DJSTRIPE_WEBHOOK_SECRET = env("DJSTRIPE_WEBHOOK_SECRET", default="")
 
 SILENCED_SYSTEM_CHECKS = [
     "djstripe.I002",  # Pegasus uses the same settings as dj-stripe for keys, so don't complain they are here

@@ -1,0 +1,102 @@
+import logging
+import requests
+from celery import shared_task
+from django.conf import settings
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
+from .models import Alert
+
+logger = logging.getLogger("iot_platform")
+
+
+@shared_task
+def dispatch_alert_email_task(alert_id):
+    try:
+        alert = Alert.objects.get(id=alert_id)
+    except Alert.DoesNotExist:
+        logger.error(f"Alert {alert_id} not found for email dispatch.")
+        return
+
+    recipient_list = [member.email for member in alert.rule.recipients.all() if member.email]
+    if not recipient_list:
+        logger.warning(f"No email recipients configured for alert {alert.id}")
+        return
+
+    subject = f"[{alert.rule.severity.upper()}] Nodeflow Alert: {alert.rule.name}"
+    context = {
+        "alert": alert,
+        "rule": alert.rule,
+        "device": alert.device,
+        "site": alert.device.site,
+        "timestamp": alert.triggered_at,
+        "dashboard_url": f"{settings.SITE_URL}/a/{alert.team.slug}/alerts/",
+    }
+    html_message = render_to_string("alerts/email/alert_notification.html", context)
+    plain_message = render_to_string("alerts/email/alert_notification.txt", context)
+
+    try:
+        send_mail(
+            subject=subject,
+            message=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=recipient_list,
+            html_message=html_message,
+            fail_silently=False,
+        )
+        logger.info(f"Alert email sent asynchronously to {len(recipient_list)} recipients.")
+    except Exception as e:
+        logger.error(f"Failed to send alert email for alert {alert.id}: {e}")
+
+
+@shared_task
+def dispatch_alert_whatsapp_task(alert_id):
+    try:
+        alert = Alert.objects.get(id=alert_id)
+    except Alert.DoesNotExist:
+        logger.error(f"Alert {alert_id} not found for WhatsApp dispatch.")
+        return
+
+    phone_numbers = [m.phone_number for m in alert.rule.recipients.all() if m.phone_number]
+    if not phone_numbers:
+        logger.warning(f"No WhatsApp recipients configured for alert {alert.id}")
+        return
+
+    message_text = (
+        f"🚨 *NODEFLOW ALERT*\n"
+        f"Rule: {alert.rule.name}\n"
+        f"Device: {alert.device.name}\n"
+        f"Value: {alert.trigger_value}\n"
+        f"Severity: {alert.rule.severity.upper()}\n"
+        f"Time: {alert.triggered_at.strftime('%H:%M:%S')}"
+    )
+
+    if getattr(settings, "WHATSAPP_PROVIDER", "mock") == "mock":
+        logger.info(f"| MOCK WHATSAPP SEND | Recipients: {phone_numbers} | Message: {message_text}")
+        return
+
+    phone_id = settings.WHATSAPP_PHONE_NUMBER_ID
+    access_token = settings.WHATSAPP_ACCESS_TOKEN
+    if not phone_id or not access_token:
+        logger.warning("WhatsApp Meta API configuration missing (phone_id/access_token).")
+        return
+
+    url = f"https://graph.facebook.com/v19.0/{phone_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+
+    for number in phone_numbers:
+        clean_number = "".join(filter(str.isdigit, number))
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": clean_number,
+            "type": "text",
+            "text": {"body": message_text},
+        }
+        try:
+            requests.post(url, headers=headers, json=payload, timeout=5).raise_for_status()
+            logger.info(f"WhatsApp alert successfully dispatched to {clean_number}")
+        except Exception as e:
+            logger.error(f"WhatsApp Meta API failed for {number}: {e}")

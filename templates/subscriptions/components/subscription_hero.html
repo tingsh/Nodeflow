@@ -1,14 +1,21 @@
 {% load static %}
-<div class="pg-columns pg-columns-reversed my-2">
-  <div class="pg-column-one-quarter">
-    <img class="img-fluid" src="{% static 'images/undraw/undraw_savings.svg' %}" alt="Upgrade to Save">
+<div class="relative py-12 text-center isolate">
+  <!-- Glowing subtle background effect -->
+  <div class="absolute inset-x-0 top-[-10rem] -z-10 transform-gpu overflow-hidden blur-3xl sm:top-[-20rem]" aria-hidden="true">
+    <div class="relative left-1/2 -z-10 aspect-[1155/678] w-[36.125rem] max-w-none -translate-x-1/2 rotate-[30deg] bg-gradient-to-tr from-[#3b82f6] to-[#6366f1] opacity-20 sm:left-[calc(50%-40rem)] sm:w-[72.1875rem]" style="clip-path: polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)"></div>
   </div>
-  <div class="pg-column">
-    <h1 class="pg-title">My Subscription</h1>
-    <p class="pg-subtitle">You're not currently subscribed to a plan.</p>
-    <p class="my-2">
-      Choose the plan that best fits your needs below to gain access
-      to additional functionality on our site!
+
+  <div class="mx-auto max-w-2xl">
+    <div class="mb-4 flex justify-center">
+      <span class="inline-flex items-center rounded-full bg-blue-500/10 px-3 py-1 text-sm font-semibold text-blue-400 ring-1 ring-inset ring-blue-500/20">
+        Upgrade Available
+      </span>
+    </div>
+    <h1 class="text-4xl font-extrabold tracking-tight sm:text-6xl text-slate-100">
+      Unlock <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-500">Nodeflow Cloud</span>
+    </h1>
+    <p class="mt-6 text-lg leading-8 text-slate-400">
+      Choose the plan that best fits your operational needs. Scale your IoT infrastructure seamlessly with Nodeflow Cloud.
     </p>
   </div>
 </div>
