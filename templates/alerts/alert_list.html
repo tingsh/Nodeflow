@@ -10,6 +10,17 @@
         </div>
     </div>
 
+    <!-- Navigation Tabs -->
+    <div class="tabs tabs-boxed mb-6 bg-gray-100 dark:bg-gray-900/60 inline-flex p-1.5 rounded-2xl border border-gray-250/20">
+        <a href="{% url 'web_team:alerts:alert_list' request.team.slug %}" class="tab rounded-xl font-black text-xs uppercase tracking-wider tab-active bg-white dark:bg-gray-800 shadow-sm text-indigo-600 dark:text-indigo-400">
+            {% translate "Triggered Alerts" %}
+        </a>
+        <a href="{% url 'web_team:alerts:rule_list' request.team.slug %}" class="tab rounded-xl font-black text-xs uppercase tracking-wider text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+            {% translate "Monitoring Rules" %}
+        </a>
+    </div>
+
+
     <div class="bg-white dark:bg-gray-800 shadow rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
         {% if alerts %}
         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -45,113 +56,6 @@
         </div>
         {% endif %}
     </div>
-
-    <!-- Alert Rules Section -->
-    <div class="mt-12 mb-8">
-        <div class="flex items-center justify-between mb-6">
-            <div>
-                <h2 class="text-xl font-bold text-gray-900 dark:text-white">Active Monitoring Rules</h2>
-                <p class="text-sm text-gray-500 mt-1">The logic currently governing your industrial fleet.</p>
-            </div>
-            <div class="flex items-center space-x-3">
-                <div class="relative group">
-                    <i class="fa fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
-                    <input type="text" id="rule-search" placeholder="Search rules..." 
-                        class="bg-gray-100 dark:bg-gray-900 border-none rounded-xl py-2 pl-10 pr-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 w-48 transition-all focus:w-64 outline-none"
-                        onkeyup="filterRules()">
-                </div>
-                {% if can_manage %}
-                <a href="{% url 'web_team:alerts:rule_create' request.team.slug %}" class="btn btn-primary btn-sm rounded-xl font-bold shadow-lg shadow-indigo-500/20 px-6">
-                    <i class="fa fa-plus mr-2"></i> CREATE RULE
-                </a>
-                {% endif %}
-            </div>
-        </div>
-
-        <div id="rule-list" class="space-y-4">
-            {% for rule in rules %}
-            <div class="rule-item bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 hover:shadow-md transition-all relative overflow-hidden group flex flex-col md:flex-row md:items-center justify-between gap-4">
-                {% if not rule.is_active %}
-                <div class="absolute inset-0 bg-gray-50/50 dark:bg-gray-900/50 backdrop-blur-[1px] z-10 flex items-center justify-center">
-                    <span class="bg-gray-800 text-white text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest">Rule Paused</span>
-                </div>
-                {% endif %}
-
-                <!-- Left: Identity -->
-                <div class="flex items-center space-x-4 flex-1">
-                    <div class="p-3 bg-indigo-50 dark:bg-indigo-900/40 rounded-xl text-indigo-600 dark:text-indigo-400">
-                        <i class="fa fa-bell"></i>
-                    </div>
-                    <div>
-                        <h3 class="font-bold text-gray-900 dark:text-white leading-tight">{{ rule.name }}</h3>
-                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                            {% if rule.device %}{{ rule.device.name }}{% elif rule.site %}{{ rule.site.name }}{% else %}—{% endif %}
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Center: Logic -->
-                <div class="flex-1 md:px-8">
-                    <div class="bg-gray-50 dark:bg-gray-900/50 rounded-xl px-4 py-2 border border-gray-100 dark:border-gray-700 inline-flex items-center space-x-3">
-                        <span class="text-[9px] font-black text-gray-400 uppercase tracking-widest">Threshold</span>
-                        <span class="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                            {{ rule.telemetry_key }} {{ rule.get_condition_display }} {{ rule.threshold }}
-                        </span>
-                    </div>
-                </div>
-
-                <!-- Right: Stats & Actions -->
-                <div class="flex items-center justify-between md:justify-end space-x-6 min-w-[200px]">
-                    <div class="flex items-center space-x-4">
-                        <div class="flex space-x-2 text-xs">
-                            {% if rule.notify_email %}<i class="fa fa-envelope text-green-500" title="Email Enabled"></i>{% endif %}
-                            {% if rule.notify_whatsapp %}<i class="fa-brands fa-whatsapp text-green-500" title="WhatsApp Enabled"></i>{% endif %}
-                        </div>
-                        <span class="text-[9px] font-black text-gray-400 uppercase tracking-widest px-2 py-1 bg-gray-100 dark:bg-gray-700/50 rounded-lg">
-                            {{ rule.get_severity_display|upper }}
-                        </span>
-                    </div>
-
-                    {% if can_manage %}
-                    <div class="flex items-center space-x-1">
-                        <a href="{% url 'web_team:alerts:rule_update' request.team.slug rule.pk %}" class="btn btn-ghost btn-sm btn-square text-gray-400 hover:text-indigo-500">
-                            <i class="fa fa-edit"></i>
-                        </a>
-                        <a href="{% url 'web_team:alerts:rule_delete' request.team.slug rule.pk %}" class="btn btn-ghost btn-sm btn-square text-gray-400 hover:text-red-500">
-                            <i class="fa fa-trash"></i>
-                        </a>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-            {% empty %}
-            <div class="py-16 text-center bg-gray-50 dark:bg-gray-900/30 rounded-3xl border border-dashed border-gray-200 dark:border-gray-700">
-                <div class="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400 opacity-50">
-                    <i class="fa fa-bell-slash text-xl"></i>
-                </div>
-                <h3 class="font-bold text-gray-900 dark:text-white">Industrial Logic Empty</h3>
-                <p class="text-xs text-gray-400 mt-1">Configure rules to proactively monitor your hardware.</p>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
 </div>
-
-<script>
-function filterRules() {
-    const input = document.getElementById('rule-search');
-    const filter = input.value.toLowerCase();
-    const list = document.getElementById('rule-list');
-    const items = list.getElementsByClassName('rule-item');
-
-    for (let i = 0; i < items.length; i++) {
-        const text = items[i].textContent.toLowerCase();
-        if (text.indexOf(filter) > -1) {
-            items[i].style.display = "";
-        } else {
-            items[i].style.display = "none";
-        }
-    }
-}
-</script>
 {% endblock %}
+

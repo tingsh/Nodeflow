@@ -234,6 +234,39 @@
             </div>
         </div>
 
+        <!-- Step 4: Maintenance Escalation -->
+        <div class="bg-base-100 rounded-3xl border border-base-content/5 shadow-sm p-8" x-data="{ ticketEnabled: {% if form.create_maintenance_ticket.value %}true{% else %}false{% endif %} }">
+            <div class="flex items-center space-x-3 mb-8">
+                <div class="w-8 h-8 rounded-full bg-indigo-500 text-white flex items-center justify-center font-black text-xs">4</div>
+                <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">Maintenance Escalation</h3>
+            </div>
+            
+            <div class="space-y-6">
+                <label class="flex items-center justify-between p-4 bg-base-100 border border-base-content/5 rounded-2xl hover:border-indigo-500/30 transition-all cursor-pointer group">
+                    <div class="flex items-center space-x-4">
+                        <div class="p-3 bg-base-200 rounded-xl group-hover:bg-indigo-500/10 transition-all">
+                            <i class="fa-solid fa-screwdriver-wrench text-base-content/40 group-hover:text-indigo-500"></i>
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-bold text-base-content">Auto-Create Maintenance Ticket</h4>
+                            <p class="text-[10px] text-base-content/40 uppercase font-black">Escalate to Kanban board when this alert triggers</p>
+                        </div>
+                    </div>
+                    <input type="checkbox" name="create_maintenance_ticket" class="checkbox checkbox-primary" :checked="ticketEnabled" @change="ticketEnabled = $el.checked">
+                </label>
+
+                <div x-show="ticketEnabled" x-transition class="mt-4" style="display: none;">
+                    <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Checklist Template</label>
+                    <select name="maintenance_template" class="select select-bordered w-full rounded-2xl font-bold">
+                        {% for choice in form.maintenance_template.field.choices %}
+                            <option value="{{ choice.0 }}" {% if form.maintenance_template.value|slugify == choice.0|slugify %}selected{% endif %}>{{ choice.1 }}</option>
+                        {% endfor %}
+                    </select>
+                    <p class="text-[10px] text-base-content/30 mt-2">Choose a standard checklist template to automatically attach to the work order. Technicians will see this procedure when inspecting the machine.</p>
+                </div>
+            </div>
+        </div>
+
         <!-- Sticky Actions -->
         <div class="sticky bottom-0 bg-white dark:bg-gray-800 p-6 border-t border-gray-100 dark:border-gray-700 -mx-8 sm:-mx-8 mt-8 z-20 flex items-center justify-end space-x-4 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] rounded-b-3xl">
             <a href="{% url 'web_team:alerts:alert_list' request.team.slug %}" class="btn btn-ghost rounded-2xl font-black text-xs uppercase tracking-widest">Cancel</a>

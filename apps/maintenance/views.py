@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -7,8 +8,8 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import PermissionRequiredMixin
 
-from .forms import MaintenanceTicketForm, PreventiveScheduleForm, TicketCommentForm, TicketTemplateForm
-from .models import MaintenanceTicket, PreventiveSchedule, TicketTemplate
+from .forms import MaintenanceTicketForm, PreventiveScheduleForm, TicketCommentForm, TicketTemplateForm, SharedTicketLinkForm
+from .models import MaintenanceTicket, PreventiveSchedule, TicketTemplate, SharedTicketLink
 
 # --- Tickets ---
 
@@ -68,6 +69,8 @@ class TicketDetailView(PermissionRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "maintenance"
         context["comment_form"] = TicketCommentForm()
+        context["shared_links"] = SharedTicketLink.objects.filter(ticket=self.object, is_active=True).order_by("-created_at")
+        context["share_form"] = SharedTicketLinkForm()
         return context
 
 
@@ -184,6 +187,30 @@ class ScheduleCreateView(PermissionRequiredMixin, CreateView):
         return super().form_valid(form)
 
     def get_success_url(self):
+        return reverse("web_team:maintenance:schedule_list", args=[self.request.team.slug])
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["active_tab"] = "maintenance"
+        return context
+
+
+class ScheduleUpdateView(PermissionRequiredMixin, UpdateView):
+    permission_required = "manage_maintenance"
+    model = PreventiveSchedule
+    form_class = PreventiveScheduleForm
+    template_name = "maintenance/schedule_form.html"
+
+    def get_queryset(self):
+        return PreventiveSchedule.objects.filter(team=self.request.team)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["team"] = self.request.team
+        return kwargs
+
+    def get_success_url(self):
+        messages.success(self.request, "Preventive Schedule updated successfully.")
         return reverse("web_team:maintenance:schedule_list", args=[self.request.team.slug])
 
     def get_context_data(self, **kwargs):
@@ -320,3 +347,77 @@ def toggle_checklist_item(request, team_slug, pk, item_index):
         return HttpResponse(str(e), status=400)
 
     return redirect("web_team:maintenance:ticket_detail", team_slug=request.team.slug, pk=ticket.id)
+
+
+@require_POST
+@login_and_team_required
+def generate_shared_link(request, team_slug, pk):
+    """Generate a public shared compliance link for a ticket."""
+    from apps.teams.roles import has_permission
+    if not has_permission(request.user, request.team, "manage_maintenance"):
+        return HttpResponse("Forbidden", status=403)
+
+    ticket = get_object_or_404(MaintenanceTicket, team=request.team, pk=pk)
+    form = SharedTicketLinkForm(request.POST)
+    if form.is_valid():
+        link = form.save(commit=False)
+        link.ticket = ticket
+        link.team = request.team
+        link.created_by = request.user
+        link.save()
+        messages.success(request, "Compliance shareable link generated.")
+    else:
+        for error_list in form.errors.values():
+            for error in error_list:
+                messages.error(request, error)
+                
+    return redirect("web_team:maintenance:ticket_detail", team_slug=request.team.slug, pk=ticket.id)
+
+
+@require_POST
+@login_and_team_required
+def revoke_shared_link(request, team_slug, pk, link_pk):
+    """Deactivate/Revoke a shared compliance link."""
+    from apps.teams.roles import has_permission
+    if not has_permission(request.user, request.team, "manage_maintenance"):
+        return HttpResponse("Forbidden", status=403)
+
+    link = get_object_or_404(SharedTicketLink, team=request.team, pk=link_pk, ticket_id=pk)
+    link.is_active = False
+    link.save()
+    messages.success(request, "Shareable link revoked successfully.")
+    return redirect("web_team:maintenance:ticket_detail", team_slug=request.team.slug, pk=pk)
+
+
+@require_POST
+@login_and_team_required
+def trigger_preventive_schedule(request, team_slug, pk):
+    """
+    Manually triggers a PreventiveSchedule to generate a MaintenanceTicket immediately,
+    and advances its next due date by one interval.
+    """
+    from apps.teams.roles import has_permission
+    if not has_permission(request.user, request.team, "manage_maintenance"):
+        from django.http import HttpResponseForbidden
+        return HttpResponseForbidden()
+
+    schedule = get_object_or_404(PreventiveSchedule, team=request.team, pk=pk)
+
+    current_val = None
+    if schedule.is_usage_based:
+        from apps.telemetry.services import get_latest_telemetry_value
+        current_val = get_latest_telemetry_value(schedule.device, schedule.usage_telemetry_key)
+        if current_val is not None:
+            try:
+                schedule.last_trigger_usage_value = float(current_val)
+                schedule.save(update_fields=["last_trigger_usage_value"])
+            except (ValueError, TypeError):
+                pass
+
+    from .services import create_pm_ticket, advance_schedule_due_date
+    ticket = create_pm_ticket(schedule, current_usage=current_val)
+    advance_schedule_due_date(schedule)
+
+    messages.success(request, f"Generated ticket TKT-{ticket.id} successfully.")
+    return redirect("web_team:maintenance:ticket_detail", team_slug=request.team.slug, pk=ticket.id)
+

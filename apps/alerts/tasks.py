@@ -143,3 +143,38 @@ def dispatch_alert_webhook_task(alert_id, is_resolved=False):
         logger.info(f"Alert Webhook successfully dispatched to {url} (is_resolved={is_resolved})")
     except Exception as e:
         logger.error(f"Alert Webhook dispatch failed for alert {alert.id}: {e}")
+
+
+@shared_task
+def send_whatsapp_message_task(phone_number, message_text):
+    """
+    Sends a general WhatsApp text message using Meta API or mock logs.
+    """
+    if getattr(settings, "WHATSAPP_PROVIDER", "mock") == "mock":
+        logger.info(f"| MOCK WHATSAPP SEND | Recipient: {phone_number} | Message: {message_text}")
+        return
+
+    phone_id = getattr(settings, "WHATSAPP_PHONE_NUMBER_ID", None)
+    access_token = getattr(settings, "WHATSAPP_ACCESS_TOKEN", None)
+    if not phone_id or not access_token:
+        logger.warning("WhatsApp Meta API configuration missing (phone_id/access_token).")
+        return
+
+    url = f"https://graph.facebook.com/v19.0/{phone_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+    clean_number = "".join(filter(str.isdigit, phone_number))
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": clean_number,
+        "type": "text",
+        "text": {"body": message_text},
+    }
+    try:
+        requests.post(url, headers=headers, json=payload, timeout=5).raise_for_status()
+        logger.info(f"WhatsApp message successfully sent to {clean_number}")
+    except Exception as e:
+        logger.error(f"WhatsApp Meta API failed for {phone_number}: {e}")

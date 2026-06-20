@@ -1,0 +1,259 @@
+{% extends "web/base.html" %}
+{% load i18n %}
+{% load form_tags %}
+
+{% block body %}
+<div class="min-h-screen bg-gray-900 font-sans flex flex-col">
+    <!-- Public Header -->
+    <header class="bg-gray-800 shadow-sm border-b border-gray-800 py-4">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="h-8 w-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-md shadow-indigo-600/30">
+                    {{ link.team.name|make_list|first|upper }}
+                </div>
+                <div>
+                    <h1 class="text-lg font-black text-white leading-none">{{ link.team.name }}</h1>
+                    <span class="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{% translate "Guest Compliance Portal" %}</span>
+                </div>
+            </div>
+            <div class="text-xs font-bold text-gray-400 bg-gray-900/60 px-3 py-1.5 rounded-full border border-gray-700/30">
+                TKT-{{ ticket.id }}
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+        <!-- Error & Success Messages Banner -->
+        {% if messages %}
+        <div class="mb-6 space-y-2">
+            {% for message in messages %}
+            <div class="alert {% if message.tags == 'error' %}alert-error text-red-200 bg-red-950/40 border-red-800{% else %}alert-success text-green-200 bg-green-950/40 border-green-800{% endif %} rounded-2xl border shadow-lg flex items-start space-x-3 p-4">
+                <i class="fa {% if message.tags == 'error' %}fa-circle-exclamation{% else %}fa-circle-check{% endif %} mt-0.5 text-lg"></i>
+                <span class="text-sm font-semibold">{{ message }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Left/Main Column: Ticket details, Checklist, Comments -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Ticket details Card -->
+                <div class="bg-gray-800 border border-gray-800/80 shadow-md rounded-2xl overflow-hidden">
+                    <div class="px-6 py-4 border-b border-gray-700/60 bg-gray-800/40">
+                        <h2 class="text-sm font-black text-gray-400 uppercase tracking-wider">{{ ticket.title }}</h2>
+                    </div>
+                    <div class="p-6 text-sm text-gray-300 whitespace-pre-wrap leading-relaxed font-medium">
+                        {{ ticket.description|default:"No description provided." }}
+                    </div>
+                </div>
+
+                <!-- Checklist Card -->
+                <div class="bg-gray-800 border border-gray-800/80 shadow-md rounded-2xl overflow-hidden">
+                    <div class="px-6 py-4 border-b border-gray-700/60 bg-gray-800/40">
+                        <h2 class="text-sm font-black text-gray-400 uppercase tracking-wider">{% translate "Procedural Checklist" %}</h2>
+                    </div>
+                    <div class="p-6">
+                        {% include "maintenance/partials/public_checklist.html" %}
+                    </div>
+                </div>
+
+                <!-- Comments & File Upload Activity Feed -->
+                <div class="bg-gray-800 border border-gray-800/80 shadow-md rounded-2xl overflow-hidden">
+                    <div class="px-6 py-4 border-b border-gray-700/60 bg-gray-800/40">
+                        <h2 class="text-sm font-black text-gray-400 uppercase tracking-wider">{% translate "Updates & Compliance Uploads" %}</h2>
+                    </div>
+                    <div class="p-6">
+                        <div class="flow-root">
+                            <ul role="list" class="-mb-8">
+                                {% for comment in comments %}
+                                <li>
+                                    <div class="relative pb-8">
+                                        {% if not forloop.last %}
+                                        <span class="absolute left-5 top-5 -ml-px h-full w-0.5 bg-gray-700/40" aria-hidden="true"></span>
+                                        {% endif %}
+                                        <div class="relative flex items-start space-x-3">
+                                            {% if comment.is_system_generated %}
+                                                <div class="relative px-1.5">
+                                                    <div class="flex h-7 w-7 items-center justify-center rounded-full bg-gray-900 text-gray-400 border border-gray-700/50 shadow-sm">
+                                                        <i class="fa fa-info-circle text-xs"></i>
+                                                    </div>
+                                                </div>
+                                                <div class="min-w-0 flex-1 py-1.5">
+                                                    <div class="text-xs text-gray-400 font-semibold italic">
+                                                        {{ comment.content }}
+                                                        <span class="whitespace-nowrap ml-1 text-[10px] text-gray-500 font-normal">• {{ comment.created_at|timesince }} ago</span>
+                                                    </div>
+                                                </div>
+                                            {% else %}
+                                                <div class="relative">
+                                                    <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900 border border-gray-700 text-indigo-400 font-black text-sm shadow-sm">
+                                                        {{ comment.guest_name|default:"Contractor"|make_list|first|upper }}
+                                                    </div>
+                                                </div>
+                                                <div class="min-w-0 flex-1">
+                                                    <div class="bg-gray-900/40 rounded-2xl p-4 border border-gray-700/60">
+                                                        <div class="flex justify-between items-center mb-1">
+                                                            <span class="text-sm font-bold text-gray-200">{{ comment.guest_name|default:"External Contractor" }}</span>
+                                                            <span class="text-xs text-gray-500">{{ comment.created_at|timesince }} ago</span>
+                                                        </div>
+                                                        <p class="text-sm leading-relaxed text-gray-300 whitespace-pre-wrap mt-2 font-medium">
+                                                            {{ comment.content }}
+                                                        </p>
+                                                        
+                                                        {% if comment.attachment %}
+                                                        <div class="mt-4 p-3 rounded-xl bg-gray-900 border border-gray-700/40 flex items-center justify-between">
+                                                            <div class="flex items-center space-x-3 min-w-0">
+                                                                <i class="fa fa-paperclip text-indigo-400 text-sm"></i>
+                                                                <span class="text-xs font-semibold text-gray-300 truncate" title="{{ comment.attachment.name }}">
+                                                                    {{ comment.attachment.name|slice:"24:" }}
+                                                                </span>
+                                                            </div>
+                                                            <a href="{{ comment.attachment.url }}" download class="btn btn-xs btn-outline border-gray-700 hover:bg-gray-800 text-gray-300">
+                                                                <i class="fa fa-download mr-1"></i> {% translate "Download" %}
+                                                            </a>
+                                                        </div>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </li>
+                                {% empty %}
+                                <p class="text-sm text-gray-500 italic py-4 text-center">{% translate "No uploads or comments submitted yet." %}</p>
+                                {% endfor %}
+                            </ul>
+                        </div>
+
+                        <!-- Add Comment / Upload Attachment Form -->
+                        <div class="mt-8 pt-6 border-t border-gray-700/60">
+                            <form method="post" action="{% url 'maintenance_public:public_add_comment' link.token %}" enctype="multipart/form-data" class="space-y-4">
+                                {% csrf_token %}
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="label font-bold text-xs uppercase text-gray-400">{% translate "Your Name / Company" %} <span class="text-red-500">*</span></label>
+                                        {{ comment_form.guest_name }}
+                                    </div>
+                                    <div>
+                                        <label class="label font-bold text-xs uppercase text-gray-400">{% translate "Photo / Signed Checklist (JPG, PNG, PDF)" %}</label>
+                                        {{ comment_form.attachment }}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="label font-bold text-xs uppercase text-gray-400">{% translate "Work Notes / Activity Logs" %} <span class="text-red-500">*</span></label>
+                                    {{ comment_form.content }}
+                                </div>
+
+                                <div class="flex justify-end pt-2">
+                                    <button type="submit" class="btn btn-primary bg-indigo-600 border-indigo-600 hover:bg-indigo-700 text-white w-full sm:w-auto shadow-md shadow-indigo-600/20">
+                                        <i class="fa fa-paper-plane mr-2 text-xs"></i> {% translate "Submit Activity Log" %}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Sidebar: Ticket Properties & Close/Resolve Action -->
+            <div class="space-y-6">
+                <!-- Properties card -->
+                <div class="bg-gray-800 border border-gray-800/80 shadow-md rounded-2xl p-6">
+                    <h3 class="text-sm font-black text-gray-400 uppercase tracking-wider mb-6">{% translate "Ticket Details" %}</h3>
+
+                    <dl class="space-y-5">
+                        <!-- Equipment -->
+                        <div>
+                            <dt class="text-xs font-bold text-gray-500 uppercase tracking-wider">{% translate "Equipment / Device" %}</dt>
+                            <dd class="mt-2 text-sm text-white font-bold flex items-center bg-gray-900/60 p-3 rounded-xl border border-gray-700/30">
+                                <i class="fa fa-microchip text-indigo-400 mr-2.5"></i>
+                                {{ ticket.device.name }}
+                            </dd>
+                        </div>
+
+                        <!-- Current Status -->
+                        <div>
+                            <dt class="text-xs font-bold text-gray-500 uppercase tracking-wider">{% translate "Current Status" %}</dt>
+                            <dd class="mt-2 flex items-center">
+                                <span class="h-2 w-2 rounded-full mr-2
+                                    {% if ticket.status == 'open' %}bg-yellow-400
+                                    {% elif ticket.status == 'in_progress' %}bg-blue-500
+                                    {% elif ticket.status == 'waiting' %}bg-purple-500
+                                    {% elif ticket.status == 'resolved' or ticket.status == 'closed' %}bg-green-500{% endif %}"></span>
+                                <span class="text-sm font-bold text-white uppercase">{{ ticket.get_status_display }}</span>
+                            </dd>
+                        </div>
+
+                        <!-- Priority -->
+                        <div>
+                            <dt class="text-xs font-bold text-gray-500 uppercase tracking-wider">{% translate "Priority" %}</dt>
+                            <dd class="mt-2 text-xs font-black uppercase">
+                                {% if ticket.priority == 'critical' %}
+                                    <span class="inline-flex items-center rounded-lg bg-red-950/40 px-2.5 py-1 text-red-400 border border-red-500/20"><i class="fa fa-fire mr-1.5"></i> {% translate "Critical" %}</span>
+                                {% elif ticket.priority == 'high' %}
+                                    <span class="inline-flex items-center rounded-lg bg-orange-955/40 px-2.5 py-1 text-orange-400 border border-orange-500/20">{% translate "High" %}</span>
+                                {% elif ticket.priority == 'medium' %}
+                                    <span class="inline-flex items-center rounded-lg bg-blue-955/40 px-2.5 py-1 text-blue-400 border border-blue-500/20">{% translate "Medium" %}</span>
+                                {% else %}
+                                    <span class="inline-flex items-center rounded-lg bg-gray-900 px-2.5 py-1 text-gray-400 border border-gray-700">{% translate "Low" %}</span>
+                                {% endif %}
+                            </dd>
+                        </div>
+
+                        <!-- Due Date -->
+                        <div>
+                            <dt class="text-xs font-bold text-gray-500 uppercase tracking-wider">{% translate "Compliance Deadline" %}</dt>
+                            <dd class="mt-2 text-sm text-gray-300 font-semibold flex items-center">
+                                <i class="fa fa-calendar-alt text-gray-500 mr-2"></i>
+                                {{ ticket.due_date|date:"F j, Y H:i"|default:"No deadline set" }}
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+
+                <!-- Resolve Work Action Card -->
+                <div class="bg-gray-800 border border-gray-800/80 shadow-md rounded-2xl p-6">
+                    <h3 class="text-sm font-black text-gray-400 uppercase tracking-wider mb-4">{% translate "Work Submission" %}</h3>
+                    <p class="text-xs text-gray-400 leading-relaxed mb-6">
+                        {% translate "Once the procedural checklist is complete and all compliance logsheets have been uploaded, submit this ticket as Resolved for the property manager to verify and close." %}
+                    </p>
+
+                    <form method="post" action="{% url 'maintenance_public:public_update_status' link.token %}" class="space-y-4">
+                        {% csrf_token %}
+                        <input type="hidden" name="status" value="resolved" />
+                        
+                        <button type="submit" class="btn btn-success w-full text-white font-black shadow-md shadow-green-600/10">
+                            <i class="fa fa-check-circle mr-2 text-lg"></i> {% translate "Mark Work as Resolved" %}
+                        </button>
+                    </form>
+                    
+                    <div class="mt-4 pt-4 border-t border-gray-700/60">
+                        <form method="post" action="{% url 'maintenance_public:public_update_status' link.token %}" class="flex items-center space-x-2">
+                            {% csrf_token %}
+                            <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">{% translate "Or set status:" %}</span>
+                            <select name="status" class="select select-xs select-bordered bg-gray-900 text-white font-bold" onchange="this.form.submit()">
+                                <option value="open" {% if ticket.status == 'open' %}selected{% endif %}>Open</option>
+                                <option value="in_progress" {% if ticket.status == 'in_progress' %}selected{% endif %}>In Progress</option>
+                                <option value="waiting" {% if ticket.status == 'waiting' %}selected{% endif %}>Waiting</option>
+                                <option value="resolved" {% if ticket.status == 'resolved' %}selected{% endif %}>Resolved</option>
+                            </select>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Nodeflow Branding Footer -->
+    <footer class="bg-gray-950 py-6 text-center mt-auto border-t border-gray-800/40">
+        <p class="text-xs text-gray-500">
+            Powered by <a href="#" class="font-bold text-white hover:text-indigo-400 transition-colors">Nodeflow IIoT Platform</a>
+        </p>
+        <p class="text-[9px] text-gray-650 mt-1 uppercase tracking-widest">Industrial Intelligence & SLA Compliance Portal</p>
+    </footer>
+</div>
+{% endblock %}

@@ -27,6 +27,7 @@ from wagtail.admin import urls as wagtailadmin_urls
 
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
+from apps.maintenance.webhooks import whatsapp_webhook
 
 @csrf_exempt
 def local_stripe_webhook(request):
@@ -75,6 +76,7 @@ urlpatterns = [
     path("admin/login/", RedirectView.as_view(pattern_name="account_login")),
     path("admin/", admin.site.urls),
     path("dashboard/", include("apps.dashboard.urls")),
+    path("shared/maintenance/", include("apps.maintenance.public_urls")),
     path("shared/", include("apps.dashboard.public_urls")),
     path("i18n/", include("django.conf.urls.i18n")),
     path("jsi18n/", JavaScriptCatalog.as_view(), name="javascript-catalog"),
@@ -96,6 +98,8 @@ urlpatterns = [
     # djstripe urls - for webhooks
     path("stripe/webhook/", local_stripe_webhook),
     path("stripe/", include("djstripe.urls", namespace="djstripe")),
+    # WhatsApp webhook
+    path("maintenance/whatsapp/webhook/", whatsapp_webhook, name="whatsapp_webhook"),
     # hijack urls for impersonation
     path("hijack/", include("hijack.urls", namespace="hijack")),
     # wagtail config

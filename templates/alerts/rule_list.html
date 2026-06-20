@@ -15,6 +15,17 @@
         </a>
     </div>
 
+    <!-- Navigation Tabs -->
+    <div class="tabs tabs-boxed mb-8 bg-gray-100 dark:bg-gray-900/60 inline-flex p-1.5 rounded-2xl border border-gray-250/20">
+        <a href="{% url 'web_team:alerts:alert_list' request.team.slug %}" class="tab rounded-xl font-black text-xs uppercase tracking-wider text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+            {% translate "Triggered Alerts" %}
+        </a>
+        <a href="{% url 'web_team:alerts:rule_list' request.team.slug %}" class="tab rounded-xl font-black text-xs uppercase tracking-wider tab-active bg-white dark:bg-gray-800 shadow-sm text-indigo-600 dark:text-indigo-400">
+            {% translate "Monitoring Rules" %}
+        </a>
+    </div>
+
+
     <!-- Rule Grid -->
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {% for rule in rules %}

@@ -339,3 +339,76 @@ def test_async_webhook_dispatch(mock_post):
     assert payload["alert_id"] == alert.id
     assert payload["status"] == "active"
 
+
+@pytest.mark.django_db
+def test_manual_escalate_alert_success():
+    client = Client()
+    team = Team.objects.create(name="Test Team", slug="test-team")
+    site = Site.objects.create(team=team, name="Test Site")
+    device = Device.objects.create(
+        team=team, site=site, name="Test Device", device_type="plc", protocol="modbus_tcp", status="online"
+    )
+    user = CustomUser.objects.create_user(username="m", email="m@test.com", password="pwd")
+    Membership.objects.create(team=team, user=user, role="admin")
+
+    rule = AlertRule.objects.create(
+        team=team,
+        name="Escalation Test Rule",
+        device=device,
+        telemetry_key="temp",
+        condition="gt",
+        threshold=50.0,
+        create_maintenance_ticket=False,
+        is_active=True
+    )
+    alert = Alert.objects.create(
+        team=team, rule=rule, device=device, trigger_value=55.0, status="active"
+    )
+
+    client.force_login(user)
+    url = reverse("web_team:alerts:escalate_alert", args=[team.slug, alert.id])
+
+    response = client.post(url)
+    assert response.status_code == 200
+
+    ticket = alert.ticket
+    assert ticket is not None
+    assert ticket.ticket_type == "reactive"
+    assert "Escalation Test Rule" in ticket.title
+    assert b"TKT-" in response.content
+
+
+@pytest.mark.django_db
+def test_manual_escalate_alert_permission_denied():
+    client = Client()
+    team = Team.objects.create(name="Test Team", slug="test-team")
+    site = Site.objects.create(team=team, name="Test Site")
+    device = Device.objects.create(
+        team=team, site=site, name="Test Device", device_type="plc", protocol="modbus_tcp", status="online"
+    )
+    user = CustomUser.objects.create_user(username="v", email="v@test.com", password="pwd")
+    from apps.teams.roles import ROLE_VIEWER
+    Membership.objects.create(team=team, user=user, role=ROLE_VIEWER)
+
+    rule = AlertRule.objects.create(
+        team=team,
+        name="Escalation Test Rule",
+        device=device,
+        telemetry_key="temp",
+        condition="gt",
+        threshold=50.0,
+        create_maintenance_ticket=False,
+        is_active=True
+    )
+    alert = Alert.objects.create(
+        team=team, rule=rule, device=device, trigger_value=55.0, status="active"
+    )
+
+    client.force_login(user)
+    url = reverse("web_team:alerts:escalate_alert", args=[team.slug, alert.id])
+
+    response = client.post(url)
+    assert response.status_code == 403
+    assert alert.ticket is None
+
+

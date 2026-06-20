@@ -1,0 +1,26 @@
+{% load i18n %}
+
+<div id="checklist-container" class="space-y-3">
+    {% for item in ticket.checklist_state %}
+        <div class="flex items-start space-x-3 p-3 rounded-xl border border-gray-200/55 dark:border-gray-800/80 bg-gray-50/50 dark:bg-gray-900/30 hover:bg-gray-100/30 dark:hover:bg-gray-900/50 transition-colors">
+            <input type="checkbox"
+                   {% if item.done %}checked{% endif %}
+                   hx-post="{% url 'maintenance_public:public_toggle_checklist_item' link.token forloop.counter0 %}"
+                   hx-target="#checklist-container"
+                   hx-swap="outerHTML"
+                   class="checkbox checkbox-primary checkbox-sm mt-0.5 rounded-md focus:ring-0" />
+            <div class="flex-1">
+                <span class="text-sm font-semibold {% if item.done %}line-through text-gray-400 dark:text-gray-500{% else %}text-gray-700 dark:text-gray-200{% endif %}">
+                    {{ item.task }}
+                </span>
+                {% if item.required %}
+                    <span class="text-[9px] font-extrabold uppercase text-red-500 bg-red-50 dark:bg-red-950/30 px-1.5 py-0.5 rounded ml-1.5 border border-red-200/30">{% translate "Required" %}</span>
+                {% endif %}
+            </div>
+        </div>
+    {% empty %}
+        <div class="text-center py-6 text-gray-400 dark:text-gray-500 text-sm italic border border-dashed border-gray-200 dark:border-gray-800/80 rounded-xl bg-white/20 dark:bg-gray-900/5">
+            <i class="fa fa-info-circle mr-1.5 opacity-75"></i> {% translate "No checklist tasks defined." %}
+        </div>
+    {% endfor %}
+</div>

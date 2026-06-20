@@ -8,6 +8,7 @@ from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 from apps.teams.decorators import require_permission
 from apps.teams.mixins import PermissionRequiredMixin
 
+from .forms import AlertRuleForm
 from .models import Alert, AlertRule
 
 
@@ -48,23 +49,13 @@ class AlertRuleListView(PermissionRequiredMixin, ListView):
 class AlertRuleCreateView(PermissionRequiredMixin, CreateView):
     permission_required = "manage_alerts"
     model = AlertRule
-    fields = [
-        "name",
-        "device",
-        "site",
-        "telemetry_key",
-        "condition",
-        "threshold",
-        "severity",
-        "is_active",
-        "notify_email",
-        "notify_whatsapp",
-        "notify_webhook",
-        "cooldown_minutes",
-        "duration_seconds",
-        "recipients",
-    ]
+    form_class = AlertRuleForm
     template_name = "alerts/rule_form.html"
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["team"] = self.request.team
+        return kwargs
 
     def form_valid(self, form):
         if (form.cleaned_data.get("notify_email") or form.cleaned_data.get("notify_whatsapp")) \
@@ -81,23 +72,13 @@ class AlertRuleCreateView(PermissionRequiredMixin, CreateView):
 class AlertRuleUpdateView(PermissionRequiredMixin, UpdateView):
     permission_required = "manage_alerts"
     model = AlertRule
-    fields = [
-        "name",
-        "device",
-        "site",
-        "telemetry_key",
-        "condition",
-        "threshold",
-        "severity",
-        "is_active",
-        "notify_email",
-        "notify_whatsapp",
-        "notify_webhook",
-        "cooldown_minutes",
-        "duration_seconds",
-        "recipients",
-    ]
+    form_class = AlertRuleForm
     template_name = "alerts/rule_form.html"
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["team"] = self.request.team
+        return kwargs
 
     def form_valid(self, form):
         if (form.cleaned_data.get("notify_email") or form.cleaned_data.get("notify_whatsapp")) \
@@ -148,3 +129,23 @@ def search_team_members(request, team_slug):
     )[:10]
 
     return render(request, "alerts/partials/user_search_results.html", {"users": users})
+
+
+@require_permission("manage_maintenance")
+@require_POST
+def escalate_alert_to_ticket(request, team_slug, alert_id):
+    """
+    HTMX POST view to manually escalate an alert into a reactive maintenance ticket.
+    Uses the auto_create_ticket service with force=True.
+    """
+    from apps.alerts.models import Alert
+    from apps.maintenance.services import auto_create_ticket
+
+    alert = get_object_or_404(Alert, id=alert_id, team=request.team)
+    
+    ticket = alert.ticket
+    if not ticket:
+        auto_create_ticket(alert, force=True)
+
+    return render(request, "alerts/partials/alert_row.html", {"alert": alert})
+

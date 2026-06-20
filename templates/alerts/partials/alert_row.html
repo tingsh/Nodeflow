@@ -21,24 +21,47 @@
         </span>
     </td>
     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-        {% has_perm 'acknowledge_alerts' as can_ack %}
-        {% if alert.status == 'active' %}
-            {% if can_ack %}
-            <button 
-                hx-post="{% url 'web_team:alerts:acknowledge_alert' request.team.slug alert.id %}"
-                hx-target="#alert-row-{{ alert.id }}"
-                hx-swap="outerHTML"
-                class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 font-semibold"
-            >
-                Acknowledge
-            </button>
-            {% else %}
-            <span class="text-xs text-gray-400 italic">Pending Ack</span>
+        <div class="flex items-center justify-end space-x-3">
+            <!-- Ticket linkage -->
+            {% if alert.ticket %}
+                <a href="{% url 'web_team:maintenance:ticket_detail' request.team.slug alert.ticket.id %}" class="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase bg-indigo-50/80 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 border border-indigo-100/30 hover:bg-indigo-100/60 transition-colors">
+                    <i class="fa fa-wrench mr-1"></i> TKT-{{ alert.ticket.id }} ({{ alert.ticket.get_status_display }})
+                </a>
+            {% elif alert.status != 'resolved' %}
+                {% has_perm 'manage_maintenance' as can_escalate %}
+                {% if can_escalate %}
+                    <button 
+                        hx-post="{% url 'web_team:alerts:escalate_alert' request.team.slug alert.id %}"
+                        hx-target="#alert-row-{{ alert.id }}"
+                        hx-swap="outerHTML"
+                        class="btn btn-xs btn-outline btn-error text-[10px] font-bold"
+                    >
+                        <i class="fa fa-chevron-circle-up mr-1 text-[9px]"></i> Escalate
+                    </button>
+                {% endif %}
             {% endif %}
-        {% elif alert.status == 'acknowledged' %}
-        <span class="text-xs text-gray-400">
-            Ack by {{ alert.acknowledged_by.get_full_name|default:alert.acknowledged_by.username }}
-        </span>
-        {% endif %}
+
+            <!-- Acknowledge action -->
+            {% has_perm 'acknowledge_alerts' as can_ack %}
+            {% if alert.status == 'active' %}
+                {% if can_ack %}
+                <button 
+                    hx-post="{% url 'web_team:alerts:acknowledge_alert' request.team.slug alert.id %}"
+                    hx-target="#alert-row-{{ alert.id }}"
+                    hx-swap="outerHTML"
+                    class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 font-semibold"
+                >
+                    Acknowledge
+                </button>
+                {% else %}
+                <span class="text-xs text-gray-400 italic">Pending Ack</span>
+                {% endif %}
+            {% elif alert.status == 'acknowledged' %}
+            <span class="text-xs text-gray-400">
+                Ack by {{ alert.acknowledged_by.get_full_name|default:alert.acknowledged_by.username }}
+            </span>
+            {% endif %}
+        </div>
     </td>
+
 </tr>

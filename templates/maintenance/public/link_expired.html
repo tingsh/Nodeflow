@@ -1,0 +1,25 @@
+{% extends "web/base.html" %}
+{% load i18n %}
+
+{% block body %}
+<div class="min-h-screen bg-gray-900 flex flex-col justify-center items-center px-4 sm:px-6 lg:px-8 font-sans">
+    <div class="max-w-md w-full text-center bg-gray-800 rounded-3xl p-8 border border-gray-700/60 shadow-xl">
+        <div class="flex items-center justify-center mb-6">
+            <div class="h-16 w-16 bg-red-950/40 rounded-2xl flex items-center justify-center text-red-500 border border-red-500/20 shadow-md">
+                <i class="fa fa-exclamation-triangle text-3xl"></i>
+            </div>
+        </div>
+        
+        <h2 class="text-2xl font-black text-white mb-2">{% translate "Link Expired or Inactive" %}</h2>
+        <p class="text-sm text-gray-400 mb-8 leading-relaxed">
+            {% translate "This shareable compliance link is no longer active. It may have expired, been manually revoked, or automatically deactivated after the work was marked as resolved." %}
+        </p>
+
+        <div class="pt-4 border-t border-gray-700/60">
+            <p class="text-[10px] text-gray-500 uppercase tracking-widest">
+                {% translate "Secure compliance link protected by Nodeflow" %}
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

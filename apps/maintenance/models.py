@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -44,6 +45,13 @@ class PreventiveSchedule(BaseTeamModel):
     usage_threshold = models.FloatField(default=0.0, blank=True, null=True)
     last_trigger_usage_value = models.FloatField(default=0.0, blank=True, null=True)
 
+    # Auto-assignment settings
+    assigned_to = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True, related_name="maintenance_schedules"
+    )
+    send_email_notification = models.BooleanField(default=True, verbose_name="Notify assignee via Email")
+    send_whatsapp_notification = models.BooleanField(default=False, verbose_name="Notify assignee via WhatsApp")
+
     def __str__(self):
         return f"PM: {self.title} on {self.device.name}"
 
@@ -88,6 +96,8 @@ class MaintenanceTicket(BaseTeamModel):
         max_length=100, blank=True, help_text=_("UUID of the alert that triggered this ticket, if any")
     )
     schedule_reference = models.ForeignKey(PreventiveSchedule, on_delete=models.SET_NULL, null=True, blank=True)
+    send_email_notification = models.BooleanField(default=True, verbose_name="Notify assignee via Email")
+    send_whatsapp_notification = models.BooleanField(default=False, verbose_name="Notify assignee via WhatsApp")
 
     # Process tracking
     due_date = models.DateTimeField(null=True, blank=True)
@@ -104,10 +114,21 @@ class MaintenanceTicket(BaseTeamModel):
     def __str__(self):
         return f"TKT-{self.id}: {self.title}"
 
+    @property
+    def alert(self):
+        if not self.alert_reference:
+            return None
+        from apps.alerts.models import Alert
+        try:
+            return Alert.objects.filter(id=self.alert_reference, team=self.team).first()
+        except (ValueError, TypeError):
+            return None
+
     def save(self, *args, **kwargs):
         if self.status in [self.StatusChoices.CLOSED, self.StatusChoices.RESOLVED] and not self.closed_at:
             self.closed_at = timezone.now()
         super().save(*args, **kwargs)
+
 
 
 class TicketComment(BaseTeamModel):
@@ -117,6 +138,39 @@ class TicketComment(BaseTeamModel):
     author = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
     content = models.TextField()
     is_system_generated = models.BooleanField(default=False)
+    attachment = models.FileField(
+        upload_to="maintenance/attachments/", 
+        blank=True, 
+        null=True,
+        help_text="Upload signed logsheets, checklist photos, or certificates (PDF, JPG, PNG up to 10MB)"
+    )
+    guest_name = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
-        return f"Comment by {self.author} on {self.ticket}"
+        if self.author:
+            return f"Comment by {self.author} on {self.ticket}"
+        return f"Comment by {self.guest_name or 'External Contractor'} on {self.ticket}"
+
+
+class SharedTicketLink(BaseTeamModel):
+    """A secure public shareable link to a maintenance ticket for guest contractors."""
+
+    ticket = models.ForeignKey(MaintenanceTicket, on_delete=models.CASCADE, related_name="shared_links")
+    token = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    is_active = models.BooleanField(default=True)
+    expires_at = models.DateTimeField(null=True, blank=True, help_text=_("Optional expiration date"))
+    auto_revoke_on_resolve = models.BooleanField(default=True, help_text=_("Deactivate this link automatically once the ticket is resolved"))
+    view_count = models.PositiveIntegerField(default=0)
+    last_viewed_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Share Link for TKT-{self.ticket.id} ({self.team.name})"
+
+    @property
+    def is_expired(self):
+        return bool(self.expires_at and timezone.now() > self.expires_at)
+
