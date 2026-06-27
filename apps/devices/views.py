@@ -2,7 +2,8 @@ import contextlib
 import json
 import logging
 
-from django.http import HttpResponse, JsonResponse
+from django.db import transaction
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse_lazy
 from django.utils import timezone
@@ -13,7 +14,7 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 from apps.teams.decorators import require_permission
 from apps.teams.mixins import PermissionRequiredMixin
 
-from .models import Device, DeviceTemplate, Gateway, GatewayConfig, RpcCommand, Site
+from .models import Device, DeviceTemplate, Gateway, GatewayConfig, GatewayInventory, RpcCommand, Site
 
 logger = logging.getLogger("iot_platform")
 
@@ -226,20 +227,42 @@ class GatewayDeleteView(PermissionRequiredMixin, DeleteView):
     model = Gateway
     template_name = "devices/gateway_confirm_delete.html"
 
-    def delete(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        # Deprovision MQTT credentials from Mosquitto before deleting the gateway
+    def form_valid(self, form):
+        confirmation_serial = self.request.POST.get("confirmation_serial", "").strip().upper()
+        expected_serial = self.object.serial_number.strip().upper()
+
+        if confirmation_serial != expected_serial:
+            form.add_error(None, "Type the gateway serial number exactly to confirm deletion.")
+            return self.form_invalid(form)
+
+        success_url = self.get_success_url()
+
+        with transaction.atomic():
+            inventory = GatewayInventory.objects.select_for_update().filter(gateway=self.object).first()
+            if inventory:
+                inventory.status = "unclaimed"
+                inventory.gateway = None
+                inventory.claimed_by_team = None
+                inventory.claimed_at = None
+                inventory.save(update_fields=["status", "gateway", "claimed_by_team", "claimed_at"])
+
+            # Deprovision MQTT credentials from Mosquitto before deleting the gateway.
+            # The gateway is still released if broker cleanup fails, matching the prior delete behavior.
+            self._deprovision_mqtt_credentials()
+            self.object.delete()
+
+        return HttpResponseRedirect(success_url)
+
+    def _deprovision_mqtt_credentials(self):
         try:
             from .mqtt_provisioning import deprovision_gateway_mqtt
 
             deprovision_gateway_mqtt(self.object)
         except Exception as e:
             logger.warning("Mosquitto deprovisioning failed for gateway %s: %s", self.object.serial_number, e)
-        return super().delete(request, *args, **kwargs)
 
     def get_success_url(self):
         return reverse_lazy("web_team:devices:gateway_list", args=[self.request.team.slug])
-
 
 # ── Gateway Management Views (Cloud ↔ Edge) ────────────────────────────
 

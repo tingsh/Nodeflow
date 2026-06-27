@@ -130,3 +130,130 @@ class EdgeConfigGenerationTest(TestCase):
         self.assertEqual(slave["port"], "/dev/ttyUSB0")
         self.assertEqual(slave["baudrate"], 19200)
         self.assertEqual(slave["unitId"], 7)
+
+
+class GatewayDeleteReleaseViewTest(TestCase):
+    def setUp(self):
+        from django.test import Client
+        from django.utils import timezone
+
+        from apps.teams.models import Membership
+        from apps.teams.roles import ROLE_ADMIN, ROLE_VIEWER
+        from apps.users.models import CustomUser
+
+        self.client = Client()
+        self.team = Team.objects.create(name="Acme", slug="acme")
+        self.other_team = Team.objects.create(name="Other", slug="other")
+        self.admin = CustomUser.objects.create(username="admin@example.com", email="admin@example.com")
+        self.viewer = CustomUser.objects.create(username="viewer@example.com", email="viewer@example.com")
+        Membership.objects.create(user=self.admin, team=self.team, role=ROLE_ADMIN)
+        Membership.objects.create(user=self.viewer, team=self.team, role=ROLE_VIEWER)
+        self.site = Site.objects.create(team=self.team, name="Factory")
+        self.other_site = Site.objects.create(team=self.other_team, name="Other Factory")
+        self.serial = "NF-DELETE-001"
+        self.claim_code = compute_claim_code(self.serial)
+        self.gateway = Gateway.objects.create(
+            team=self.team,
+            site=self.site,
+            name="Delete Me",
+            serial_number=self.serial,
+            access_token="delete-token-001",
+            mqtt_username=self.serial,
+            mqtt_password=self.claim_code,
+        )
+        self.inventory = GatewayInventory.objects.create(
+            serial_number=self.serial,
+            status="claimed",
+            gateway=self.gateway,
+            claimed_by_team=self.team,
+            claimed_at=timezone.now(),
+        )
+
+    def _delete_url(self):
+        from django.urls import reverse
+
+        return reverse("web_team:devices:gateway_delete", args=[self.team.slug, self.gateway.pk])
+
+    def test_admin_can_view_confirmation_page(self):
+        self.client.force_login(self.admin)
+
+        response = self.client.get(self._delete_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Deleting this gateway will disconnect any devices connected through it.")
+        self.assertContains(response, self.serial)
+
+    def test_viewer_cannot_delete_gateway(self):
+        self.client.force_login(self.viewer)
+
+        response = self.client.post(self._delete_url(), {"confirmation_serial": self.serial})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Gateway.objects.filter(pk=self.gateway.pk).exists())
+
+    @patch("apps.devices.mqtt_provisioning.deprovision_gateway_mqtt")
+    def test_missing_serial_confirmation_does_not_delete(self, mock_deprovision):
+        self.client.force_login(self.admin)
+
+        response = self.client.post(self._delete_url(), {"confirmation_serial": ""})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Type the gateway serial number exactly to confirm deletion.")
+        self.assertTrue(Gateway.objects.filter(pk=self.gateway.pk).exists())
+        mock_deprovision.assert_not_called()
+
+    @patch("apps.devices.mqtt_provisioning.deprovision_gateway_mqtt")
+    def test_wrong_serial_confirmation_does_not_delete(self, mock_deprovision):
+        self.client.force_login(self.admin)
+
+        response = self.client.post(self._delete_url(), {"confirmation_serial": "WRONG-SERIAL"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Type the gateway serial number exactly to confirm deletion.")
+        self.assertTrue(Gateway.objects.filter(pk=self.gateway.pk).exists())
+        mock_deprovision.assert_not_called()
+
+    @patch("apps.devices.mqtt_provisioning.deprovision_gateway_mqtt")
+    def test_matching_serial_deletes_gateway_and_releases_inventory(self, mock_deprovision):
+        device = Device.objects.create(
+            team=self.team,
+            site=self.site,
+            gateway=self.gateway,
+            name="Power Meter",
+            device_type="power_meter",
+            protocol="modbus_tcp",
+        )
+        self.client.force_login(self.admin)
+
+        response = self.client.post(self._delete_url(), {"confirmation_serial": self.serial.lower()})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Gateway.objects.filter(pk=self.gateway.pk).exists())
+        self.assertFalse(Device.objects.filter(pk=device.pk).exists())
+        mock_deprovision.assert_called_once()
+        self.assertEqual(mock_deprovision.call_args.args[0].serial_number, self.serial)
+        self.inventory.refresh_from_db()
+        self.assertEqual(self.inventory.status, "unclaimed")
+        self.assertIsNone(self.inventory.gateway)
+        self.assertIsNone(self.inventory.claimed_by_team)
+        self.assertIsNone(self.inventory.claimed_at)
+
+    @patch("apps.devices.mqtt_provisioning.provision_gateway_mqtt")
+    @patch("apps.devices.mqtt_provisioning.deprovision_gateway_mqtt")
+    def test_released_gateway_can_be_onboarded_by_another_team(self, mock_deprovision, mock_provision):
+        self.client.force_login(self.admin)
+        self.client.post(self._delete_url(), {"confirmation_serial": self.serial})
+
+        gateway = claim_gateway_for_team(
+            self.other_team, self.other_site, "Reclaimed Gateway", self.serial, self.claim_code
+        )
+
+        self.assertEqual(gateway.team, self.other_team)
+        self.assertEqual(gateway.site, self.other_site)
+        self.inventory.refresh_from_db()
+        self.assertEqual(self.inventory.status, "claimed")
+        self.assertEqual(self.inventory.claimed_by_team, self.other_team)
+        self.assertEqual(self.inventory.gateway, gateway)
+        mock_deprovision.assert_called_once()
+        self.assertEqual(mock_deprovision.call_args.args[0].serial_number, self.serial)
+        mock_provision.assert_called_once_with(gateway, self.claim_code)

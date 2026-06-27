@@ -1,25 +1,75 @@
-{% extends "web/app/app_base.html" %}
+{% extends 'web/app/app_base.html' %}
 {% block app %}
-<div class="px-4 sm:px-6 lg:px-8 py-8 max-w-lg mx-auto">
-    <div class="bg-white dark:bg-gray-800 shadow rounded-xl border border-gray-100 dark:border-gray-700 p-8 text-center">
-        <div class="inline-flex items-center justify-center p-4 bg-red-100 dark:bg-red-900/30 rounded-full mb-4">
-            <i class="fa fa-trash text-red-600 text-2xl"></i>
-        </div>
-        <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Delete Gateway</h2>
-        <p class="text-gray-500 mb-6">Are you sure you want to delete <strong>{{ object.name }}</strong>? All associated devices and telemetry data will be affected.</p>
-        <form method="post">
-            {% csrf_token %}
-            <div class="flex justify-center space-x-4">
-                <a href="{% url 'web_team:devices:gateway_list' request.team.slug %}"
-                   class="rounded-md bg-white dark:bg-gray-700 px-4 py-2 text-sm font-semibold text-gray-900 dark:text-white shadow-sm ring-1 ring-inset ring-gray-300">
-                    Cancel
-                </a>
-                <button type="submit"
-                        class="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500">
-                    Delete Gateway
-                </button>
+{% url 'web_team:devices:gateway_detail' request.team.slug object.pk as gateway_url %}
+<div class='px-4 sm:px-6 lg:px-8 py-8 max-w-2xl mx-auto'>
+    <div class='bg-white dark:bg-gray-800 shadow rounded-xl border border-red-200 dark:border-red-900/50 overflow-hidden'>
+        <div class='p-8'>
+            <div class='flex items-start gap-4'>
+                <div class='flex-shrink-0 inline-flex items-center justify-center p-4 bg-red-100 dark:bg-red-900/30 rounded-full'>
+                    <i class='fa fa-trash text-red-600 text-2xl'></i>
+                </div>
+                <div>
+                    <h2 class='text-xl font-bold text-gray-900 dark:text-white'>Delete Gateway</h2>
+                    <p class='mt-2 text-sm text-gray-600 dark:text-gray-300'>
+                        This releases the physical gateway so it can be onboarded again with its sticker claim code.
+                    </p>
+                </div>
             </div>
-        </form>
+
+            <div class='mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-200'>
+                <p class='font-semibold'>Deleting this gateway will disconnect any devices connected through it.</p>
+                <p class='mt-1'>Those devices will stop sending data until they are onboarded again.</p>
+            </div>
+
+            <dl class='mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2'>
+                <div class='rounded-lg bg-gray-50 p-4 dark:bg-gray-900/40'>
+                    <dt class='text-xs font-bold uppercase tracking-widest text-gray-500'>Gateway</dt>
+                    <dd class='mt-1 text-sm font-semibold text-gray-900 dark:text-white'>{{ object.name }}</dd>
+                </div>
+                <div class='rounded-lg bg-gray-50 p-4 dark:bg-gray-900/40'>
+                    <dt class='text-xs font-bold uppercase tracking-widest text-gray-500'>Serial Number</dt>
+                    <dd class='mt-1 text-sm font-mono font-semibold text-gray-900 dark:text-white'>{{ object.serial_number }}</dd>
+                </div>
+                <div class='rounded-lg bg-gray-50 p-4 dark:bg-gray-900/40'>
+                    <dt class='text-xs font-bold uppercase tracking-widest text-gray-500'>Site</dt>
+                    <dd class='mt-1 text-sm font-semibold text-gray-900 dark:text-white'>{{ object.site.name }}</dd>
+                </div>
+                <div class='rounded-lg bg-gray-50 p-4 dark:bg-gray-900/40'>
+                    <dt class='text-xs font-bold uppercase tracking-widest text-gray-500'>Connected Devices</dt>
+                    <dd class='mt-1 text-sm font-semibold text-gray-900 dark:text-white'>{{ object.devices.count }}</dd>
+                </div>
+            </dl>
+
+            <form method='post' class='mt-6 space-y-5'>
+                {% csrf_token %}
+                {% if form.non_field_errors %}
+                    <div class='rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-200'>
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
+                <div>
+                    <label for='confirmation_serial' class='block text-sm font-semibold text-gray-900 dark:text-white'>
+                        Type {{ object.serial_number }} to confirm deletion
+                    </label>
+                    <input id='confirmation_serial' name='confirmation_serial' type='text' required autocomplete='off'
+                           class='mt-2 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-sm text-gray-900 shadow-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white'
+                           aria-describedby='confirmation_help'>
+                    <p id='confirmation_help' class='mt-2 text-xs text-gray-500 dark:text-gray-400'>
+                        This extra step prevents accidental gateway deletion.
+                    </p>
+                </div>
+                <div class='flex flex-col-reverse gap-3 sm:flex-row sm:justify-end'>
+                    <a href='{{ gateway_url }}'
+                       class='inline-flex items-center justify-center rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:text-white dark:ring-gray-600 dark:hover:bg-gray-600'>
+                        Cancel
+                    </a>
+                    <button type='submit'
+                            class='inline-flex items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2'>
+                        <i class='fa fa-trash mr-2'></i> Delete Gateway
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 {% endblock %}
