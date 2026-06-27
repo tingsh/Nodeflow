@@ -26,6 +26,12 @@ class Gateway(BaseTeamModel):
         ("offline", _("Offline")),
         ("maintenance", _("Maintenance")),
     )
+    LIFECYCLE_CHOICES = (
+        ("claimed", _("Claimed")),
+        ("online", _("Online")),
+        ("commissioning", _("Commissioning")),
+        ("active", _("Active")),
+    )
     TLS_MODE_CHOICES = (
         ("none", _("None")),
         ("one-way", _("One-Way TLS")),
@@ -37,6 +43,7 @@ class Gateway(BaseTeamModel):
     serial_number = models.CharField(max_length=100, unique=True)
     access_token = models.CharField(max_length=64, unique=True, help_text=_("MQTT authentication token"))
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="offline")
+    lifecycle_status = models.CharField(max_length=20, choices=LIFECYCLE_CHOICES, default="claimed")
     last_seen = models.DateTimeField(null=True, blank=True)
     firmware_version = models.CharField(max_length=50, blank=True)
     config = models.JSONField(default=dict, blank=True)
@@ -70,6 +77,36 @@ class Gateway(BaseTeamModel):
 
     def __str__(self):
         return f"{self.name} ({self.serial_number})"
+
+
+class GatewayInventory(models.Model):
+    """Factory registry for physical gateways before customer claim."""
+
+    STATUS_CHOICES = (
+        ("unclaimed", _("Unclaimed")),
+        ("claimed", _("Claimed")),
+        ("retired", _("Retired")),
+    )
+
+    serial_number = models.CharField(max_length=100, unique=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="unclaimed")
+    batch = models.CharField(max_length=100, blank=True)
+    gateway = models.OneToOneField(
+        Gateway, null=True, blank=True, on_delete=models.SET_NULL, related_name="inventory_record"
+    )
+    claimed_by_team = models.ForeignKey(
+        "teams.Team", null=True, blank=True, on_delete=models.SET_NULL, related_name="claimed_gateway_inventory"
+    )
+    manufactured_at = models.DateTimeField(auto_now_add=True)
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["serial_number"]
+        verbose_name_plural = "gateway inventory"
+
+    def __str__(self):
+        return f"{self.serial_number} ({self.status})"
 
 
 class DeviceTemplate(models.Model):

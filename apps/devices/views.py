@@ -173,44 +173,39 @@ class GatewayCreateView(PermissionRequiredMixin, CreateView):
     template_name = "devices/gateway_form.html"
 
     def post(self, request, *args, **kwargs):
-        from .services import validate_claim_code
+        from django.shortcuts import redirect
+
+        from .services import GatewayClaimError, claim_gateway_for_team
 
         self.object = None
         form = self.get_form()
-        claim_code = request.POST.get("claim_code", "").strip()
+        claim_code = request.POST.get("claim_code", "").strip().upper()
 
         if not claim_code:
             form.add_error(None, "Claim code is required. Check the sticker on your gateway.")
             return self.form_invalid(form)
 
-        serial_number = form.data.get("serial_number", "").strip()
-        if serial_number and not validate_claim_code(serial_number, claim_code):
-            form.add_error(None, "Invalid claim code. Please check the sticker on the bottom of your gateway.")
+        if not form.is_valid():
             return self.form_invalid(form)
 
-        if form.is_valid():
-            return self.form_valid(form, claim_code=claim_code)
-        else:
+        site = form.cleaned_data["site"]
+        if site.team != request.team:
+            form.add_error("site", "Select a site that belongs to the current team.")
             return self.form_invalid(form)
 
-    def form_valid(self, form, claim_code=""):
-        import secrets
-
-        form.instance.team = self.request.team
-        # Auto-generate access token
-        form.instance.access_token = secrets.token_hex(20)
-        # MQTT credentials: username = serial_number, password = claim_code (from sticker)
-        form.instance.mqtt_username = form.cleaned_data["serial_number"]
-        form.instance.mqtt_password = claim_code.strip().upper()
-        response = super().form_valid(form)
-        # Provision MQTT credentials on Mosquitto using claim code as the password
         try:
-            from .mqtt_provisioning import provision_gateway_mqtt
+            self.object = claim_gateway_for_team(
+                request.team,
+                site,
+                form.cleaned_data["name"],
+                form.cleaned_data["serial_number"],
+                claim_code,
+            )
+        except GatewayClaimError as e:
+            form.add_error(None, str(e))
+            return self.form_invalid(form)
 
-            provision_gateway_mqtt(self.object, claim_code.strip().upper())
-        except Exception as e:
-            logger.warning("Mosquitto provisioning failed for gateway %s: %s (gateway saved, manual setup may be required)", self.object.serial_number, e)
-        return response
+        return redirect(self.get_success_url())
 
     def get_success_url(self):
         return reverse_lazy("web_team:devices:gateway_detail", args=[self.request.team.slug, self.object.pk])
@@ -316,6 +311,9 @@ def gateway_push_config(request, team_slug, pk):
     gateway = Gateway.objects.get(pk=pk, team=request.team)
     action = request.POST.get("action", "full_update")
     config = json.loads(request.POST.get("config"))
+
+    gateway.lifecycle_status = "commissioning"
+    gateway.save(update_fields=["lifecycle_status"])
 
     config_record = publish_config_update(gateway, action, config)
 

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Device, DeviceTemplate, FirmwareRelease, Gateway, GatewayConfig, RpcCommand, Site
+from .models import Device, DeviceTemplate, FirmwareRelease, Gateway, GatewayConfig, GatewayInventory, RpcCommand, Site
 
 
 @admin.register(Site)
@@ -12,13 +12,13 @@ class SiteAdmin(admin.ModelAdmin):
 
 @admin.register(Gateway)
 class GatewayAdmin(admin.ModelAdmin):
-    list_display = ("name", "serial_number", "site", "status", "last_seen", "tls_mode")
-    list_filter = ("status", "tls_mode", "site__team")
+    list_display = ("name", "serial_number", "site", "status", "lifecycle_status", "last_seen", "tls_mode")
+    list_filter = ("status", "lifecycle_status", "tls_mode", "site__team")
     search_fields = ("name", "serial_number", "mqtt_username")
     readonly_fields = ("access_token", "mqtt_username", "mqtt_password")
     actions = ["recover_claim_codes"]
     fieldsets = (
-        (None, {"fields": ("team", "site", "name", "serial_number", "status", "firmware_version", "capacity")}),
+        (None, {"fields": ("team", "site", "name", "serial_number", "status", "lifecycle_status", "firmware_version", "capacity")}),
         ("MQTT Credentials", {"fields": ("access_token", "mqtt_username", "mqtt_password", "tls_mode")}),
         ("Heartbeat Attributes", {"fields": ("last_seen", "ip_address", "uptime_seconds", "python_version", "platform_info", "active_connectors", "connected_devices")}),
         ("Advanced", {"fields": ("config", "discovery_data", "client_cert_pem", "client_key_pem"), "classes": ("collapse",)}),
@@ -33,6 +33,26 @@ class GatewayAdmin(admin.ModelAdmin):
         for gw in queryset:
             code = compute_claim_code(gw.serial_number)
             messages.info(request, f"Gateway {gw.serial_number} → Claim Code: {code}")
+
+
+@admin.register(GatewayInventory)
+class GatewayInventoryAdmin(admin.ModelAdmin):
+    list_display = ("serial_number", "status", "batch", "claimed_by_team", "gateway", "claimed_at")
+    list_filter = ("status", "batch")
+    search_fields = ("serial_number", "batch", "claimed_by_team__name")
+    readonly_fields = ("manufactured_at", "claimed_at", "gateway", "claimed_by_team")
+
+    actions = ["recover_claim_codes"]
+
+    @admin.action(description="Recover claim codes for selected inventory records")
+    def recover_claim_codes(self, request, queryset):
+        from django.contrib import messages
+
+        from .services import compute_claim_code
+
+        for item in queryset:
+            code = compute_claim_code(item.serial_number)
+            messages.info(request, f"Gateway {item.serial_number} -> Claim Code: {code}")
 
 
 @admin.register(DeviceTemplate)

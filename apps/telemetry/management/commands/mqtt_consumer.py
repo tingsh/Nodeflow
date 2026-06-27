@@ -204,7 +204,11 @@ class Command(BaseCommand):
                 setattr(gateway, model_field, attrs[attr_key])
                 update_fields.append(model_field)
 
-        gateway.save(update_fields=update_fields)
+        if attrs.get("status") == "online" and gateway.lifecycle_status == "claimed":
+            gateway.lifecycle_status = "online"
+            update_fields.append("lifecycle_status")
+
+        gateway.save(update_fields=list(dict.fromkeys(update_fields)))
 
         # Handle discovery report from Edge auto-scan
         discovery_report = attrs.get("discovery_report")
@@ -216,10 +220,14 @@ class Command(BaseCommand):
         if config_request_id:
             try:
                 config_record = GatewayConfig.objects.get(request_id=config_request_id)
-                config_record.status = attrs.get("config_update_status", "unknown")
+                config_status = attrs.get("config_update_status", "unknown")
+                config_record.status = config_status
                 config_record.error_message = attrs.get("config_update_error", "") or ""
                 config_record.acknowledged_at = timezone.now()
                 config_record.save()
+                if config_status == "success":
+                    gateway.lifecycle_status = "active"
+                    gateway.save(update_fields=["lifecycle_status"])
                 logger.info(
                     "Config update %s acknowledged: %s", config_request_id, config_record.status
                 )

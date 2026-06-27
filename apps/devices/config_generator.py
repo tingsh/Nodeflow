@@ -6,13 +6,25 @@ configurations that can be pushed via MQTT config update.
 
 The generated config follows the Nodeflow Edge connector schema:
 - Groups devices by protocol (modbus_tcp, modbus_rtu, etc.)
-- Each device becomes a slave entry with register mappings
+- Emits Edge connector objects with top-level type/name and nested config
 - Includes device_id (UUID) for unambiguous telemetry matching
 """
 
 import logging
 
 logger = logging.getLogger("iot_platform")
+
+MODBUS_TYPE_MAP = {
+    "float32": "32float",
+    "float64": "64float",
+    "int16": "16int",
+    "uint16": "16uint",
+    "int32": "32int",
+    "uint32": "32uint",
+    "int64": "64int",
+    "uint64": "64uint",
+    "bool": "bits",
+}
 
 
 def generate_connector_config(gateway):
@@ -24,13 +36,10 @@ def generate_connector_config(gateway):
     """
     devices = gateway.devices.select_related("template").all()
 
-    # Group devices by protocol
     protocol_groups = {}
     for device in devices:
         protocol = device.protocol or "modbus_tcp"
-        if protocol not in protocol_groups:
-            protocol_groups[protocol] = []
-        protocol_groups[protocol].append(device)
+        protocol_groups.setdefault(protocol, []).append(device)
 
     connectors = []
     for protocol, devices_in_group in protocol_groups.items():
@@ -45,14 +54,9 @@ def generate_connector_config(gateway):
 
 
 def _build_modbus_connector(protocol, devices):
-    """
-    Build a Modbus connector config from a group of devices.
-
-    Returns a connector dict in Nodeflow Edge format.
-    """
+    """Build an Edge-compatible Modbus connector config."""
     is_tcp = protocol == "modbus_tcp"
-    connector_name = "Modbus TCP" if is_tcp else "Modbus RTU"
-    connector_type = "modbus_tcp" if is_tcp else "modbus_rtu"
+    connector_name = "Modbus TCP Connector" if is_tcp else "Modbus RTU Connector"
 
     slaves = []
     for device in devices:
@@ -63,32 +67,19 @@ def _build_modbus_connector(protocol, devices):
     if not slaves:
         return None
 
-    connector = {
+    return {
         "name": connector_name,
-        "type": connector_type,
-        "enabled": True,
-        "slaves": slaves,
+        "type": "modbus",
+        "config": {
+            "master": {
+                "slaves": slaves,
+            },
+        },
     }
-
-    # For RTU connectors, add serial port config from the first device's discovery_meta
-    if not is_tcp and devices:
-        first_meta = devices[0].discovery_meta or {}
-        connector["port"] = first_meta.get("interface", "/dev/ttyUSB0")
-        connector["baudrate"] = first_meta.get("baud_rate", 9600)
-        connector["stopbits"] = first_meta.get("stopbits", 1)
-        connector["bytesize"] = first_meta.get("bytesize", 8)
-        connector["parity"] = first_meta.get("parity", "N")
-        connector["timeout"] = first_meta.get("timeout", 3)
-
-    return connector
 
 
 def _build_slave_config(device, is_tcp):
-    """
-    Build a single slave config from a Device + its DeviceTemplate.
-
-    Returns a slave dict or None if no template.
-    """
+    """Build a single Modbus slave config from a Device + DeviceTemplate."""
     template = device.template
     if not template or not template.register_map:
         logger.info("Device %s has no template/register_map, skipping config generation", device.name)
@@ -102,39 +93,76 @@ def _build_slave_config(device, is_tcp):
         "deviceId": str(device.pk),
         "unitId": discovery.get("slave_id", connection.get("slave_id", 1)),
         "pollPeriod": (template.default_polling_interval or 5) * 1000,
+        "method": connection.get("method", "socket"),
+        "timeout": connection.get("timeout", 35),
+        "byteOrder": connection.get("byteOrder", "BIG"),
+        "wordOrder": connection.get("wordOrder", "BIG"),
+        "retries": connection.get("retries", True),
+        "retryOnEmpty": connection.get("retryOnEmpty", True),
+        "retryOnInvalid": connection.get("retryOnInvalid", True),
+        "sendDataOnlyOnChange": connection.get("sendDataOnlyOnChange", False),
+        "connectAttemptTimeMs": connection.get("connectAttemptTimeMs", 5000),
+        "connectAttemptCount": connection.get("connectAttemptCount", 5),
+        "waitAfterFailedAttemptsMs": connection.get("waitAfterFailedAttemptsMs", 300000),
         "timeseries": [],
         "attributes": [],
     }
 
-    # TCP-specific fields
     if is_tcp:
-        # Determine host/port from discovery_meta or connection_config
         interface = discovery.get("interface", "")
         if ":" in interface:
-            parts = interface.rsplit(":", 1)
-            slave["host"] = parts[0]
-            slave["port"] = int(parts[1]) if parts[1].isdigit() else 502
+            host, port = interface.rsplit(":", 1)
+            slave["host"] = host
+            slave["port"] = int(port) if port.isdigit() else 502
         else:
             slave["host"] = connection.get("host", interface or "127.0.0.1")
             slave["port"] = connection.get("port", 502)
         slave["type"] = "tcp"
+    else:
+        slave["type"] = "serial"
+        slave["port"] = discovery.get("interface", connection.get("serial_port", "/dev/ttyUSB0"))
+        slave["baudrate"] = discovery.get("baud_rate", connection.get("baudrate", 9600))
+        slave["stopbits"] = connection.get("stopbits", 1)
+        slave["bytesize"] = connection.get("bytesize", 8)
+        slave["parity"] = connection.get("parity", "N")
 
-    # Transform register_map to timeseries/attributes
     for key, reg in template.register_map.items():
+        if not isinstance(reg, dict):
+            continue
         entry = {
             "tag": key,
-            "type": reg.get("type", "16int"),
+            "type": _normalize_modbus_type(reg.get("type", "16int")),
             "functionCode": reg.get("functionCode", 3),
-            "objectsCount": reg.get("objectsCount", 1),
+            "objectsCount": reg.get("objectsCount", _default_objects_count(reg.get("type"))),
             "address": reg.get("address", 0),
         }
+        if "scale" in reg:
+            entry["multiplier"] = reg["scale"]
+        if "multiplier" in reg:
+            entry["multiplier"] = reg["multiplier"]
 
         if reg.get("attribute"):
             slave["attributes"].append(entry)
-        else:
+        elif not reg.get("writable"):
             slave["timeseries"].append(entry)
 
     return slave
+
+
+def _normalize_modbus_type(type_name):
+    if not type_name:
+        return "16int"
+    normalized = str(type_name).replace("_", "").lower()
+    return MODBUS_TYPE_MAP.get(normalized, type_name)
+
+
+def _default_objects_count(type_name):
+    normalized = _normalize_modbus_type(type_name)
+    if normalized.startswith("64"):
+        return 4
+    if normalized.startswith("32"):
+        return 2
+    return 1
 
 
 def generate_and_push_config(gateway):
@@ -151,10 +179,12 @@ def generate_and_push_config(gateway):
         logger.info("No connectors to push for gateway %s", gateway.serial_number)
         return None
 
-    # Build the full config payload
     config_payload = {
         "connectors": connectors,
     }
+
+    gateway.lifecycle_status = "commissioning"
+    gateway.save(update_fields=["lifecycle_status"])
 
     config_record = publish_config_update(gateway, "connector_update", config_payload)
     logger.info(

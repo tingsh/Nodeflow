@@ -2,12 +2,14 @@ import hashlib
 import hmac
 import json
 import logging
+import secrets
 import uuid
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
-from .models import DeviceCommand
+from .models import DeviceCommand, Gateway, GatewayInventory
 
 logger = logging.getLogger("iot_platform")
 
@@ -30,6 +32,96 @@ def validate_claim_code(serial_number: str, claim_code: str) -> bool:
     """
     expected = compute_claim_code(serial_number)
     return hmac.compare_digest(expected, claim_code.strip().upper())
+
+
+class GatewayClaimError(ValueError):
+    """Raised when a gateway claim cannot be completed safely."""
+
+
+def normalize_gateway_serial(serial_number: str) -> str:
+    return serial_number.strip().upper()
+
+
+def validate_gateway_claim(serial_number: str, claim_code: str):
+    """Validate a sticker claim against factory inventory and HMAC claim code."""
+    serial_number = normalize_gateway_serial(serial_number)
+    if not validate_claim_code(serial_number, claim_code):
+        raise GatewayClaimError("Invalid claim code. Please check the sticker on the bottom of your gateway.")
+
+    inventory = GatewayInventory.objects.filter(serial_number__iexact=serial_number).first()
+    existing_gateway = Gateway.objects.filter(serial_number=serial_number).first()
+    if not inventory and not existing_gateway:
+        raise GatewayClaimError(
+            "This serial number is not in the Nodeflow factory inventory. Please contact support."
+        )
+    if inventory and inventory.status == "retired":
+        raise GatewayClaimError("This gateway has been retired and cannot be claimed.")
+    return inventory
+
+
+@transaction.atomic
+def claim_gateway_for_team(team, site, name: str, serial_number: str, claim_code: str):
+    """Bind a manufactured gateway to a customer team/site after sticker validation."""
+    serial_number = normalize_gateway_serial(serial_number)
+    inventory = validate_gateway_claim(serial_number, claim_code)
+    mqtt_password = claim_code.strip().upper()
+
+    existing_gateway = Gateway.objects.select_for_update().filter(serial_number=serial_number).first()
+    if existing_gateway and existing_gateway.team != team:
+        raise GatewayClaimError(
+            "This serial number is already registered to another team. Please contact support if this is an error."
+        )
+
+    if inventory:
+        inventory = GatewayInventory.objects.select_for_update().get(pk=inventory.pk)
+        if inventory.status == "claimed" and inventory.claimed_by_team and inventory.claimed_by_team != team:
+            raise GatewayClaimError(
+                "This serial number is already registered to another team. Please contact support if this is an error."
+            )
+
+    if existing_gateway:
+        gateway = existing_gateway
+        gateway.site = site
+        gateway.name = name
+        gateway.mqtt_username = serial_number
+        gateway.mqtt_password = mqtt_password
+        if gateway.status == "online":
+            gateway.lifecycle_status = "online"
+        elif gateway.lifecycle_status not in ("commissioning", "active"):
+            gateway.lifecycle_status = "claimed"
+        gateway.save(update_fields=["site", "name", "mqtt_username", "mqtt_password", "lifecycle_status"])
+    else:
+        gateway = Gateway.objects.create(
+            team=team,
+            site=site,
+            name=name,
+            serial_number=serial_number,
+            access_token=secrets.token_hex(20),
+            mqtt_username=serial_number,
+            mqtt_password=mqtt_password,
+            lifecycle_status="claimed",
+        )
+
+    if inventory:
+        inventory.status = "claimed"
+        inventory.claimed_by_team = team
+        inventory.gateway = gateway
+        if not inventory.claimed_at:
+            inventory.claimed_at = timezone.now()
+        inventory.save(update_fields=["status", "claimed_by_team", "gateway", "claimed_at"])
+
+    try:
+        from .mqtt_provisioning import provision_gateway_mqtt
+
+        provision_gateway_mqtt(gateway, mqtt_password)
+    except Exception as e:
+        logger.warning(
+            "Mosquitto provisioning failed for gateway %s: %s (gateway saved, manual setup may be required)",
+            gateway.serial_number,
+            e,
+        )
+
+    return gateway
 
 
 def send_device_command(device, user, key, value):

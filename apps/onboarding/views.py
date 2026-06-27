@@ -1,5 +1,3 @@
-import secrets
-
 from django.shortcuts import get_object_or_404, redirect, render
 
 from apps.alerts.models import AlertRule
@@ -47,8 +45,7 @@ def step_1_site(request, team_slug):
 
 @require_permission("manage_devices")
 def step_2_gateway(request, team_slug):
-    from apps.devices.mqtt_provisioning import provision_gateway_mqtt
-    from apps.devices.services import validate_claim_code
+    from apps.devices.services import GatewayClaimError, claim_gateway_for_team
 
     site_id = request.session.get("onboarding_site_id")
     if not site_id:
@@ -59,7 +56,7 @@ def step_2_gateway(request, team_slug):
     gateway = Gateway.objects.filter(id=gateway_id, team=request.team).first() if gateway_id else None
 
     if request.method == "POST":
-        name = request.POST.get("name")
+        name = request.POST.get("name", "").strip()
         sn = request.POST.get("serial_number", "").strip().upper()
         claim_code = request.POST.get("claim_code", "").strip().upper()
 
@@ -70,8 +67,11 @@ def step_2_gateway(request, team_slug):
             error = "Serial number must be between 3 and 50 characters."
         elif not claim_code:
             error = "Claim code is required. Check the sticker on the bottom of your gateway."
-        elif not validate_claim_code(sn, claim_code):
-            error = "Invalid claim code. Please check the sticker on the bottom of your gateway."
+        else:
+            try:
+                gateway = claim_gateway_for_team(request.team, site, name, sn, claim_code)
+            except GatewayClaimError as e:
+                error = str(e)
 
         if error:
             context = {
@@ -82,53 +82,6 @@ def step_2_gateway(request, team_slug):
                 "error": error,
             }
             return render(request, "onboarding/step_2_gateway.html", context)
-
-        # Check for existing gateway with same serial number
-        existing_gateway = Gateway.objects.filter(serial_number=sn).first()
-        if existing_gateway:
-            if existing_gateway.team == request.team:
-                existing_gateway.site = site
-                existing_gateway.name = name
-                existing_gateway.save()
-                request.session["onboarding_gateway_id"] = existing_gateway.id
-                return redirect("web_team:onboarding:step_2b_wait", team_slug=team_slug)
-            else:
-                context = {
-                    "steps": ONBOARDING_STEPS,
-                    "current_step": 2,
-                    "site": site,
-                    "gateway": gateway,
-                    "error": (
-                        "This Serial Number is already registered to another team. "
-                        "Please contact support if you believe this is an error."
-                    ),
-                }
-                return render(request, "onboarding/step_2_gateway.html", context)
-
-        # Create new gateway with claim code as MQTT password
-        mqtt_password = claim_code.upper()
-        if gateway:
-            gateway.name = name
-            gateway.serial_number = sn
-            gateway.mqtt_username = sn
-            gateway.mqtt_password = mqtt_password
-            gateway.save()
-        else:
-            gateway = Gateway.objects.create(
-                team=request.team,
-                site=site,
-                name=name,
-                serial_number=sn,
-                access_token=secrets.token_hex(20),
-                mqtt_username=sn,
-                mqtt_password=mqtt_password,
-            )
-
-        # Provision MQTT credentials on Mosquitto
-        try:
-            provision_gateway_mqtt(gateway, mqtt_password)
-        except Exception:
-            pass  # Non-blocking — Edge will connect once Mosquitto is available
 
         request.session["onboarding_gateway_id"] = gateway.id
         return redirect("web_team:onboarding:step_2b_wait", team_slug=team_slug)
@@ -147,6 +100,9 @@ def step_2b_wait(request, team_slug):
 
     # If already online, skip straight to discovery step
     if gateway.status == "online":
+        if gateway.lifecycle_status == "claimed":
+            gateway.lifecycle_status = "online"
+            gateway.save(update_fields=["lifecycle_status"])
         return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
 
     context = {"steps": ONBOARDING_STEPS, "current_step": 2, "gateway": gateway}
@@ -178,6 +134,17 @@ def step_3_discover(request, team_slug):
     discovery_data = gateway.discovery_data or {}
     discovered_devices = discovery_data.get("devices", [])
     templates = DeviceTemplate.objects.all()
+
+    if request.method != "POST" and gateway.status == "online":
+        try:
+            from apps.telemetry.mqtt_publisher import publish_rpc_command
+
+            publish_rpc_command(gateway, "scan_devices", {"scan_type": "manual"})
+            if gateway.lifecycle_status in ("claimed", "online"):
+                gateway.lifecycle_status = "commissioning"
+                gateway.save(update_fields=["lifecycle_status"])
+        except Exception:
+            pass
 
     if request.method == "POST":
         # Bulk provision: process each selected discovered device
@@ -225,6 +192,8 @@ def step_3_discover(request, team_slug):
         if provisioned_count > 0:
             try:
                 generate_and_push_config(gateway)
+                gateway.lifecycle_status = "commissioning"
+                gateway.save(update_fields=["lifecycle_status"])
             except Exception:
                 pass
 
