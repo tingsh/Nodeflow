@@ -620,7 +620,7 @@ class Migration(migrations.Migration):
                             16: (
                                 "wagtail.blocks.CharBlock",
                                 (),
-                                {"default": "Nodeflow AI", "required": False},
+                                {"default": "Novena AI", "required": False},
                             ),
                             17: (
                                 "wagtail.blocks.StructBlock",

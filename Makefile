@@ -48,7 +48,7 @@ shell: ## Get a Django shell
 	@docker compose run --rm web python manage.py shell
 
 dbshell: ## Get a Database shell
-	@docker compose exec db psql -U postgres iot_platform
+	@docker compose exec db psql -U postgres novena_hub
 
 test: ## Run Django tests
 	@docker compose run --rm web python manage.py test ${ARGS}

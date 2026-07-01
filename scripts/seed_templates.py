@@ -3,7 +3,7 @@ import os
 import django
 
 # Set up Django environment
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "iot_platform.settings")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "novena_hub.settings")
 django.setup()
 
 from apps.devices.models import DeviceTemplate  # noqa: E402

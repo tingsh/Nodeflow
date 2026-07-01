@@ -2,7 +2,7 @@
 
 ## Metadata
 - **ID:** 02_code_conventions
-- **Description:** Prescriptive coding standards for models, views, templates, and the Nodeflow service layer.
+- **Description:** Prescriptive coding standards for models, views, templates, and the Novena service layer.
 - **Scope:** Use this skill for any code modification or new feature development to ensure 100% consistency with established patterns.
 
 ---
@@ -36,6 +36,6 @@
 - **Layout:** Use Flexbox and CSS Grid. Avoid fixed widths/heights where possible to ensure responsiveness.
 
 ## 6. Logging & Error Handling
-- **Logger:** Use `logger = logging.getLogger("iot_platform")`.
+- **Logger:** Use `logger = logging.getLogger("novena_hub")`.
 - **User Feedback:** Return an `alert-error` component via HTMX for validation failures.
 - **Audit:** Critical operations (deletions, configuration changes) should be logged to the database for audit trails.

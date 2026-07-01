@@ -40,7 +40,7 @@ class Migration(migrations.Migration):
             name="source",
             field=models.CharField(
                 choices=[
-                    ("curated", "Curated (Nodeflow)"),
+                    ("curated", "Curated (Novena)"),
                     ("ai_generated", "AI Generated"),
                     ("user_created", "User Created"),
                 ],

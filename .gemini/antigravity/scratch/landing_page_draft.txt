@@ -21,7 +21,7 @@
                   <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
                   <span class="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
                 </span>
-                <span>Nodeflow Platform 2.0 is Here</span>
+                <span>Novena Platform 2.0 is Here</span>
                 <i class="fa fa-arrow-right text-xs opacity-50 ml-2"></i>
             </a>
             
@@ -126,7 +126,7 @@
                 <h2 class="text-amber-500 font-semibold tracking-wide uppercase text-sm mb-3">AI Intelligence</h2>
                 <h3 class="text-3xl font-extrabold text-base-content sm:text-4xl font-heading mb-6">Proactive threat detection.</h3>
                 <p class="text-lg text-base-content/70 font-light mb-8">
-                    Nodeflow learns your facility's energy baseline. The moment consumption spikes or generation drops unexpectedly, smart threshold alerts notify your team instantly.
+                    Novena learns your facility's energy baseline. The moment consumption spikes or generation drops unexpectedly, smart threshold alerts notify your team instantly.
                 </p>
                 <ul class="space-y-4 mb-8">
                     <li class="flex items-center text-base-content/80"><i class="fa fa-check text-green-500 mr-3"></i> Slack & Email Integrations</li>
@@ -148,7 +148,7 @@
             Ready to optimize?
         </h2>
         <p class="text-xl leading-relaxed text-base-100/70 mb-10 font-light">
-            Join over 500 companies tracking their path to Net Zero with Nodeflow.
+            Join over 500 companies tracking their path to Net Zero with Novena.
         </p>
         <a href="{% url 'account_signup' %}" class="inline-flex items-center justify-center px-8 py-4 border border-transparent text-lg font-semibold rounded-full text-base-content bg-base-100 hover:scale-105 transition-all shadow-2xl">
             Get Started Now

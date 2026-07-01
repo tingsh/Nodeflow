@@ -51,7 +51,7 @@ class AISpotlightBlock(blocks.StructBlock):
     title = blocks.CharBlock(required=True, default="Stop searching for logs. Start asking questions.")
     body = blocks.TextBlock(required=True)
     prompt_text = blocks.CharBlock(required=True, default="Show yesterday's efficiency trends for Factory Floor A.")
-    response_tagline = blocks.CharBlock(required=False, default="Nodeflow AI")
+    response_tagline = blocks.CharBlock(required=False, default="Novena AI")
     response_text = blocks.TextBlock(required=True)
 
     class Meta:

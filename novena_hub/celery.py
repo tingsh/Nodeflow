@@ -3,9 +3,9 @@ import os
 from celery import Celery
 
 # set the default Django settings module for the 'celery' program.
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "iot_platform.settings")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "novena_hub.settings")
 
-app = Celery("iot_platform")
+app = Celery("novena_hub")
 
 # Using a string here means the worker doesn't have to serialize
 # the configuration object to child processes.

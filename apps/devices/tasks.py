@@ -2,73 +2,94 @@ import logging
 from datetime import timedelta
 
 from celery import shared_task
+from django.conf import settings
 from django.utils import timezone
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger('novena_hub')
+
+
+@shared_task
+def check_device_heartbeats():
+    '''Persist devices as offline when telemetry freshness exceeds the offline timeout.'''
+    from .freshness import device_offline_cutoff
+    from .models import Device
+
+    now = timezone.now()
+    stale_ids = []
+
+    devices = Device.objects.select_related('template').filter(status='online')
+    for device in devices:
+        if not device.last_telemetry_at or device.last_telemetry_at < device_offline_cutoff(device, now):
+            stale_ids.append(device.id)
+
+    count = 0
+    if stale_ids:
+        count = Device.objects.filter(id__in=stale_ids).exclude(status='alarm').update(status='offline')
+        logger.info('Marked %d device(s) as offline (telemetry timeout)', count)
+
+    return count
 
 
 @shared_task
 def check_gateway_heartbeats():
-    """
-    Safety net: marks gateways as offline if no heartbeat received
-    within the timeout window. Handles cases where MQTT LWT doesn't fire
-    (e.g. broker restart, network partition).
-
-    Should be scheduled to run every 60 seconds via django-celery-beat.
-    """
+    '''Mark gateways offline when the edge heartbeat exceeds the configured timeout.'''
     from .models import Gateway
 
-    timeout = timedelta(seconds=120)
+    timeout = timedelta(seconds=getattr(settings, 'GATEWAY_OFFLINE_SECONDS', 120))
     cutoff = timezone.now() - timeout
 
     stale_gateways = Gateway.objects.filter(
-        status="online",
+        status='online',
         last_seen__lt=cutoff,
     )
 
-    count = stale_gateways.update(status="offline")
+    count = stale_gateways.update(status='offline')
     if count:
-        logger.info("Marked %d gateway(s) as offline (heartbeat timeout)", count)
+        logger.info('Marked %d gateway(s) as offline (heartbeat timeout)', count)
+
+    return count
 
 
 @shared_task
 def check_rpc_timeouts():
-    """
-    Marks pending RPC commands as timed out if no response received
-    within 60 seconds.
-    """
+    '''Marks pending RPC commands as timed out if no response received within 60 seconds.'''
     from .models import RpcCommand
 
     timeout = timedelta(seconds=60)
     cutoff = timezone.now() - timeout
 
     timed_out = RpcCommand.objects.filter(
-        status="pending",
+        status='pending',
         sent_at__lt=cutoff,
     )
 
-    count = timed_out.update(status="timeout")
+    count = timed_out.update(status='timeout')
     if count:
-        logger.info("Marked %d RPC command(s) as timed out", count)
+        logger.info('Marked %d RPC command(s) as timed out', count)
+
+    return count
 
 
 @shared_task
 def generate_template_ai_task(task_id: str, manufacturer: str, model_number: str, doc_url: str = None):
-    """
-    Background task: AI generates a device template draft.
-    Result is cached in Redis keyed by task_id for frontend polling.
-    """
+    '''Background task: AI generates a device template draft.'''
     from django.core.cache import cache
+
     from apps.devices.template_ai import generate_template_from_ai
 
-    logger.info("Starting AI template generation background task: %s (Manufacturer: %s, Model: %s)", task_id, manufacturer, model_number)
+    logger.info(
+        'Starting AI template generation background task: %s (Manufacturer: %s, Model: %s)',
+        task_id,
+        manufacturer,
+        model_number,
+    )
     try:
-        cache.set(f"ai_template:{task_id}", {"status": "processing"}, timeout=300)
+        cache.set(f'ai_template:{task_id}', {'status': 'processing'}, timeout=300)
         draft = generate_template_from_ai(manufacturer, model_number, doc_url=doc_url)
-        if draft.get("status") == "error":
-            cache.set(f"ai_template:{task_id}", {"status": "error", "error": draft.get("error")}, timeout=300)
+        if draft.get('status') == 'error':
+            cache.set(f'ai_template:{task_id}', {'status': 'error', 'error': draft.get('error')}, timeout=300)
         else:
-            cache.set(f"ai_template:{task_id}", {"status": "complete", "draft": draft}, timeout=300)
+            cache.set(f'ai_template:{task_id}', {'status': 'complete', 'draft': draft}, timeout=300)
     except Exception as e:
-        cache.set(f"ai_template:{task_id}", {"status": "error", "error": str(e)}, timeout=300)
-        logger.exception("AI template generation background task failed for task_id %s", task_id)
+        cache.set(f'ai_template:{task_id}', {'status': 'error', 'error': str(e)}, timeout=300)
+        logger.exception('AI template generation background task failed for task_id %s', task_id)

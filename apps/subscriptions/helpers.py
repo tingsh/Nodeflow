@@ -18,7 +18,7 @@ from apps.web.meta import absolute_url
 
 from .exceptions import SubscriptionConfigError
 
-log = logging.getLogger("iot_platform.subscription")
+log = logging.getLogger("novena_hub.subscription")
 
 
 def subscription_is_active(subscription: Subscription) -> bool:

@@ -140,7 +140,7 @@
                     <i class="fa fa-hdd text-base-content/20 text-3xl"></i>
                 </div>
                 <h4 class="text-xl font-bold text-base-content font-heading mb-2">No Gateways Configured</h4>
-                <p class="text-base-content/50 max-w-sm mx-auto text-sm leading-relaxed mb-8">Deploy your first Nodeflow gateway to this site to start monitoring your industrial assets.</p>
+                <p class="text-base-content/50 max-w-sm mx-auto text-sm leading-relaxed mb-8">Deploy your first Novena gateway to this site to start monitoring your industrial assets.</p>
                 <a href="{% url 'web_team:onboarding:setup_start' request.team.slug %}?site_id={{ site.id }}" class="inline-flex items-center px-6 py-3 bg-primary-600 text-white rounded-2xl font-bold text-sm hover:bg-primary-700 transition shadow-lg shadow-primary-600/30">
                     <i class="fa fa-plus-circle mr-2"></i>Add Gateway
                 </a>
@@ -162,10 +162,10 @@
                         <a href="{% url 'web_team:devices:device_detail' request.team.slug device.pk %}" class="group bg-base-100 p-5 rounded-3xl border border-base-content/5 hover:shadow-xl transition-all">
                              <div class="flex items-center justify-between mb-4">
                                 <span class="text-[10px] font-black uppercase tracking-widest text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-2 py-0.5 rounded-lg">Cloud-Native</span>
-                                <span class="h-2 w-2 rounded-full {% if device.status == 'online' %}bg-green-500{% else %}bg-base-300{% endif %}"></span>
+                                <span class='h-2 w-2 rounded-full {% if device.freshness.status == "live" %}bg-green-500{% elif device.freshness.status == "delayed" %}bg-amber-500{% elif device.freshness.status == "alarm" %}bg-red-500{% else %}bg-base-300{% endif %}' title='{{ device.freshness.display }}'></span>
                              </div>
                              <h5 class="text-sm font-bold text-base-content">{{ device.name }}</h5>
-                             <p class="text-[10px] text-base-content/40 uppercase tracking-widest font-mono mt-1">{{ device.protocol }}</p>
+                             <p class='text-[10px] text-base-content/40 uppercase tracking-widest font-mono mt-1'>{{ device.freshness.display }}</p>
                         </a>
                         {% endif %}
                     {% endfor %}

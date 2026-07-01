@@ -112,7 +112,7 @@ class BlogPageGalleryImage(Orderable):
 
 class HomePage(BaseContentPage):
     """
-    The homepage of the Nodeflow site.
+    The homepage of the Novena site.
     """
     body = StreamField(_get_default_block_types(), blank=True)
     content_panels = Page.content_panels + [
@@ -142,7 +142,7 @@ class HomePage(BaseContentPage):
         return super().serve(request, *args, **kwargs)
 
 
-class NodeflowHomePage(BaseContentPage):
+class NovenaHomePage(BaseContentPage):
     hero_tagline = models.CharField(max_length=255, default="Industrial Intelligence", blank=True)
     hero_title = models.CharField(max_length=255, default="Your Factory, Perfectly Synchronized.", blank=True)
     hero_subtitle = models.TextField(default="Connect industrial PLCs, meters, and sensors to a secure unified cloud plane. Harness AI-guided template registry, local edge network failover, and zero-downtime upgrades in 24 hours.", blank=True)

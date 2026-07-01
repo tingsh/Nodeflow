@@ -1,4 +1,4 @@
-# Implementation Plan: Nodeflow Feature Sprints 1-6
+# Implementation Plan: Novena Feature Sprints 1-6
 
 > **Created:** April 17, 2026  
 > **Status:** ✅ ALL SPRINTS COMPLETE  
@@ -8,7 +8,7 @@
 
 ## Overview
 
-This plan covered 6 feature sprints to transform Nodeflow from a demo-ready IoT dashboard into a full-featured industrial platform with enterprise-grade capabilities. All sprints have been completed.
+This plan covered 6 feature sprints to transform Novena from a demo-ready IoT dashboard into a full-featured industrial platform with enterprise-grade capabilities. All sprints have been completed.
 
 ### Sprint 1: Role-Based Access Control (RBAC) — ✅ COMPLETE
 - 5-tier role system (Owner, Admin, Manager, Operator, Viewer)
@@ -28,7 +28,7 @@ This plan covered 6 feature sprints to transform Nodeflow from a demo-ready IoT 
 ### Sprint 4: Public Shareable Links — ✅ COMPLETE
 - SharedDashboard model with tokenized URLs
 - Password protection, expiry, view tracking, kiosk mode
-- "Powered by Nodeflow" branding
+- "Powered by Novena" branding
 
 ### Sprint 5: Maintenance Ticketing — ✅ COMPLETE
 - Reactive auto-ticketing from alerts + Preventive PM schedules

@@ -16,7 +16,7 @@ from apps.teams.mixins import PermissionRequiredMixin
 
 from .models import Device, DeviceTemplate, Gateway, GatewayConfig, GatewayInventory, RpcCommand, Site
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 
 class SiteListView(PermissionRequiredMixin, ListView):
@@ -952,7 +952,7 @@ def gateway_ota_update(request, team_slug, pk):
     params = {
         "version": release.version,
         "url": url,
-        "token": "nodeflow_internal_token_mock",
+        "token": "novena_internal_token_mock",
     }
 
     rpc = publish_rpc_command(gateway, "update_firmware", params)

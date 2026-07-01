@@ -75,14 +75,13 @@
                                         {{ device.get_energy_category_display }}
                                     </span>
                                 </td>
-                                <td class="whitespace-nowrap px-3 py-4 text-sm">
-                                    <div class="flex items-center">
-                                        <div class="h-2.5 w-2.5 rounded-full mr-2 
-                                            {% if device.status == 'online' %}bg-green-500
-                                            {% elif device.status == 'offline' %}bg-gray-400
-                                            {% else %}bg-red-500{% endif %}"></div>
-                                        <span class="text-gray-700 dark:text-gray-300">{{ device.get_status_display }}</span>
+                                <td class='whitespace-nowrap px-3 py-4 text-sm'>
+                                    {% with freshness=device.freshness %}
+                                    <div class='flex items-center'>
+                                        <div class='h-2.5 w-2.5 rounded-full mr-2 {% if freshness.status == "live" %}bg-green-500{% elif freshness.status == "delayed" %}bg-amber-500{% elif freshness.status == "alarm" %}bg-red-500{% else %}bg-gray-400{% endif %}'></div>
+                                        <span class='text-gray-700 dark:text-gray-300'>{{ freshness.display }}</span>
                                     </div>
+                                    {% endwith %}
                                 </td>
                                 <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
                                     {{ device.last_telemetry_at|default:"--" }}

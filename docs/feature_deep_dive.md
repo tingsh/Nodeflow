@@ -1,8 +1,8 @@
-# Nodeflow Feature Deep Dive — How to Build the "IIoT Shopify" Moat
+# Novena Feature Deep Dive — How to Build the "IIoT Shopify" Moat
 
 > **Date:** April 17, 2026  
 > **Author:** CTO  
-> **Reference:** [gateway_and_features_brainstorm.md](file:///d:/Nodeflow/docs/gateway_and_features_brainstorm.md) — Section 4  
+> **Reference:** [gateway_and_features_brainstorm.md](file:///d:/Novena-Hub/docs/gateway_and_features_brainstorm.md) — Section 4  
 > **Purpose:** Take each of the 6 high-value features we brainstormed and break down *exactly* how we'd build them on top of our existing Django + HTMX + MQTT stack.
 
 ---
@@ -13,19 +13,19 @@ Before we brainstorm, here's what we're building on:
 
 | Layer | What Exists | Key Files |
 |-------|------------|-----------|
-| **Data Pipeline** | MQTT → `ingest_telemetry_data()` → TimescaleDB → Alert check | [services.py](file:///d:/Nodeflow/apps/telemetry/services.py) |
-| **Device Model** | Site → Gateway → Device hierarchy, templates, register maps | [models.py](file:///d:/Nodeflow/apps/devices/models.py) |
-| **Alert Engine** | Threshold rules, cooldown, email + webhook + WhatsApp (mock) | [services.py](file:///d:/Nodeflow/apps/alerts/services.py), [notifications.py](file:///d:/Nodeflow/apps/alerts/notifications.py) |
-| **Teams/Multi-tenant** | Pegasus teams, `BaseTeamModel`, admin/member roles | [models.py](file:///d:/Nodeflow/apps/teams/models.py), [roles.py](file:///d:/Nodeflow/apps/teams/roles.py) |
-| **AI Chat** | Pegasus chat with LiteLLM streaming via WebSocket | [consumers.py](file:///d:/Nodeflow/apps/chat/consumers.py) |
-| **Gateway Config** | `Gateway.config` JSONField, `Gateway.discovery_data` JSONField | [models.py](file:///d:/Nodeflow/apps/devices/models.py#L30-L32) |
+| **Data Pipeline** | MQTT → `ingest_telemetry_data()` → TimescaleDB → Alert check | [services.py](file:///d:/Novena-Hub/apps/telemetry/services.py) |
+| **Device Model** | Site → Gateway → Device hierarchy, templates, register maps | [models.py](file:///d:/Novena-Hub/apps/devices/models.py) |
+| **Alert Engine** | Threshold rules, cooldown, email + webhook + WhatsApp (mock) | [services.py](file:///d:/Novena-Hub/apps/alerts/services.py), [notifications.py](file:///d:/Novena-Hub/apps/alerts/notifications.py) |
+| **Teams/Multi-tenant** | Pegasus teams, `BaseTeamModel`, admin/member roles | [models.py](file:///d:/Novena-Hub/apps/teams/models.py), [roles.py](file:///d:/Novena-Hub/apps/teams/roles.py) |
+| **AI Chat** | Pegasus chat with LiteLLM streaming via WebSocket | [consumers.py](file:///d:/Novena-Hub/apps/chat/consumers.py) |
+| **Gateway Config** | `Gateway.config` JSONField, `Gateway.discovery_data` JSONField | [models.py](file:///d:/Novena-Hub/apps/devices/models.py#L30-L32) |
 
 ---
 
 ## Feature 1: Write-Back / Remote Control Commands
 
 ### What It Is
-Not just *reading* data from PLCs — but **writing** commands back. A factory manager clicks a toggle on the Nodeflow dashboard and a motor stops 200km away. This transforms us from a "dashboard" into a **Remote SCADA** system.
+Not just *reading* data from PLCs — but **writing** commands back. A factory manager clicks a toggle on the Novena dashboard and a motor stops 200km away. This transforms us from a "dashboard" into a **Remote SCADA** system.
 
 ### Why It's a Game-Changer
 - Most SME IoT platforms are read-only. Write-back is an enterprise feature that costs $10K+ in SCADA software.
@@ -99,7 +99,7 @@ class DeviceCommand(BaseTeamModel):
 3. **MQTT Publisher** — Utility to publish commands to the broker (~1 hr)
 4. **MQTT Consumer Update** — Listen on `command_response` topic, update `DeviceCommand` status (~2 hrs)
 5. **UI: Control Panel** — Add a "Controls" tab to device detail with toggle switches, sliders, input fields based on the device template's `register_map` (~4 hrs)
-6. **Edge Gateway Handler** — In Repo 2 (Nodeflow Edge), subscribe to `command` topic, parse, execute Modbus write, publish response (~4 hrs)
+6. **Edge Gateway Handler** — In Repo 2 (Novena Gateway), subscribe to `command` topic, parse, execute Modbus write, publish response (~4 hrs)
 7. **Audit Trail** — All commands logged, shown in a "Command History" table on device detail (~2 hrs)
 8. **Safety Mode** — `requires_confirmation` flag for critical operations (e.g., "Stop Pump") — pops a confirmation modal (~2 hrs)
 
@@ -122,7 +122,7 @@ class DeviceCommand(BaseTeamModel):
 "If Temperature > 50°C for 5 minutes, automatically turn on Chiller 2 via Modbus." — The platform handles logic in the cloud, saving customers from needing a PLC programmer.
 
 ### How It Differs From Current Alerts
-Our current alert engine ([services.py](file:///d:/Nodeflow/apps/alerts/services.py)) only *notifies*. It says "hey, temperature is high!" but doesn't *do* anything about it. Automations close the loop: **detect → decide → act**.
+Our current alert engine ([services.py](file:///d:/Novena-Hub/apps/alerts/services.py)) only *notifies*. It says "hey, temperature is high!" but doesn't *do* anything about it. Automations close the loop: **detect → decide → act**.
 
 ### Architecture Design
 
@@ -209,7 +209,7 @@ class AutomationLog(models.Model):
 
 ### How It Integrates With Our Pipeline
 
-The key integration point is [ingest_telemetry_data()](file:///d:/Nodeflow/apps/telemetry/services.py#L8). After we create telemetry records and check alerts, we add a third step:
+The key integration point is [ingest_telemetry_data()](file:///d:/Novena-Hub/apps/telemetry/services.py#L8). After we create telemetry records and check alerts, we add a third step:
 
 ```python
 # In telemetry/services.py, after line 82:
@@ -305,7 +305,7 @@ The automation builder should feel like a **simplified IFTTT** — not a code ed
 Fine-grained permissions: Factory Owner sees billing. Plant Manager sees dashboards. Shift Operator can only acknowledge alarms but cannot change configurations.
 
 ### What We Have Today
-Pegasus gives us a basic 2-role system in [roles.py](file:///d:/Nodeflow/apps/teams/roles.py):
+Pegasus gives us a basic 2-role system in [roles.py](file:///d:/Novena-Hub/apps/teams/roles.py):
 - `admin` — Full control
 - `member` — General access
 
@@ -507,7 +507,7 @@ class TicketTemplate(models.Model):
 
 ### Auto-Generation from Alerts
 
-The hook goes into [trigger_alert()](file:///d:/Nodeflow/apps/alerts/services.py#L45):
+The hook goes into [trigger_alert()](file:///d:/Novena-Hub/apps/alerts/services.py#L45):
 
 ```python
 # In alerts/services.py, after line 68:
@@ -600,7 +600,7 @@ Generate a **read-only live URL** for a specific dashboard to share with:
 - Investors or auditors who need temporary access
 
 ### Why It's a Growth Engine
-- **Viral loop**: Every shared link exposes a non-customer to Nodeflow. "Powered by Nodeflow" in the footer.
+- **Viral loop**: Every shared link exposes a non-customer to Novena. "Powered by Novena" in the footer.
 - **Enterprise readiness**: Large SMEs need to share dashboards with external stakeholders.
 - **Zero-friction onboarding**: Prospect sees a live dashboard → "I want this for my factory" → sign up.
 
@@ -632,7 +632,7 @@ class SharedDashboard(BaseTeamModel):
     expires_at = models.DateTimeField(null=True, blank=True)
     
     # Branding
-    show_nodeflow_branding = models.BooleanField(default=True)  # "Powered by Nodeflow"
+    show_novena_branding = models.BooleanField(default=True)  # "Powered by Novena"
     custom_logo = models.ImageField(upload_to='shared_dashboard_logos/', blank=True)
     
     # Analytics
@@ -645,8 +645,8 @@ class SharedDashboard(BaseTeamModel):
 ### URL Design
 
 ```
-Public URL:  https://app.nodeflow.io/shared/{token}/
-Example:     https://app.nodeflow.io/shared/a1b2c3d4e5f6/
+Public URL:  https://app.${NOVENA_DOMAIN}/shared/{token}/
+Example:     https://app.${NOVENA_DOMAIN}/shared/a1b2c3d4e5f6/
 ```
 
 This is a **completely separate view** — no authentication required, no navigation chrome, just a clean dashboard with auto-refreshing HTMX charts.
@@ -672,7 +672,7 @@ This is a **completely separate view** — no authentication required, no naviga
 Leverage the existing Pegasus chat UI + LiteLLM integration to let users ask plain English questions about their factory data. The LLM queries TimescaleDB behind the scenes and translates raw numbers into actionable insights.
 
 ### What We Have Today
-The [ChatConsumer](file:///d:/Nodeflow/apps/chat/consumers.py) already handles WebSocket streaming with LiteLLM. But it's a **generic chatbot** — it has zero knowledge of the user's devices, data, or alerts.
+The [ChatConsumer](file:///d:/Novena-Hub/apps/chat/consumers.py) already handles WebSocket streaming with LiteLLM. But it's a **generic chatbot** — it has zero knowledge of the user's devices, data, or alerts.
 
 ### Architecture: OpenAI Function Calling (Tool Use)
 
@@ -701,7 +701,7 @@ sequenceDiagram
 
 ```python
 # apps/chat/tools.py (NEW FILE)
-NODEFLOW_TOOLS = [
+NOVENA_TOOLS = [
     {
         "type": "function",
         "function": {
@@ -794,7 +794,7 @@ from apps.devices.models import Device, Site
 from apps.alerts.models import Alert
 from datetime import datetime, timedelta
 
-class NodeflowToolExecutor:
+class NovenaToolExecutor:
     """Executes LLM tool calls against the user's team data."""
     
     def __init__(self, team):
@@ -861,7 +861,7 @@ class NodeflowToolExecutor:
 ### System Prompt
 
 ```python
-NODEFLOW_SYSTEM_PROMPT = """You are the Nodeflow AI Assistant — an expert in industrial IoT, 
+NOVENA_SYSTEM_PROMPT = """You are the Novena AI Assistant — an expert in industrial IoT, 
 energy management, and factory operations. You help facility managers understand their 
 equipment data, diagnose issues, and optimise operations.
 
@@ -880,7 +880,7 @@ Guidelines:
 
 ### Changes to ChatConsumer
 
-The main change is adding tool-calling support to the [_stream_response_text()](file:///d:/Nodeflow/apps/chat/consumers.py#L112) method:
+The main change is adding tool-calling support to the [_stream_response_text()](file:///d:/Novena-Hub/apps/chat/consumers.py#L112) method:
 
 ```python
 # Modified ChatConsumer.receive() — high-level pseudocode
@@ -890,14 +890,14 @@ async def receive(self, text_data):
     # Inject system prompt with team context
     system_msg = {
         "role": "system", 
-        "content": NODEFLOW_SYSTEM_PROMPT + f"\n\nTeam: {self.team.name}"
+        "content": NOVENA_SYSTEM_PROMPT + f"\n\nTeam: {self.team.name}"
     }
     messages = [system_msg] + self.messages
     
     # Call LLM with tools
     response = await litellm.acompletion(
         messages=messages, 
-        tools=NODEFLOW_TOOLS, 
+        tools=NOVENA_TOOLS, 
         stream=False,  # Can't stream tool calls
         **get_llm_kwargs()
     )
@@ -906,7 +906,7 @@ async def receive(self, text_data):
     if response.choices[0].message.tool_calls:
         for tool_call in response.choices[0].message.tool_calls:
             # Execute the tool
-            executor = NodeflowToolExecutor(self.team)
+            executor = NovenaToolExecutor(self.team)
             result = executor.execute(
                 tool_call.function.name, 
                 json.loads(tool_call.function.arguments)
@@ -937,7 +937,7 @@ async def receive(self, text_data):
 
 ### Implementation Steps
 
-1. **System prompt** — Write the Nodeflow-specific system prompt (~1 hr)
+1. **System prompt** — Write the Novena-specific system prompt (~1 hr)
 2. **Tool definitions** — Define 5-6 function schemas (~1 hr)
 3. **Tool executor** — Implement each function with proper team scoping and SQL queries (~4 hrs)
 4. **Modify ChatConsumer** — Add tool-calling loop with non-streaming first call + streaming second call (~3 hrs)
@@ -946,7 +946,7 @@ async def receive(self, text_data):
 7. **UI polish** — Add "suggested questions" chips below the chat input (~1 hr)
 
 > [!TIP]
-> **Demo killer feature.** This is the single best feature to show in a sales demo. A prospect will type "how much energy am I wasting?" and Nodeflow will give them a dollar amount. That's the moment they pull out their credit card.
+> **Demo killer feature.** This is the single best feature to show in a sales demo. A prospect will type "how much energy am I wasting?" and Novena will give them a dollar amount. That's the moment they pull out their credit card.
 
 ### Effort: ~3-4 days | Revenue Impact: VERY HIGH (demo wow-factor + competitive differentiator)
 
@@ -983,7 +983,7 @@ gantt
 | **2** | **AI Chat** | Highest demo impact for lowest effort. Uses existing Pegasus chat infra. Will immediately differentiate us in every sales call. |
 | **3** | **Write-Back** | Transforms the value proposition from "monitoring" to "control." Directly justifies higher-tier pricing. |
 | **4** | **Shared Links** | Quick win that drives organic growth. Every link shared is a free marketing impression. |
-| **5** | **Maintenance Ticketing** | Major retention driver. Once a customer's maintenance data is in Nodeflow, they'll never leave. |
+| **5** | **Maintenance Ticketing** | Major retention driver. Once a customer's maintenance data is in Novena, they'll never leave. |
 | **6** | **Automations** | Most complex feature, but also the most transformative. Depends on Write-Back being solid. This is the "replace a PLC programmer" pitch. |
 
 ---
@@ -1001,7 +1001,7 @@ gantt
 | **TOTAL** | **~20-27 days** | |
 
 > [!IMPORTANT]
-> **This is ~5-6 weeks of heads-down building.** After this sprint, Nodeflow wouldn't just be a monitoring dashboard — it would be a complete industrial operations platform that competes with enterprise SCADA systems costing $50K+. That's the pitch: "Everything your factory needs for S$299/month."
+> **This is ~5-6 weeks of heads-down building.** After this sprint, Novena wouldn't just be a monitoring dashboard — it would be a complete industrial operations platform that competes with enterprise SCADA systems costing $50K+. That's the pitch: "Everything your factory needs for S$299/month."
 
 ---
 

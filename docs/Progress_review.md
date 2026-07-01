@@ -1,4 +1,4 @@
-# Nodeflow Progress Review — Codebase Audit & Next Steps
+# Novena Progress Review — Codebase Audit & Next Steps
 
 > **Date:** April 10, 2026  
 > **Goal:** "Shopify for IIoT" — the brand ASEAN SMEs think of for industrial monitoring  
@@ -22,7 +22,7 @@
 | **Device templates** (register maps) | ✅ Done | 🟡 MVP | Eastron SDM630, Schneider PM5110, generic temp sensor. Needs more |
 | **MQTT broker** (Mosquitto) | ✅ Done | 🟢 Solid | Docker-compose integrated |
 | **MQTT consumer** (Django management command) | ✅ Done | 🟢 Solid | Subscribes to `v1/gateway/telemetry`, parses, ingests |
-| **MQTT payload parser** | ✅ Done | 🟢 Solid | Supports Nodeflow format + ThingsBoard Gateway format |
+| **MQTT payload parser** | ✅ Done | 🟢 Solid | Supports Novena format + ThingsBoard Gateway format |
 | **Telemetry ingestion pipeline** | ✅ Done | 🟢 Solid | `ingest_telemetry_data()` → bulk create → alert check → device update |
 | **Telemetry data model** (TimescaleDB-ready) | ✅ Done | 🟢 Solid | Separate numeric/string/bool fields, indexed on (device, key, timestamp) |
 | **Alert rules** (threshold-based) | ✅ Done | 🟢 Solid | gt/lt/gte/lte/eq/neq, severity, cooldown, per-device or per-site |
@@ -110,7 +110,7 @@ graph LR
 
 ## 3. What "Done" Looks Like — The End Goal State
 
-Let me paint the picture of what Nodeflow needs to be to match our "Shopify for IIoT" vision:
+Let me paint the picture of what Novena needs to be to match our "Shopify for IIoT" vision:
 
 ### Product Completeness (For Paying Customers)
 

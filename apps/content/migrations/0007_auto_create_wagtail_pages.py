@@ -5,9 +5,9 @@ def create_wagtail_pages(apps, schema_editor):
     from wagtail.models import Page
     from django.contrib.contenttypes.models import ContentType
     from django.db import connection
-    from apps.content.models import NodeflowHomePage, MarketingStandardPage
+    from apps.content.models import MarketingStandardPage
 
-    # 1. Convert homepage ID=2 to NodeflowHomePage using raw SQL
+    # 1. Convert homepage ID=2 to NovenaHomePage using raw SQL
     try:
         nodeflow_homepage_ct, _ = ContentType.objects.get_or_create(app_label='content', model='nodeflowhomepage')
 
@@ -16,7 +16,7 @@ def create_wagtail_pages(apps, schema_editor):
             cursor.execute("DELETE FROM content_homepage WHERE page_ptr_id = 2;")
             cursor.execute("DELETE FROM content_nodeflowhomepage WHERE page_ptr_id = 2;")
             
-            # Insert the new NodeflowHomePage record manually
+            # Insert the new NovenaHomePage record manually
             cursor.execute("""
                 INSERT INTO content_nodeflowhomepage (
                     page_ptr_id, hero_tagline, hero_title, hero_subtitle, 
@@ -45,7 +45,7 @@ def create_wagtail_pages(apps, schema_editor):
                             {
                                 "icon": "fa-chart-line",
                                 "title": "Instant Auto-Dashboards",
-                                "description": "Plug your equipment in, and watch Nodeflow handle the configuration. Our schema parser matches registered templates (Omron, Schneider, Delta, Siemens) and auto-creates live WebSocket-streamed dashboards instantly.",
+                                "description": "Plug your equipment in, and watch Novena handle the configuration. Our schema parser matches registered templates (Omron, Schneider, Delta, Siemens) and auto-creates live WebSocket-streamed dashboards instantly.",
                                 "link_text": "Learn template matching",
                                 "link_url": "/product/#dashboards"
                             },
@@ -68,9 +68,9 @@ def create_wagtail_pages(apps, schema_editor):
                     {"type": "ai_spotlight", "value": {
                         "tagline": "Built-in Intelligence",
                         "title": "Stop searching for logs. <br/><span class=\"text-white/40\">Start asking questions.</span>",
-                        "body": "Traditional IoT platforms force you to query raw Timescale databases or export thousands of rows into Excel. With Nodeflow AI, query machinery trends, energy consumption, and alert history in plain English.",
+                        "body": "Traditional IoT platforms force you to query raw Timescale databases or export thousands of rows into Excel. With Novena AI, query machinery trends, energy consumption, and alert history in plain English.",
                         "prompt_text": "Show yesterday's efficiency trends for Factory Floor A.",
-                        "response_tagline": "Nodeflow AI",
+                        "response_tagline": "Novena AI",
                         "response_text": "Analyzing Timescale data: Factory Floor A peaked at 88.4% capacity at 14:15. Total energy saved vs grid baseline: 142 kWh."
                     }},
                     {"type": "final_cta", "value": {
@@ -84,14 +84,13 @@ def create_wagtail_pages(apps, schema_editor):
                 ])
             ])
             
-            # Update content type mapping in wagtailcore_page
-            cursor.execute("UPDATE wagtailcore_page SET content_type_id = %s WHERE id = 2;", [nodeflow_homepage_ct.id])
+            # Defer updating the page content type until after child pages are added.
 
     except Exception as e:
         print(f"Error converting home page in migration: {e}")
 
-    # Fetch homepage instance (now fully mapped to NodeflowHomePage class in DB)
-    homepage = NodeflowHomePage.objects.get(id=2)
+    # Use the real Wagtail Page class for tree operations such as add_child().
+    homepage = Page.objects.get(id=2)
 
     # 2. Add subpages under the converted home page
     subpages_data = [
@@ -100,7 +99,7 @@ def create_wagtail_pages(apps, schema_editor):
             "slug": "product",
             "hero_tagline": "Everything you need",
             "hero_title": "Everything you need,<br/><span class=\"text-indigo-600\">nothing you don't.</span>",
-            "hero_subtitle": "Nodeflow replaces complex, fragmented IoT stacks with a single, beautiful platform built specifically for industrial energy intelligence.",
+            "hero_subtitle": "Novena replaces complex, fragmented IoT stacks with a single, beautiful platform built specifically for industrial energy intelligence.",
             "body": [
                 ("feature_section", {
                     "title": "Real-Time Dashboards & Vision",
@@ -190,7 +189,7 @@ def create_wagtail_pages(apps, schema_editor):
             "slug": "solutions",
             "hero_tagline": "Vertical Solutions",
             "hero_title": "Tailored for the<br/><span class=\"text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-sky-400\">factory floor.</span>",
-            "hero_subtitle": "Generic IoT platforms fail because they don't understand industrial protocols or SME workflows. Nodeflow was built from the ground up for industrial reality.",
+            "hero_subtitle": "Generic IoT platforms fail because they don't understand industrial protocols or SME workflows. Novena was built from the ground up for industrial reality.",
             "body": [
                 ("solutions_section", {
                     "badge": "Sustainability",
@@ -286,8 +285,8 @@ def create_wagtail_pages(apps, schema_editor):
                     "title": "Frequently Asked Questions",
                     "faqs": [
                         {
-                            "question": "Do I need dedicated hardware to use Nodeflow?",
-                            "answer": "You can use Nodeflow with your own hardware using our open-source edge gateway, or purchase a pre-configured Nodeflow Node for zero-config setup. We support Modbus, MQTT, and Siemens S7 protocols out of the box."
+                            "question": "Do I need dedicated hardware to use Novena?",
+                            "answer": "You can use Novena with your own hardware using our open-source edge gateway, or purchase a pre-configured Novena Gateway for zero-config setup. We support Modbus, MQTT, and Siemens S7 protocols out of the box."
                         },
                         {
                             "question": "Is there a limit on how much data I can store?",
@@ -295,18 +294,18 @@ def create_wagtail_pages(apps, schema_editor):
                         },
                         {
                             "question": "Can I cancel my subscription at any time?",
-                            "answer": "Yes. Nodeflow is a month-to-month service. You can cancel at any time from your dashboard settings without any cancellation fees."
+                            "answer": "Yes. Novena is a month-to-month service. You can cancel at any time from your dashboard settings without any cancellation fees."
                         }
                     ]
                 })
             ]
         },
         {
-            "title": "About Nodeflow",
+            "title": "About Novena",
             "slug": "about",
             "hero_tagline": "Mission",
             "hero_title": "Smart factories,<br/><span class=\"text-indigo-600\">better world.</span>",
-            "hero_subtitle": "Nodeflow was born from a simple observation: modern software hadn't reached the factory floor. We're on a mission to democratize industrial intelligence for SMEs across ASEAN.",
+            "hero_subtitle": "Novena was born from a simple observation: modern software hadn't reached the factory floor. We're on a mission to democratize industrial intelligence for SMEs across ASEAN.",
             "body": [
                 ("html", """
 <section class="py-32 bg-base-200/50">
@@ -339,7 +338,7 @@ def create_wagtail_pages(apps, schema_editor):
                 <h2 class="text-3xl font-black text-white font-heading mb-6">Let's build the future together.</h2>
                 <p class="text-white/60 mb-8 leading-relaxed">Whether you're an OEM looking to add cloud features to your machines, or a facility manager starting your digital journey, we're here to help.</p>
                 <div class="space-y-4">
-                    <div class="flex items-center text-white/80"><i class="fa fa-envelope w-6 text-indigo-400"></i> hello@nodeflow.io</div>
+                    <div class="flex items-center text-white/80"><i class="fa fa-envelope w-6 text-indigo-400"></i> ${CONTACT_EMAIL}</div>
                     <div class="flex items-center text-white/80"><i class="fa fa-location-dot w-6 text-indigo-400"></i> One North, Singapore</div>
                 </div>
             </div>
@@ -372,8 +371,18 @@ def create_wagtail_pages(apps, schema_editor):
             homepage.add_child(instance=sp)
             sp.save_revision().publish()
 
+    # Update content type mapping after Wagtail tree operations finish.
+    try:
+        from django.contrib.contenttypes.models import ContentType
+        from django.db import connection
+        nodeflow_homepage_ct = ContentType.objects.get(app_label="content", model="nodeflowhomepage")
+        with connection.cursor() as cursor:
+            cursor.execute("UPDATE wagtailcore_page SET content_type_id = %s WHERE id = 2;", [nodeflow_homepage_ct.id])
+    except Exception as e:
+        print(f"Error updating homepage content type in migration: {e}")
+
 def remove_wagtail_pages(apps, schema_editor):
-    from apps.content.models import MarketingStandardPage, NodeflowHomePage
+    from apps.content.models import MarketingStandardPage
     from wagtail.models import Page
     from django.contrib.contenttypes.models import ContentType
     from django.db import connection

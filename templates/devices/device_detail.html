@@ -29,15 +29,21 @@
     <div class="md:flex md:items-center md:justify-between mb-8">
         <div class="min-w-0 flex-1">
             <h2 class="text-2xl font-bold leading-7 text-gray-900 dark:text-white sm:truncate sm:text-3xl sm:tracking-tight">{{ device.name }}</h2>
-            <div class="mt-1 flex items-center space-x-4">
-                <div class="flex items-center">
-                    <div class="h-2.5 w-2.5 rounded-full mr-2 {% if device.status == 'online' %}bg-green-500{% else %}bg-gray-400{% endif %}"></div>
-                    <span class="text-sm text-gray-500 dark:text-gray-400 font-medium">{{ device.get_status_display }}</span>
+            <div class='mt-1 flex flex-wrap items-center gap-x-4 gap-y-1'>
+                {% with device_freshness=device.freshness %}
+                <div class='flex items-center'>
+                    <div class='h-2.5 w-2.5 rounded-full mr-2 {% if device_freshness.status == "live" %}bg-green-500{% elif device_freshness.status == "delayed" %}bg-amber-500{% elif device_freshness.status == "alarm" %}bg-red-500{% else %}bg-gray-400{% endif %}'></div>
+                    <span class='text-sm text-gray-500 dark:text-gray-400 font-medium'>{{ device_freshness.display }}</span>
                 </div>
-                <div class="text-sm text-gray-300 dark:text-gray-600">|</div>
-                <div class="text-sm text-gray-500 dark:text-gray-400">{{ device.get_device_type_display }}</div>
-                <div class="text-sm text-gray-300 dark:text-gray-600">|</div>
-                <div class="text-sm text-gray-500 dark:text-gray-400">{{ device.site.name }}</div>
+                {% endwith %}
+                {% if device.gateway %}
+                <div class='text-sm text-gray-300 dark:text-gray-600'>|</div>
+                <div class='text-sm text-gray-500 dark:text-gray-400'>{{ device.gateway_context_display }}</div>
+                {% endif %}
+                <div class='text-sm text-gray-300 dark:text-gray-600'>|</div>
+                <div class='text-sm text-gray-500 dark:text-gray-400'>{{ device.get_device_type_display }}</div>
+                <div class='text-sm text-gray-300 dark:text-gray-600'>|</div>
+                <div class='text-sm text-gray-500 dark:text-gray-400'>{{ device.site.name }}</div>
             </div>
         </div>
         <div class="mt-5 flex lg:ml-4 lg:mt-0 space-x-3">
@@ -137,72 +143,50 @@
 
 
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
     <script>
         let charts = {};
         const deviceId = "{{ device.id }}";
         const teamSlug = "{{ request.team.slug }}";
         let socket = null;
+        let telemetryPollTimer = null;
+        let telemetryPollingActive = false;
+        let telemetrySampleLimit = 20;
+        let telemetrySampleColumns = [];
+        let telemetrySampleRows = [];
+        let telemetryFallbackIntervalMs = 5000;
+        let telemetryStaleTimer = null;
+        let telemetryConnectTimer = null;
+        const telemetryStaleGraceMs = 15000;
         const hasDjangoWidgets = {% if widgets %}true{% else %}false{% endif %};
 
         async function initDashboard() {
             try {
+                initTelemetrySampleSelector();
+                await loadTelemetrySamples();
+
                 if (hasDjangoWidgets) {
-                    // Initialize Chart.js for each timeseries canvas in the page
                     const canvases = document.querySelectorAll('canvas[id^="chart-"]');
                     canvases.forEach(canvas => {
                         const key = canvas.id.replace('chart-', '');
                         const ctx = canvas.getContext('2d');
                         const card = canvas.closest('[id^="widget-card-"]');
                         const title = card ? card.querySelector('h4').textContent : key;
-                        
-                        charts[key] = new Chart(ctx, {
-                            type: 'line',
-                            data: { labels: [], datasets: [{ 
-                                label: title,
-                                data: [], 
-                                borderColor: '#6366f1', 
-                                backgroundColor: 'rgba(99, 102, 241, 0.05)',
-                                borderWidth: 3,
-                                fill: true,
-                                tension: 0.4,
-                                pointRadius: 0
-                            }]},
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: { legend: { display: false } },
-                                scales: {
-                                    x: { display: false },
-                                    y: { 
-                                        grid: { color: 'rgba(0,0,0,0.02)' },
-                                        ticks: { font: { size: 10, weight: '700' }, color: '#94a3b8' }
-                                    }
-                                }
-                            }
-                        });
-                        
+                        charts[key] = buildTelemetryChart(ctx, title);
                         updateMetricHistory(key);
                     });
-                    
-                    // Fetch initial history for gauge and value widgets as well to populate
-                    const valueElements = document.querySelectorAll('[id^="value-"]');
-                    valueElements.forEach(el => {
+
+                    document.querySelectorAll('[id^="value-"]').forEach(el => {
                         const key = el.id.replace('value-', '');
-                        // If it's not a chart (already fetched), update it
-                        if (!charts[key]) {
-                            updateMetricHistory(key);
-                        }
+                        if (!charts[key]) updateMetricHistory(key);
                     });
-                    
+
                     initWebSocket();
                 } else {
-                    // Fallback to old dynamic fetch (e.g. for devices without templates)
                     const response = await fetch(`/a/${teamSlug}/telemetry/api/metrics/${deviceId}/`);
                     const data = await response.json();
-                    
                     const container = document.getElementById('metrics-container');
-                    container.innerHTML = ''; // Clear skeletons
+                    container.innerHTML = '';
 
                     if (data.metrics.length === 0) {
                         container.innerHTML = `
@@ -212,18 +196,44 @@
                                 <p class="text-sm text-base-content/30 mt-1">Once the sensors start transmitting, charts will appear here automatically.</p>
                             </div>
                         `;
+                        initWebSocket();
                         return;
                     }
 
-                    data.metrics.forEach(metric => {
-                        createMetricCard(metric);
-                    });
-
+                    data.metrics.forEach(metric => createMetricCard(metric));
                     initWebSocket();
                 }
             } catch (e) {
                 console.error("Failed to init dashboard", e);
             }
+        }
+
+        function buildTelemetryChart(ctx, title) {
+            return new Chart(ctx, {
+                type: 'line',
+                data: { labels: [], datasets: [{
+                    label: title,
+                    data: [],
+                    borderColor: '#6366f1',
+                    backgroundColor: 'rgba(99, 102, 241, 0.05)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0
+                }]},
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { display: false },
+                        y: {
+                            grid: { color: 'rgba(0,0,0,0.02)' },
+                            ticks: { font: { size: 10, weight: '700' }, color: '#94a3b8' }
+                        }
+                    }
+                }
+            });
         }
 
         function createMetricCard(metric) {
@@ -248,74 +258,136 @@
                 </div>
             `;
             container.appendChild(card);
+            charts[metric.key] = buildTelemetryChart(document.getElementById(`chart-${metric.key}`).getContext('2d'), metric.label);
+            updateMetricHistory(metric.key);
+        }
 
-            const ctx = document.getElementById(`chart-${metric.key}`).getContext('2d');
-            charts[metric.key] = new Chart(ctx, {
-                type: 'line',
-                data: { labels: [], datasets: [{ 
-                    label: metric.label,
-                    data: [], 
-                    borderColor: '#6366f1', 
-                    backgroundColor: 'rgba(99, 102, 241, 0.05)',
-                    borderWidth: 3,
-                    fill: true,
-                    tension: 0.4,
-                    pointRadius: 0
-                }]},
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { display: false },
-                        y: { 
-                            grid: { color: 'rgba(0,0,0,0.02)' },
-                            ticks: { font: { size: 10, weight: '700' }, color: '#94a3b8' }
-                        }
-                    }
+        function initTelemetrySampleSelector() {
+            const selector = document.getElementById('telemetry-sample-limit');
+            if (!selector) return;
+            selector.value = String(telemetrySampleLimit);
+            selector.addEventListener('change', () => {
+                telemetrySampleLimit = parseInt(selector.value, 10) || 20;
+                loadTelemetrySamples();
+            });
+        }
+
+        async function loadTelemetrySamples() {
+            try {
+                const response = await fetch(`/a/${teamSlug}/telemetry/api/samples/${deviceId}/?limit=${telemetrySampleLimit}`);
+                if (!response.ok) throw new Error(`Samples request failed: ${response.status}`);
+                const data = await response.json();
+                telemetrySampleColumns = data.columns || [];
+                telemetrySampleRows = data.rows || [];
+                telemetrySampleLimit = data.limit || telemetrySampleLimit;
+                renderTelemetrySamples();
+            } catch (e) {
+                console.warn("Telemetry samples fetch failed", e);
+            }
+        }
+
+        function renderTelemetrySamples() {
+            const head = document.getElementById('telemetry-samples-head');
+            const body = document.getElementById('telemetry-samples-body');
+            if (!head || !body) return;
+
+            head.innerHTML = '';
+            const headerRow = document.createElement('tr');
+            headerRow.appendChild(buildHeaderCell('Time'));
+            telemetrySampleColumns.forEach(column => {
+                const label = column.unit ? `${column.label} (${column.unit})` : column.label;
+                headerRow.appendChild(buildHeaderCell(label));
+            });
+            head.appendChild(headerRow);
+
+            body.innerHTML = '';
+            if (telemetrySampleRows.length === 0) {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = Math.max(1, telemetrySampleColumns.length + 1);
+                cell.className = 'px-6 py-10 text-center text-xs text-gray-400 italic';
+                cell.textContent = 'No telemetry samples recorded yet.';
+                row.appendChild(cell);
+                body.appendChild(row);
+                return;
+            }
+
+            telemetrySampleRows.slice(0, telemetrySampleLimit).forEach((sample, index) => {
+                const row = document.createElement('tr');
+                if (index === 0) row.className = 'transition-colors duration-500';
+                row.appendChild(buildValueCell(formatSampleTime(sample.timestamp), true));
+                telemetrySampleColumns.forEach(column => {
+                    row.appendChild(buildValueCell(formatTelemetryValue(sample.values[column.key])));
+                });
+                body.appendChild(row);
+            });
+        }
+
+        function buildHeaderCell(text) {
+            const cell = document.createElement('th');
+            cell.className = 'px-6 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest whitespace-nowrap';
+            cell.textContent = text;
+            return cell;
+        }
+
+        function buildValueCell(text, isTime = false) {
+            const cell = document.createElement('td');
+            cell.className = isTime
+                ? 'px-6 py-4 whitespace-nowrap text-xs text-gray-500 font-mono'
+                : 'px-6 py-4 whitespace-nowrap text-xs text-gray-700 dark:text-gray-200 font-mono';
+            cell.textContent = text;
+            return cell;
+        }
+
+        function formatSampleTime(timestamp) {
+            const parsed = new Date(timestamp);
+            return Number.isNaN(parsed.getTime()) ? timestamp : parsed.toLocaleTimeString();
+        }
+
+        function formatTelemetryValue(value) {
+            if (value === null || value === undefined || value === '') return '—';
+            if (typeof value === 'number') {
+                return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+            }
+            if (typeof value === 'boolean') return value ? 'ON' : 'OFF';
+            return String(value);
+        }
+
+        function prependTelemetrySample(timestamp, values) {
+            if (!telemetrySampleColumns.length) {
+                loadTelemetrySamples();
+                return;
+            }
+
+            const nextValues = {};
+            let hasKnownValue = false;
+            telemetrySampleColumns.forEach(column => {
+                if (Object.prototype.hasOwnProperty.call(values, column.key)) {
+                    nextValues[column.key] = values[column.key];
+                    hasKnownValue = true;
                 }
             });
-            
-            // Single initial fetch of historical coordinates
-            updateMetricHistory(metric.key);
+            if (!hasKnownValue) return;
+
+            const existing = telemetrySampleRows.find(row => row.timestamp === timestamp);
+            if (existing) {
+                existing.values = {...existing.values, ...nextValues};
+            } else {
+                telemetrySampleRows.unshift({timestamp, values: nextValues});
+            }
+            telemetrySampleRows = telemetrySampleRows.slice(0, telemetrySampleLimit);
+            renderTelemetrySamples();
         }
 
         async function updateMetricHistory(key) {
             try {
                 const response = await fetch(`/a/${teamSlug}/telemetry/api/history/${deviceId}/?key=${key}&hours=1`);
                 const data = await response.json();
-                
+
                 if (data.values.length > 0) {
                     const latestValue = data.values[data.values.length - 1];
-                    
-                    const valEl = document.getElementById(`value-${key}`);
-                    if (valEl) {
-                        const indicatorEl = document.getElementById(`indicator-${key}`);
-                        if (indicatorEl) {
-                            const isTrue = latestValue === true || latestValue === "true" || latestValue === 1 || latestValue === "1" || String(latestValue).toLowerCase() === "on" || String(latestValue).toLowerCase() === "run";
-                            if (isTrue) {
-                                indicatorEl.className = "w-8 h-8 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]";
-                                valEl.innerText = "ON";
-                            } else {
-                                indicatorEl.className = "w-8 h-8 rounded-full bg-slate-300 dark:bg-gray-600";
-                                valEl.innerText = "OFF";
-                            }
-                        } else {
-                            valEl.innerText = typeof latestValue === 'number' ? latestValue.toFixed(1) : latestValue;
-                        }
-                    }
-                    
-                    const gaugeEl = document.getElementById(`gauge-${key}`);
-                    if (gaugeEl) {
-                        const min = parseFloat(gaugeEl.getAttribute('data-min') || 0);
-                        const max = parseFloat(gaugeEl.getAttribute('data-max') || 100);
-                        const numVal = parseFloat(latestValue);
-                        if (!isNaN(numVal)) {
-                            const pct = Math.min(100, Math.max(0, Math.round(((numVal - min) / (max - min)) * 100)));
-                            gaugeEl.style.setProperty('--value', pct);
-                        }
-                    }
-                    
+                    updateMetricValue(key, latestValue);
+
                     if (charts[key]) {
                         const chart = charts[key];
                         chart.data.labels = data.labels.map(l => new Date(l).toLocaleTimeString());
@@ -328,95 +400,152 @@
             }
         }
 
+        function updateMetricValue(key, val) {
+            const valEl = document.getElementById(`value-${key}`);
+            if (valEl) {
+                const indicatorEl = document.getElementById(`indicator-${key}`);
+                if (indicatorEl) {
+                    const isTrue = val === true || val === "true" || val === 1 || val === "1" || String(val).toLowerCase() === "on" || String(val).toLowerCase() === "run";
+                    if (isTrue) {
+                        indicatorEl.className = "w-8 h-8 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]";
+                        valEl.innerText = "ON";
+                    } else {
+                        indicatorEl.className = "w-8 h-8 rounded-full bg-slate-300 dark:bg-gray-600";
+                        valEl.innerText = "OFF";
+                    }
+                } else {
+                    valEl.innerText = typeof val === 'number' ? val.toFixed(1) : val;
+                }
+            }
+
+            const gaugeEl = document.getElementById(`gauge-${key}`);
+            if (gaugeEl) {
+                const min = parseFloat(gaugeEl.getAttribute('data-min') || 0);
+                const max = parseFloat(gaugeEl.getAttribute('data-max') || 100);
+                const numVal = parseFloat(val);
+                if (!isNaN(numVal)) {
+                    const pct = Math.min(100, Math.max(0, Math.round(((numVal - min) / (max - min)) * 100)));
+                    gaugeEl.style.setProperty('--value', pct);
+                }
+            }
+        }
+
+        function updateChartPoint(key, timestamp, val) {
+            if (!charts[key]) return;
+            const chart = charts[key];
+            chart.data.labels.push(timestamp);
+            chart.data.datasets[0].data.push(val);
+            if (chart.data.labels.length > 30) {
+                chart.data.labels.shift();
+                chart.data.datasets[0].data.shift();
+            }
+            chart.update('none');
+        }
+
+        function telemetryKeysOnPage() {
+            return Array.from(document.querySelectorAll('[id^="value-"]')).map(el => el.id.replace('value-', ''));
+        }
+
+        function refreshVisibleTelemetry() {
+            const keys = new Set([...Object.keys(charts), ...telemetryKeysOnPage()]);
+            keys.forEach(key => updateMetricHistory(key));
+            loadTelemetrySamples();
+        }
+
+        function setTelemetryBadge(text, className) {
+            const badge = document.getElementById("streaming-latency-badge");
+            if (badge) {
+                badge.innerText = text;
+                badge.className = className;
+            }
+        }
+
+        function setLiveBadgeForInterval(minInterval) {
+            const label = minInterval ? (minInterval + 's stream') : 'Live stream';
+            setTelemetryBadge(label, 'text-xs font-bold text-green-500 mr-2 uppercase');
+        }
+
+        function stopTelemetryPolling() {
+            if (telemetryPollTimer) clearInterval(telemetryPollTimer);
+            telemetryPollTimer = null;
+            telemetryPollingActive = false;
+        }
+
+        function startTelemetryPolling(label = null) {
+            stopTelemetryPolling();
+            if (telemetryStaleTimer) clearTimeout(telemetryStaleTimer);
+            telemetryPollingActive = true;
+            const interval = Math.max(5000, telemetryFallbackIntervalMs);
+            refreshVisibleTelemetry();
+            telemetryPollTimer = setInterval(refreshVisibleTelemetry, interval);
+            const badgeLabel = label ? label : ('Polling ' + Math.round(interval / 1000) + 's');
+            setTelemetryBadge(badgeLabel, 'text-xs font-bold text-amber-500 mr-2 uppercase');
+        }
+
+        function scheduleTelemetryStaleWatch() {
+            if (telemetryStaleTimer) clearTimeout(telemetryStaleTimer);
+            const staleAfter = Math.max(telemetryStaleGraceMs, telemetryFallbackIntervalMs * 3);
+            telemetryStaleTimer = setTimeout(() => {
+                if (!telemetryPollingActive) startTelemetryPolling();
+            }, staleAfter);
+        }
+
         function initWebSocket() {
             const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
             const wsUrl = `${wsScheme}://${window.location.host}/ws/device/${deviceId}/`;
-            
+
             console.log(`Connecting to WebSocket: ${wsUrl}`);
             socket = new WebSocket(wsUrl);
+            if (telemetryConnectTimer) clearTimeout(telemetryConnectTimer);
+            telemetryConnectTimer = setTimeout(function() {
+                if (!socket) {
+                    setTelemetryBadge('Reconnecting', 'text-xs font-bold text-gray-400 mr-2 uppercase');
+                    startTelemetryPolling();
+                } else if (socket.readyState !== WebSocket.OPEN) {
+                    setTelemetryBadge('Reconnecting', 'text-xs font-bold text-gray-400 mr-2 uppercase');
+                    startTelemetryPolling();
+                }
+            }, 8000);
 
             socket.onopen = function() {
-                console.log("WebSocket connected successfully.");
+                console.log('WebSocket connected successfully.');
+                if (telemetryConnectTimer) clearTimeout(telemetryConnectTimer);
+                setLiveBadgeForInterval(null);
             };
 
             socket.onmessage = function(e) {
                 const msg = JSON.parse(e.data);
-                
+
                 if (msg.type === "connection_established") {
-                    const badge = document.getElementById("streaming-latency-badge");
-                    if (badge) {
-                        badge.innerText = `${msg.min_interval}s stream`;
-                        if (msg.min_interval <= 1.0) {
-                            badge.className = "text-xs font-bold text-green-500 mr-2 uppercase";
-                        } else if (msg.min_interval <= 5.0) {
-                            badge.className = "text-xs font-bold text-amber-500 mr-2 uppercase";
-                        } else {
-                            badge.className = "text-xs font-bold text-indigo-500 mr-2 uppercase";
-                        }
-                    }
+                    const minInterval = Number(msg.min_interval || 0);
+                    telemetryFallbackIntervalMs = Math.max(5000, minInterval * 1000);
+                    stopTelemetryPolling();
+                    setLiveBadgeForInterval(minInterval);
+                    scheduleTelemetryStaleWatch();
                 } else if (msg.type === "telemetry") {
+                    stopTelemetryPolling();
                     const timestamp = new Date(msg.timestamp).toLocaleTimeString();
-                    
                     Object.keys(msg.values).forEach(key => {
+                        if (key === 'device_name') return;
                         const val = msg.values[key];
-                        const displayVal = typeof val === 'number' ? val.toFixed(1) : val;
-                        
-                        const valEl = document.getElementById(`value-${key}`);
-                        if (valEl) {
-                            const indicatorEl = document.getElementById(`indicator-${key}`);
-                            if (indicatorEl) {
-                                const isTrue = val === true || val === "true" || val === 1 || val === "1" || String(val).toLowerCase() === "on" || String(val).toLowerCase() === "run";
-                                if (isTrue) {
-                                    indicatorEl.className = "w-8 h-8 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]";
-                                    valEl.innerText = "ON";
-                                } else {
-                                    indicatorEl.className = "w-8 h-8 rounded-full bg-slate-300 dark:bg-gray-600";
-                                    valEl.innerText = "OFF";
-                                }
-                            } else {
-                                valEl.innerText = displayVal;
-                            }
-                        }
-
-                        const gaugeEl = document.getElementById(`gauge-${key}`);
-                        if (gaugeEl) {
-                            const min = parseFloat(gaugeEl.getAttribute('data-min') || 0);
-                            const max = parseFloat(gaugeEl.getAttribute('data-max') || 100);
-                            const numVal = parseFloat(val);
-                            if (!isNaN(numVal)) {
-                                const pct = Math.min(100, Math.max(0, Math.round(((numVal - min) / (max - min)) * 100)));
-                                gaugeEl.style.setProperty('--value', pct);
-                            }
-                        }
-
-                        if (charts[key]) {
-                            const chart = charts[key];
-                            chart.data.labels.push(timestamp);
-                            chart.data.datasets[0].data.push(val);
-                            
-                            // Keep last 30 points
-                            if (chart.data.labels.length > 30) {
-                                chart.data.labels.shift();
-                                chart.data.datasets[0].data.shift();
-                            }
-                            chart.update('none');
-                        }
+                        updateMetricValue(key, val);
+                        updateChartPoint(key, timestamp, val);
                     });
+                    prependTelemetrySample(msg.timestamp, msg.values);
+                    scheduleTelemetryStaleWatch();
                 }
             };
 
             socket.onclose = function(e) {
                 console.log("WebSocket connection closed. Reconnecting in 3s...", e);
-                const badge = document.getElementById("streaming-latency-badge");
-                if (badge) {
-                    badge.innerText = "Reconnecting...";
-                    badge.className = "text-xs font-bold text-gray-400 mr-2 uppercase";
-                }
+                setTelemetryBadge("Reconnecting", "text-xs font-bold text-gray-400 mr-2 uppercase");
+                startTelemetryPolling();
                 setTimeout(initWebSocket, 3000);
             };
 
             socket.onerror = function(err) {
                 console.error("WebSocket error observed:", err);
+                setTelemetryBadge("Reconnecting", "text-xs font-bold text-gray-400 mr-2 uppercase");
             };
         }
 
@@ -493,39 +622,31 @@
                 {% endif %}
             </div>
 
-            <!-- Command History -->
+            <!-- Live Telemetry Samples -->
             <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-                <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
-                    <h3 class="text-sm font-black uppercase tracking-widest text-gray-500">Command Audit Trail</h3>
+                <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                        <h3 class="text-sm font-black uppercase tracking-widest text-gray-500">Live Telemetry Samples</h3>
+                    </div>
+                    <select id="telemetry-sample-limit" class="select select-bordered select-sm rounded-xl text-xs font-bold bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
+                        <option value="10">10 samples</option>
+                        <option value="20" selected>20 samples</option>
+                        <option value="30">30 samples</option>
+                        <option value="40">40 samples</option>
+                        <option value="50">50 samples</option>
+                    </select>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-100 dark:divide-gray-700">
-                        <thead class="bg-gray-50 dark:bg-gray-900/50">
+                        <thead id="telemetry-samples-head" class="bg-gray-50 dark:bg-gray-900/50">
                             <tr>
                                 <th class="px-6 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Time</th>
-                                <th class="px-6 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Command</th>
-                                <th class="px-6 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">User</th>
-                                <th class="px-6 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
                             </tr>
                         </thead>
-                        <tbody id="command-history-body" class="divide-y divide-gray-50 dark:divide-gray-700">
-                            {% for command in recent_commands %}
+                        <tbody id="telemetry-samples-body" class="divide-y divide-gray-50 dark:divide-gray-700">
                             <tr>
-                                <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500 font-mono">{{ command.requested_at|date:"H:i:s" }}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-xs">
-                                    <span class="font-bold text-indigo-600 dark:text-indigo-400">{{ command.command_key }}</span>
-                                    <span class="text-gray-400 ml-1">→ {{ command.value }}</span>
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500">{{ command.created_by.get_display_name }}</td>
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    {% include "devices/partials/command_status_badge.html" %}
-                                </td>
+                                <td class="px-6 py-10 text-center text-xs text-gray-400 italic">Loading telemetry samples...</td>
                             </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="4" class="px-6 py-10 text-center text-xs text-gray-400 italic">No commands have been sent to this device yet.</td>
-                            </tr>
-                            {% endfor %}
                         </tbody>
                     </table>
                 </div>
@@ -754,6 +875,45 @@
                     </dl>
                 </div>
             </div>
+
+
+            <!-- Command History -->
+            <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                    <h3 class="text-sm font-black uppercase tracking-widest text-gray-500">Command Audit Trail</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-100 dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-900/50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Time</th>
+                                <th class="px-6 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Command</th>
+                                <th class="px-6 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">User</th>
+                                <th class="px-6 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="command-history-body" class="divide-y divide-gray-50 dark:divide-gray-700">
+                            {% for command in recent_commands %}
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500 font-mono">{{ command.requested_at|date:"H:i:s" }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-xs">
+                                    <span class="font-bold text-indigo-600 dark:text-indigo-400">{{ command.command_key }}</span>
+                                    <span class="text-gray-400 ml-1">→ {{ command.value }}</span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500">{{ command.created_by.get_display_name }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    {% include "devices/partials/command_status_badge.html" %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="px-6 py-10 text-center text-xs text-gray-400 italic">No commands have been sent to this device yet.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -913,3 +1073,5 @@
     </script>
 </div>
 {% endblock %}
+
+

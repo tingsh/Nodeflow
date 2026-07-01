@@ -3,7 +3,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 from apps.maintenance.models import MaintenanceTicket, PreventiveSchedule
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 
 def auto_create_ticket(alert, force=False):
@@ -77,7 +77,7 @@ def send_ticket_assignment_email(ticket):
         logger.warning(f"No email recipient configured for assignee on TKT-{ticket.id}")
         return
 
-    subject = f"[Nodeflow] Job Assigned: TKT-{ticket.id} - {ticket.title}"
+    subject = f"[Novena] Job Assigned: TKT-{ticket.id} - {ticket.title}"
     
     checklist_str = ""
     if ticket.checklist_state:
@@ -97,7 +97,7 @@ def send_ticket_assignment_email(ticket):
         f"Description:\n{ticket.description}\n\n"
         f"Checklist Tasks:\n{checklist_str}\n"
         f"Manage this ticket on the dashboard: {settings.PROJECT_METADATA['URL']}/a/{ticket.team.slug}/maintenance/tickets/{ticket.id}/\n\n"
-        f"Nodeflow Operations Team"
+        f"Novena Operations Team"
     )
 
     try:

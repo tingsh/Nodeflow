@@ -9,6 +9,8 @@ class TelemetryData(models.Model):
 
     device = models.ForeignKey("devices.Device", on_delete=models.CASCADE, related_name="telemetry")
     timestamp = models.DateTimeField(db_index=True)
+    cloud_received_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    db_flushed_at = models.DateTimeField(null=True, blank=True, db_index=True)
     key = models.CharField(max_length=100)  # e.g., 'active_power', 'voltage', 'temperature'
 
     # Values as separate fields to avoid JSON overhead in high-frequency writes

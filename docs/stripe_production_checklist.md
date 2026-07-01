@@ -1,6 +1,6 @@
 # Stripe Production Launch Checklist
 
-Going live with Stripe is straightforward, but it requires carefully duplicating your Test Mode configuration into Live Mode. When you are ready to launch Nodeflow Cloud to real paying customers, follow this step-by-step mental framework.
+Going live with Stripe is straightforward, but it requires carefully duplicating your Test Mode configuration into Live Mode. When you are ready to launch Novena Hub to real paying customers, follow this step-by-step mental framework.
 
 > [!IMPORTANT]  
 > Test mode and Live mode in Stripe are completely isolated. None of your test products, pricing tables, or settings carry over automatically. You must recreate them in Live mode.

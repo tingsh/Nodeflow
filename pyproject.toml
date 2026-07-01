@@ -28,7 +28,7 @@ line-ending = "auto"
 py-modules = []
 
 [project]
-name = "iot-platform"
+name = "novena-hub"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"

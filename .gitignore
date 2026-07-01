@@ -8,8 +8,8 @@ venv
 db.sqlite3
 .sass-cache/
 celerybeat-schedule
-iot_platform/localsettings.py
-iot_platform/local.py
+novena_hub/localsettings.py
+novena_hub/local.py
 static_root/
 node_modules/
 .vite/
@@ -29,8 +29,8 @@ venv
 db.sqlite3
 .sass-cache/
 celerybeat-schedule
-iot_platform/localsettings.py
-iot_platform/local.py
+novena_hub/localsettings.py
+novena_hub/local.py
 static_root/
 node_modules/
 .vite/
@@ -49,3 +49,12 @@ static/js/
 t e s t _ o u t p u t . t x t  
 .gemini/  
  
+.venv-wsl
+.venv_new
+
+# WSL local dev runtime artifacts
+.dev-pids/
+*-wsl.log
+*-wsl.err.log
+vite-detach-test.log
+vite-detach-test.err.log

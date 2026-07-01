@@ -1,5 +1,5 @@
 """
-Django settings for iiot project.
+Django settings for Novena Hub.
 
 For more information on this file, see
 https://docs.djangoproject.com/en/stable/topics/settings/
@@ -120,8 +120,8 @@ PROJECT_APPS = [
 # MQTT Settings
 MQTT_BROKER_HOST = env("MQTT_BROKER_HOST", default="localhost")
 MQTT_BROKER_PORT = env.int("MQTT_BROKER_PORT", default=1883)
-MQTT_CONSUMER_CLIENT_ID = env("MQTT_CONSUMER_CLIENT_ID", default="iot-platform-consumer")
-MQTT_PUBLISHER_CLIENT_ID = env("MQTT_PUBLISHER_CLIENT_ID", default="nodeflow-cloud-publisher")
+MQTT_CONSUMER_CLIENT_ID = env("MQTT_CONSUMER_CLIENT_ID", default="novena-hub-consumer")
+MQTT_PUBLISHER_CLIENT_ID = env("MQTT_PUBLISHER_CLIENT_ID", default="novena-hub-publisher")
 
 # Mosquitto Dynamic Security Plugin
 MQTT_DYNSEC_PORT = env.int("MQTT_DYNSEC_PORT", default=1884)
@@ -130,6 +130,12 @@ MQTT_DYNSEC_ADMIN_PASS = env("MQTT_DYNSEC_ADMIN_PASS", default="dynsec-password"
 
 # Gateway Claim Code (HMAC secret for deriving claim codes from serial numbers)
 GATEWAY_CLAIM_SECRET = env("GATEWAY_CLAIM_SECRET", default="change-me-in-production")
+
+# Hardware health and telemetry freshness thresholds.
+DEVICE_OFFLINE_MIN_SECONDS = env.int("DEVICE_OFFLINE_MIN_SECONDS", default=30)
+DEVICE_OFFLINE_MULTIPLIER = env.float("DEVICE_OFFLINE_MULTIPLIER", default=3)
+DEVICE_DELAYED_MULTIPLIER = env.float("DEVICE_DELAYED_MULTIPLIER", default=2)
+GATEWAY_OFFLINE_SECONDS = env.int("GATEWAY_OFFLINE_SECONDS", default=120)
 
 # WhatsApp Settings
 WHATSAPP_PROVIDER = env("WHATSAPP_PROVIDER", default="mock")  # 'mock' or 'twilio'
@@ -177,7 +183,7 @@ if ENABLE_DEBUG_TOOLBAR:
     except OSError as e:
         print(f"{e} while attempting to resolve system hostname. Using INTERNAL_IPS={INTERNAL_IPS}")
 
-ROOT_URLCONF = "iot_platform.urls"
+ROOT_URLCONF = "novena_hub.urls"
 
 
 # used to disable the cache in dev, but turn it on in production.
@@ -233,7 +239,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "iot_platform.wsgi.application"
+WSGI_APPLICATION = "novena_hub.wsgi.application"
 
 FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
 
@@ -246,7 +252,7 @@ else:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": env("DJANGO_DATABASE_NAME", default="iot_platform"),
+            "NAME": env("DJANGO_DATABASE_NAME", default="novena_hub"),
             "USER": env("DJANGO_DATABASE_USER", default="postgres"),
             "PASSWORD": env("DJANGO_DATABASE_PASSWORD", default="***"),
             "HOST": env("DJANGO_DATABASE_HOST", default="localhost"),
@@ -380,7 +386,7 @@ TURNSTILE_SECRET = env("TURNSTILE_SECRET", default=None)
 # https://docs.djangoproject.com/en/stable/topics/i18n/
 
 LANGUAGE_CODE = "en-us"
-LANGUAGE_COOKIE_NAME = "iot_platform_language"
+LANGUAGE_COOKIE_NAME = "novena_hub_language"
 LANGUAGES = WAGTAIL_CONTENT_LANGUAGES = [
     ("en", gettext_lazy("English")),
     ("fr", gettext_lazy("French")),
@@ -426,7 +432,7 @@ if USE_S3_MEDIA:
     # See https://docs.saaspegasus.com/configuration/#storing-media-files
     AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default="")
     AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
-    AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="iot_platform-media")
+    AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="novena_hub-media")
     AWS_S3_CUSTOM_DOMAIN = f"{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com"
     PUBLIC_MEDIA_LOCATION = "media"
     MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/{PUBLIC_MEDIA_LOCATION}/"
@@ -474,7 +480,7 @@ EMAIL_BACKEND = env("EMAIL_BACKEND", default="anymail.backends.amazon_ses.EmailB
 WHATSAPP_PHONE_NUMBER_ID = env("WHATSAPP_PHONE_NUMBER_ID", default=None)
 WHATSAPP_ACCESS_TOKEN = env("WHATSAPP_ACCESS_TOKEN", default=None)
 
-EMAIL_SUBJECT_PREFIX = "[iiot] "
+EMAIL_SUBJECT_PREFIX = "[Novena] "
 
 # Django sites
 
@@ -496,8 +502,8 @@ CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=["http://localho
 
 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "iiot",
-    "DESCRIPTION": "AI IOT platform",  # noqa: E501
+    "TITLE": "Novena Platform API",
+    "DESCRIPTION": "Novena Platform industrial IoT API",  # noqa: E501
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "SWAGGER_UI_SETTINGS": {
@@ -555,11 +561,19 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.telemetry.tasks.flush_logs_buffer_task",
         "schedule": 2.0,  # Run every 2 seconds
     },
+    "check-device-heartbeats": {
+        "task": "apps.devices.tasks.check_device_heartbeats",
+        "schedule": 10.0,
+    },
+    "check-gateway-heartbeats": {
+        "task": "apps.devices.tasks.check_gateway_heartbeats",
+        "schedule": 30.0,
+    },
 }
 
 # Channels / Daphne setup
 
-ASGI_APPLICATION = "iot_platform.asgi.application"
+ASGI_APPLICATION = "novena_hub.asgi.application"
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
@@ -575,8 +589,8 @@ HEALTH_CHECK_TOKENS = env.list("HEALTH_CHECK_TOKENS", default="")
 
 # Wagtail config
 
-WAGTAIL_SITE_NAME = "iiot Content"
-WAGTAILADMIN_BASE_URL = "http://localhost:8000"
+WAGTAIL_SITE_NAME = "Novena Platform Content"
+WAGTAILADMIN_BASE_URL = env("APP_BASE_URL", default="http://localhost:8000")
 
 # Waffle config
 
@@ -586,12 +600,12 @@ WAFFLE_FLAG_MODEL = "teams.Flag"
 
 # replace any values below with specifics for your project
 PROJECT_METADATA = {
-    "NAME": gettext_lazy("iiot"),
-    "URL": "http://localhost:8000",
-    "DESCRIPTION": gettext_lazy("AI IOT platform"),  # noqa: E501
+    "NAME": gettext_lazy("Novena Platform"),
+    "URL": env("APP_BASE_URL", default="http://localhost:8000"),
+    "DESCRIPTION": gettext_lazy("Industrial IoT operations platform"),  # noqa: E501
     "IMAGE": "https://upload.wikimedia.org/wikipedia/commons/2/20/PEO-pegasus_black.svg",
-    "KEYWORDS": "SaaS, django",
-    "CONTACT_EMAIL": "tingshouheng@gmail.com",
+    "KEYWORDS": "Industrial IoT, SaaS, Novena Hub, Novena Gateway",
+    "CONTACT_EMAIL": env("CONTACT_EMAIL", default="support@example.com"),
 }
 
 # set this to True in production to have URLs generated with https instead of http
@@ -687,9 +701,9 @@ LOGGING = {
             "handlers": ["console"],
             "level": env("DJANGO_LOG_LEVEL", default="INFO"),
         },
-        "iot_platform": {
+        "novena_hub": {
             "handlers": ["console"],
-            "level": env("IOT_PLATFORM_LOG_LEVEL", default="INFO"),
+            "level": env("NOVENA_HUB_LOG_LEVEL", default="INFO"),
         },
     },
 }

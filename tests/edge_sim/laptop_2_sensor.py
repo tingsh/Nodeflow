@@ -37,7 +37,7 @@ async def run_server():
 
     # Identify the simulated equipment
     identity = ModbusDeviceIdentification()
-    identity.VendorName = "Nodeflow Simulated Equipment"
+    identity.VendorName = "Novena Simulated Equipment"
     identity.ProductCode = "NF-SIM-S7-MOCK"
 
     # Start the updating task in the background
@@ -45,7 +45,7 @@ async def run_server():
 
     # Port 5020 is used instead of 502 because ports under 1024 require Administrator/root privileges.
     log.info("Starting Modbus TCP SERVER on port 5020...")
-    log.info("Waiting for Modbus Client (Nodeflow Edge) to connect...")
+    log.info("Waiting for Modbus Client (Novena Gateway) to connect...")
     await StartAsyncTcpServer(context=context, identity=identity, address=("0.0.0.0", 5020))
 
 

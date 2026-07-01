@@ -17,7 +17,7 @@ import time
 import paho.mqtt.client as mqtt
 from django.conf import settings
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 DYNSEC_TOPIC = "$CONTROL/dynamic-security/v1"
 RESPONSE_TOPIC = "$CONTROL/dynamic-security/v1/response"
@@ -34,7 +34,7 @@ def _get_dynsec_client():
 
     client = mqtt.Client(
         callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
-        client_id="nodeflow-dynsec-provisioner",
+        client_id="novena-dynsec-provisioner",
         protocol=mqtt.MQTTv311,
     )
 

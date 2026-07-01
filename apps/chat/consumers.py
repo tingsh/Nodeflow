@@ -11,7 +11,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.chat.models import Chat, ChatMessage, ChatUsage, MessageTypes
 from apps.chat.system_prompt import get_system_prompt
 from apps.chat.tasks import set_chat_name
-from apps.chat.tool_executor import NodeflowToolExecutor
+from apps.chat.tool_executor import NovenaToolExecutor
 from apps.chat.tools import get_tools_definition
 from apps.chat.utils import get_llm_kwargs
 from apps.teams.models import Team
@@ -101,7 +101,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=error_html)
 
     async def _process_completion(self, contents_div_id, context_messages):
-        executor = NodeflowToolExecutor(self.team)
+        executor = NovenaToolExecutor(self.team)
         tools = get_tools_definition()
 
         # Tool-calling loop

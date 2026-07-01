@@ -7,7 +7,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from .models import Alert
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 
 @shared_task
@@ -24,9 +24,9 @@ def dispatch_alert_email_task(alert_id, is_resolved=False):
         return
 
     if is_resolved:
-        subject = f"[RESOLVED] Nodeflow Alert: {alert.rule.name}"
+        subject = f"[RESOLVED] Novena Alert: {alert.rule.name}"
     else:
-        subject = f"[{alert.rule.severity.upper()}] Nodeflow Alert: {alert.rule.name}"
+        subject = f"[{alert.rule.severity.upper()}] Novena Alert: {alert.rule.name}"
 
     context = {
         "alert": alert,
@@ -71,7 +71,7 @@ def dispatch_alert_whatsapp_task(alert_id, is_resolved=False):
     status_text = "RESOLVED" if is_resolved else alert.rule.severity.upper()
     emoji = "✅" if is_resolved else "🚨"
     message_text = (
-        f"{emoji} *NODEFLOW ALERT {status_text}*\n"
+        f"{emoji} *NOVENA ALERT {status_text}*\n"
         f"Rule: {alert.rule.name}\n"
         f"Device: {alert.device.name}\n"
         f"Value: {alert.trigger_value}\n"

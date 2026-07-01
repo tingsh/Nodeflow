@@ -2,7 +2,7 @@
 
 ## Metadata
 - **ID:** 06_business_context
-- **Description:** Market positioning, pricing strategy, and competitive landscape for the Nodeflow IIoT platform.
+- **Description:** Market positioning, pricing strategy, and competitive landscape for the Novena IIoT platform.
 - **Scope:** Use this skill for brainstorming new features, roadmap prioritization, and ensuring technical decisions support our "Unicorn" trajectory.
 
 ---

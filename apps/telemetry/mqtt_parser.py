@@ -4,7 +4,7 @@ from datetime import datetime, timezone as dt_timezone
 
 from django.utils import timezone
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 
 def parse_mqtt_payload(topic, payload):
@@ -12,7 +12,7 @@ def parse_mqtt_payload(topic, payload):
     Parses MQTT payloads from either our custom simulator or ThingsBoard Gateway format.
     Returns a list of normalized ingestion events.
 
-    Format A (Nodeflow Simulator):
+    Format A (Novena Simulator):
     {"serial_number": "GW-001", "values": {"device_name": "Device 1", "active_power": 100}}
 
     Format B (ThingsBoard Gateway):
@@ -28,7 +28,7 @@ def parse_mqtt_payload(topic, payload):
             logger.error(f"Failed to decode MQTT payload: {e}")
             return []
 
-    # Detect Format A (Nodeflow Simulator / Nodeflow Edge)
+    # Detect Format A (Novena Simulator / Novena Gateway)
     if "serial_number" in payload and "values" in payload:
         gateway_sn = payload.get("serial_number")
         values = payload.get("values", {})

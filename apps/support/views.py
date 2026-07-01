@@ -10,7 +10,7 @@ from django.utils.translation import gettext as _
 
 from .forms import HijackUserForm
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 
 @user_passes_test(lambda u: u.is_superuser, login_url="/404")
@@ -40,7 +40,7 @@ def contact_support(request):
 
     user = request.user
     team_name = request.team.name if getattr(request, "team", None) else "No Team"
-    email_subject = f"[Nodeflow Support] {category}: {subject or 'No Subject'}"
+    email_subject = f"[Novena Support] {category}: {subject or 'No Subject'}"
     email_body = (
         f"Support Request Details:\n"
         f"------------------------\n"

@@ -1492,7 +1492,7 @@ wheels = [
 ]
 
 [[package]]
-name = "iot-platform"
+name = "novena-hub"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

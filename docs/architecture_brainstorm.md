@@ -1,13 +1,13 @@
 # Architecture Brainstorm: SaaS Pegasus + ThingsBoard vs Build Custom
 
 > **Date:** April 2026  
-> **Context:** We have SaaS Pegasus (Django/Python/HTMX/Tailwind/Postgres/Celery/Stripe) in `d:\Nodeflow`. We're evaluating whether to integrate ThingsBoard (Java/Spring Boot/Angular/Kafka/Cassandra) or build IoT features natively in Django.
+> **Context:** We have SaaS Pegasus (Django/Python/HTMX/Tailwind/Postgres/Celery/Stripe) in `d:\Novena`. We're evaluating whether to integrate ThingsBoard (Java/Spring Boot/Angular/Kafka/Cassandra) or build IoT features natively in Django.
 
 ---
 
 ## 1. What We Already Have (SaaS Pegasus)
 
-Your Pegasus instance (`iot_platform` project) already gives us:
+Your Pegasus instance (`novena_hub` project) already gives us:
 
 | Feature | Status | Value |
 |---------|--------|-------|

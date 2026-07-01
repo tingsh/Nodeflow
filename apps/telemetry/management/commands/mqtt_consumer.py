@@ -1,15 +1,12 @@
 import json
 import logging
-from datetime import datetime, timezone as dt_timezone
 
 import paho.mqtt.client as mqtt
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from apps.telemetry.services import ingest_telemetry_data
-
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 
 class Command(BaseCommand):
@@ -75,21 +72,24 @@ class Command(BaseCommand):
     # ── Telemetry (Ingestion queueing and WebSockets broadcast) ──────────
 
     def _handle_telemetry(self, payload):
-        """Ingest telemetry data from a gateway."""
-        # 1. Queue to Redis
-        try:
-            self.redis_client.rpush("telemetry_ingest_queue", json.dumps(payload))
-        except Exception as e:
-            logger.error(f"Failed to queue telemetry raw payload to Redis: {e}")
+        """Queue telemetry data and broadcast it to the browser live stream."""
+        cloud_received_at = timezone.now()
 
-        # 2. Broadcast via WebSockets
         try:
-            from apps.telemetry.mqtt_parser import parse_mqtt_payload
-            from channels.layers import get_channel_layer
+            queued_payload = dict(payload)
+            queued_payload['_cloud_received_at'] = cloud_received_at.isoformat()
+            self.redis_client.rpush('telemetry_ingest_queue', json.dumps(queued_payload))
+        except Exception as e:
+            logger.error('Failed to queue telemetry raw payload to Redis: %s', e)
+
+        try:
             from asgiref.sync import async_to_sync
+            from channels.layers import get_channel_layer
+
             from apps.devices.models import Device, Gateway
-            
-            events = parse_mqtt_payload("v1/gateway/telemetry", payload)
+            from apps.telemetry.mqtt_parser import parse_mqtt_payload
+
+            events = parse_mqtt_payload('v1/gateway/telemetry', payload)
             channel_layer = get_channel_layer()
 
             gateway_cache = {}
@@ -97,19 +97,18 @@ class Command(BaseCommand):
             device_by_id = {}
 
             for event in events:
-                gateway_sn = event.get("gateway_sn")
-                device_name = event.get("device_name")
-                device_id = event.get("device_id")
-                values = dict(event.get("values", {}))
-                timestamp = event.get("timestamp") or timezone.now()
+                gateway_sn = event.get('gateway_sn')
+                device_name = event.get('device_name')
+                device_id = event.get('device_id')
+                values = dict(event.get('values', {}))
+                timestamp = event.get('timestamp') or cloud_received_at
 
-                if device_name and "device_name" not in values:
-                    values["device_name"] = device_name
+                if device_name and 'device_name' not in values:
+                    values['device_name'] = device_name
 
                 if not gateway_sn:
                     continue
 
-                # Cache lookup for Gateway
                 if gateway_sn not in gateway_cache:
                     try:
                         gateway_cache[gateway_sn] = Gateway.objects.get(serial_number=gateway_sn)
@@ -117,7 +116,6 @@ class Command(BaseCommand):
                         continue
                 gateway = gateway_cache[gateway_sn]
 
-                # Cache lookup for Device
                 target_device = None
                 if device_id:
                     try:
@@ -126,8 +124,8 @@ class Command(BaseCommand):
                             device_by_id[d_id] = Device.objects.filter(id=d_id, gateway=gateway).first()
                         target_device = device_by_id[d_id]
                     except (ValueError, TypeError):
-                        pass
-                
+                        logger.warning('Invalid telemetry device_id %s from gateway %s.', device_id, gateway_sn)
+
                 if not target_device and device_name:
                     cache_key = (gateway.id, device_name)
                     if cache_key not in device_cache:
@@ -136,19 +134,27 @@ class Command(BaseCommand):
 
                 if not target_device:
                     target_device = Device.objects.filter(gateway=gateway).first()
+                    if target_device:
+                        logger.warning(
+                            'Using legacy first-device telemetry fallback for gateway %s. '
+                            'Payload device_id=%s device_name=%s resolved_device=%s.',
+                            gateway_sn,
+                            device_id,
+                            device_name,
+                            target_device.id,
+                        )
 
                 if target_device:
-                    # Broadcast to WebSocket channel group
                     async_to_sync(channel_layer.group_send)(
-                        f"device_{target_device.id}",
+                        f'device_{target_device.id}',
                         {
-                            "type": "telemetry_message",
-                            "timestamp": timestamp.isoformat() if hasattr(timestamp, "isoformat") else str(timestamp),
-                            "values": values,
-                        }
+                            'type': 'telemetry_message',
+                            'timestamp': timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp),
+                            'values': values,
+                        },
                     )
         except Exception as e:
-            logger.error(f"Error broadcasting WebSocket telemetry: {e}", exc_info=True)
+            logger.error('Error broadcasting WebSocket telemetry: %s', e, exc_info=True)
 
     # ── Remote Logging ──────────────────────────────────────────────────
 

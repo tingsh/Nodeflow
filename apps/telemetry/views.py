@@ -9,6 +9,63 @@ from apps.devices.models import Device
 from .models import TelemetryData
 from .services import get_latest_telemetry_for_chart, get_latest_telemetry_value
 
+SAMPLE_LIMIT_OPTIONS = (10, 20, 30, 40, 50)
+DEFAULT_SAMPLE_LIMIT = 20
+
+
+def _normalize_sample_limit(raw_limit):
+    try:
+        requested = int(raw_limit)
+    except (TypeError, ValueError):
+        return DEFAULT_SAMPLE_LIMIT
+
+    if requested <= SAMPLE_LIMIT_OPTIONS[0]:
+        return SAMPLE_LIMIT_OPTIONS[0]
+    if requested >= SAMPLE_LIMIT_OPTIONS[-1]:
+        return SAMPLE_LIMIT_OPTIONS[-1]
+    return min(SAMPLE_LIMIT_OPTIONS, key=lambda option: abs(option - requested))
+
+
+def _telemetry_point_value(point):
+    if point.value_numeric is not None:
+        return point.value_numeric
+    if point.value_bool is not None:
+        return point.value_bool
+    return point.value_string
+
+
+def _device_telemetry_columns(device):
+    columns = []
+    seen = set()
+
+    if device.template and device.template.register_map:
+        for key, config in device.template.register_map.items():
+            if not isinstance(config, dict) or config.get("writable"):
+                continue
+            columns.append({
+                "key": key,
+                "label": config.get("label", key.replace("_", " ").title()),
+                "unit": config.get("unit", ""),
+            })
+            seen.add(key)
+
+    if not columns:
+        keys = (
+            TelemetryData.objects.filter(device=device)
+            .order_by("key")
+            .values_list("key", flat=True)
+            .distinct()
+        )
+        for key in keys:
+            columns.append({
+                "key": key,
+                "label": key.replace("_", " ").title(),
+                "unit": "",
+            })
+            seen.add(key)
+
+    return columns, seen
+
 
 @login_required
 def get_chart_partial(request, team_slug, device_id, key):
@@ -60,13 +117,12 @@ def device_metrics_api(request, team_slug, device_id):
     metrics = []
     if device.template and device.template.register_map:
         for key, val in device.template.register_map.items():
-            if isinstance(val, dict):
-                if not val.get("writable"):
-                    metrics.append({
-                        "key": key,
-                        "label": val.get("label", key.replace("_", " ").title()),
-                        "unit": val.get("unit", "")
-                    })
+            if isinstance(val, dict) and not val.get("writable"):
+                metrics.append({
+                    "key": key,
+                    "label": val.get("label", key.replace("_", " ").title()),
+                    "unit": val.get("unit", "")
+                })
     
     if not metrics:
         # Fallback to distinct keys recorded in TelemetryData
@@ -79,6 +135,51 @@ def device_metrics_api(request, team_slug, device_id):
             })
             
     return JsonResponse({"metrics": metrics})
+
+
+@login_required
+def device_telemetry_samples_api(request, team_slug, device_id):
+    """
+    JSON endpoint returning the latest grouped telemetry samples for a device.
+
+    TelemetryData is stored as one row per key, so this endpoint pivots rows
+    with the same timestamp into a table-friendly sample row.
+    """
+    device = get_object_or_404(Device, id=device_id, team__slug=team_slug)
+    limit = _normalize_sample_limit(request.GET.get("limit", DEFAULT_SAMPLE_LIMIT))
+    columns, column_keys = _device_telemetry_columns(device)
+
+    sample_qs = TelemetryData.objects.filter(device=device)
+    if column_keys:
+        sample_qs = sample_qs.filter(key__in=column_keys)
+
+    timestamps = list(
+        sample_qs.order_by("-timestamp")
+        .values_list("timestamp", flat=True)
+        .distinct()[:limit]
+    )
+
+    points = sample_qs.filter(timestamp__in=timestamps).order_by("-timestamp", "key")
+
+    rows_by_timestamp = {
+        timestamp: {
+            "timestamp": timestamp.isoformat(),
+            "values": {},
+        }
+        for timestamp in timestamps
+    }
+
+    for point in points:
+        row = rows_by_timestamp.get(point.timestamp)
+        if row is not None:
+            row["values"][point.key] = _telemetry_point_value(point)
+
+    return JsonResponse({
+        "columns": columns,
+        "rows": list(rows_by_timestamp.values()),
+        "limit": limit,
+        "limit_options": list(SAMPLE_LIMIT_OPTIONS),
+    })
 
 
 def get_retention_limit_days(team) -> int:

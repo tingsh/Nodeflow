@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from .models import MaintenanceTicket, PreventiveSchedule
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 
 from .services import create_pm_ticket, advance_schedule_due_date

@@ -2,7 +2,7 @@ import logging
 
 from django.conf import settings
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 
 from .tasks import (

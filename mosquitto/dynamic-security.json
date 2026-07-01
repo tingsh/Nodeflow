@@ -15,8 +15,8 @@
       ]
     },
     {
-      "username": "nodeflow-cloud",
-      "textName": "Nodeflow Cloud Internal Services",
+      "username": "novena-hub",
+      "textName": "Novena Hub Internal Services",
       "textDescription": "Used by mqtt_consumer and mqtt_publisher Django services",
       "roles": [
         {

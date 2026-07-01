@@ -30,7 +30,7 @@ default_context:
   - chat
   post_process: y
   project_name: iiot
-  project_slug: iot_platform
+  project_slug: novena_hub
   python_package_manager: uv
   standalone_front_end: none
   stripe_payment_mode: checkout

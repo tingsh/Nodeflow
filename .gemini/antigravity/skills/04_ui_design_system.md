@@ -2,13 +2,13 @@
 
 ## Metadata
 - **ID:** 04_ui_design_system
-- **Description:** Prescriptive design tokens, component patterns, and visual aesthetics for the Nodeflow "Command Center" interface.
+- **Description:** Prescriptive design tokens, component patterns, and visual aesthetics for the Novena "Command Center" interface.
 - **Scope:** Use this skill for any frontend work, including new dashboard widgets, marketing pages, or operational forms.
 
 ---
 
 ## 1. The "Rich Aesthetics" Identity
-Nodeflow follows a "Command Center" aesthetic:
+Novena follows a "Command Center" aesthetic:
 - **Primary Palette:** Slate, Indigo, and Emerald.
 - **Dark Mode:** Deep slate backgrounds (`bg-base-300`) with subtle textural grain.
 - **Visual Depth:** Use glassmorphism (blur + border glow) for primary dashboard cards.

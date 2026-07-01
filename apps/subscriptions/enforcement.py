@@ -2,7 +2,7 @@ import logging
 
 from apps.devices.models import Device
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 # Plan Limits
 # mapping slug -> limit

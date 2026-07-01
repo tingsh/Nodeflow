@@ -7,7 +7,7 @@ from django.utils import timezone
 from apps.telemetry.models import TelemetryData
 from .models import Alert, AlertRule
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 
 def check_alerts_for_payload(device, key, value):

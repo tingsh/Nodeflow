@@ -1,234 +1,252 @@
 import json
 import logging
-import time
-from datetime import datetime, timezone as dt_timezone
-from celery import shared_task
-import redis
+from datetime import UTC, datetime
 
+import redis
+from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
-from apps.devices.models import Device, Gateway
-from apps.telemetry.models import TelemetryData, GatewayLog
-from apps.telemetry.mqtt_parser import parse_mqtt_payload
 from apps.alerts.services import check_alerts_for_payload
 from apps.automations.engine import evaluate_automations
+from apps.devices.models import Device, Gateway
+from apps.telemetry.models import GatewayLog, TelemetryData
+from apps.telemetry.mqtt_parser import parse_mqtt_payload
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger('novena_hub')
+
+
+def _parse_cloud_received_at(value):
+    if not value:
+        return timezone.now()
+    if hasattr(value, 'isoformat'):
+        return value
+    parsed = parse_datetime(str(value))
+    if not parsed:
+        return timezone.now()
+    if timezone.is_naive(parsed):
+        return timezone.make_aware(parsed, UTC)
+    return parsed
+
 
 @shared_task
 def flush_telemetry_buffer_task():
     r = redis.Redis.from_url(settings.REDIS_URL)
-    queue_key = "telemetry_ingest_queue"
-    
-    # 1. Pop all payloads atomically using a Redis pipeline transaction
+    queue_key = 'telemetry_ingest_queue'
+
     with r.pipeline() as pipe:
         pipe.multi()
         pipe.lrange(queue_key, 0, -1)
         pipe.delete(queue_key)
         results = pipe.execute()
-    
+
     if not results or not results[0]:
-        return "No telemetry to ingest"
-    
+        return 'No telemetry to ingest'
+
     payloads = results[0]
-    logger.info(f"Popped {len(payloads)} raw telemetry payloads from Redis.")
-    
-    # 2. Parse all raw JSON payloads into normalization dicts
+    logger.info('Popped %d raw telemetry payloads from Redis.', len(payloads))
+
     events = []
     for raw_payload in payloads:
         try:
-            payload_dict = json.loads(raw_payload.decode("utf-8"))
-            parsed_events = parse_mqtt_payload("v1/gateway/telemetry", payload_dict)
+            payload_dict = json.loads(raw_payload.decode('utf-8'))
+            cloud_received_at = _parse_cloud_received_at(payload_dict.pop('_cloud_received_at', None))
+            parsed_events = parse_mqtt_payload('v1/gateway/telemetry', payload_dict)
+            for event in parsed_events:
+                event['_cloud_received_at'] = cloud_received_at
             events.extend(parsed_events)
         except Exception as e:
-            logger.error(f"Error parsing buffered telemetry payload: {e}")
+            logger.error('Error parsing buffered telemetry payload: %s', e)
 
     if not events:
-        return "No events parsed"
+        return 'No events parsed'
 
-    # 3. Gather unique gateway SNs and bulk-fetch model cache
-    gateway_sns = {e.get("gateway_sn") for e in events if e.get("gateway_sn")}
+    gateway_sns = {e.get('gateway_sn') for e in events if e.get('gateway_sn')}
     if not gateway_sns:
-        return "No gateways identified in events"
-    
+        return 'No gateways identified in events'
+
     gateways = {g.serial_number: g for g in Gateway.objects.filter(serial_number__in=gateway_sns)}
-    
-    # 4. Bulk-fetch devices and build lookups to prevent N+1 DB hits
+
     gateway_ids = [g.id for g in gateways.values()]
-    devices_qs = Device.objects.filter(gateway_id__in=gateway_ids)
-    
-    device_cache = {}
-    device_by_id = {}
-    for d in devices_qs:
-        device_cache[(d.gateway_id, d.name)] = d
-        device_by_id[d.id] = d
-        
+    devices = list(Device.objects.filter(gateway_id__in=gateway_ids))
+    device_cache = {(d.gateway_id, d.name): d for d in devices}
+    device_by_id = {d.id: d for d in devices}
+    devices_by_gateway = {}
+    for device in devices:
+        devices_by_gateway.setdefault(device.gateway_id, []).append(device)
+
     telemetry_to_create = []
     gateway_updates = {}
     device_updates = {}
     alerts_to_check = []
     automations_to_eval = {}
+    db_flushed_at = timezone.now()
 
-    # 5. Process events and resolve targets
     for event in events:
-        gateway_sn = event.get("gateway_sn")
+        gateway_sn = event.get('gateway_sn')
         if not gateway_sn or gateway_sn not in gateways:
             continue
-        
+
         gateway = gateways[gateway_sn]
-        timestamp = event.get("timestamp") or timezone.now()
-        device_id = event.get("device_id")
-        device_name = event.get("device_name")
-        values = dict(event.get("values", {}))
-        
-        # Remove device_name value helper
-        values.pop("device_name", None)
-        
+        timestamp = event.get('timestamp') or timezone.now()
+        cloud_received_at = event.get('_cloud_received_at') or db_flushed_at
+        device_id = event.get('device_id')
+        device_name = event.get('device_name')
+        values = dict(event.get('values', {}))
+        values.pop('device_name', None)
+
         target_device = None
-        
-        # A. Match by device_id
+
         if device_id:
             try:
                 d_id = int(device_id)
-                target_device = device_by_id.get(d_id)
+                matched = device_by_id.get(d_id)
+                if matched and matched.gateway_id == gateway.id:
+                    target_device = matched
+                elif matched:
+                    logger.warning(
+                        'Telemetry device_id %s belongs to gateway %s, not payload gateway %s.',
+                        device_id,
+                        matched.gateway.serial_number if matched.gateway else 'none',
+                        gateway_sn,
+                    )
             except (ValueError, TypeError):
-                pass
-                
-        # B. Fallback: match by device_name string
+                logger.warning('Invalid telemetry device_id %s from gateway %s.', device_id, gateway_sn)
+
         if not target_device and device_name:
             target_device = device_cache.get((gateway.id, device_name))
-            
-        # C. Final fallback: first registered device on the gateway
+
         if not target_device:
-            gateway_devices = [d for d in devices_qs if d.gateway_id == gateway.id]
+            gateway_devices = devices_by_gateway.get(gateway.id, [])
             if gateway_devices:
                 target_device = gateway_devices[0]
-                
+                logger.warning(
+                    'Using legacy first-device telemetry fallback for gateway %s. '
+                    'Payload device_id=%s device_name=%s resolved_device=%s.',
+                    gateway_sn,
+                    device_id,
+                    device_name,
+                    target_device.id,
+                )
+
         if not target_device:
             continue
-            
-        # Update heartbeat logs
-        gateway_updates[gateway.id] = timestamp
+
+        gateway_updates[gateway.id] = cloud_received_at
         device_updates[target_device.id] = timestamp
-        
-        # Build TelemetryData rows
+
         for key, value in values.items():
-            data_point = TelemetryData(device=target_device, timestamp=timestamp, key=key)
-            
-            if isinstance(value, (int, float)):
-                data_point.value_numeric = float(value)
-            elif isinstance(value, bool):
+            data_point = TelemetryData(
+                device=target_device,
+                timestamp=timestamp,
+                cloud_received_at=cloud_received_at,
+                db_flushed_at=db_flushed_at,
+                key=key,
+            )
+
+            if isinstance(value, bool):
                 data_point.value_bool = value
+            elif isinstance(value, int | float):
+                data_point.value_numeric = float(value)
             else:
                 data_point.value_string = str(value)
-                
-            telemetry_to_create.append(data_point)
-            
-            # Queue for alerts check
-            alerts_to_check.append((target_device, key, value))
-            
-        # Accumulate metrics per device/timestamp for automations engine
-        if target_device.id not in automations_to_eval:
-            automations_to_eval[target_device.id] = {}
-        automations_to_eval[target_device.id].update(values)
 
-    # 6. Execute database transactions in bulk
+            telemetry_to_create.append(data_point)
+            alerts_to_check.append((target_device, key, value))
+
+        automations_to_eval.setdefault(target_device.id, {}).update(values)
+
     if telemetry_to_create:
         TelemetryData.objects.bulk_create(telemetry_to_create)
-        logger.info(f"Bulk-created {len(telemetry_to_create)} telemetry records.")
-        
-    # Bulk update Gateway heartbeats
+        logger.info('Bulk-created %d telemetry records.', len(telemetry_to_create))
+
     if gateway_updates:
         for g_id, last_seen_time in gateway_updates.items():
-            Gateway.objects.filter(id=g_id).update(last_seen=last_seen_time, status="online")
-            
-    # Bulk update Device heartbeats
+            Gateway.objects.filter(id=g_id).update(last_seen=last_seen_time, status='online')
+
     if device_updates:
         for d_id, last_seen_time in device_updates.items():
-            Device.objects.filter(id=d_id).update(last_telemetry_at=last_seen_time, status="online")
-            
-    # 7. Evaluate alerts and rules on the batch asynchronously (safe loops)
+            Device.objects.filter(id=d_id, status='alarm').update(last_telemetry_at=last_seen_time)
+            Device.objects.filter(id=d_id).exclude(status='alarm').update(
+                last_telemetry_at=last_seen_time,
+                status='online',
+            )
+
     for device, key, value in alerts_to_check:
         try:
             check_alerts_for_payload(device, key, value)
         except Exception as e:
-            logger.error(f"Alert check failed for device {device.id}, key {key}: {e}")
-            
+            logger.error('Alert check failed for device %s, key %s: %s', device.id, key, e)
+
     for d_id, vals in automations_to_eval.items():
         device = device_by_id.get(d_id)
         if device:
             try:
                 evaluate_automations(device, vals)
             except Exception as e:
-                logger.error(f"Automation evaluation failed for device {device.id}: {e}")
-                
-    return f"Ingested {len(telemetry_to_create)} points."
+                logger.error('Automation evaluation failed for device %s: %s', device.id, e)
+
+    return f'Ingested {len(telemetry_to_create)} points.'
 
 
 @shared_task
 def flush_logs_buffer_task():
     r = redis.Redis.from_url(settings.REDIS_URL)
-    queue_key = "logs_ingest_queue"
-    
+    queue_key = 'logs_ingest_queue'
+
     with r.pipeline() as pipe:
         pipe.multi()
         pipe.lrange(queue_key, 0, -1)
         pipe.delete(queue_key)
         results = pipe.execute()
-        
+
     if not results or not results[0]:
-        return "No logs to ingest"
-        
+        return 'No logs to ingest'
+
     payloads = results[0]
-    
+
     grouped_logs = {}
     for raw_payload in payloads:
         try:
-            payload = json.loads(raw_payload.decode("utf-8"))
-            gateway_sn = payload.get("serial_number")
+            payload = json.loads(raw_payload.decode('utf-8'))
+            gateway_sn = payload.get('serial_number')
             if not gateway_sn:
                 continue
-            if gateway_sn not in grouped_logs:
-                grouped_logs[gateway_sn] = []
-            grouped_logs[gateway_sn].extend(payload.get("logs", []))
+            grouped_logs.setdefault(gateway_sn, []).extend(payload.get('logs', []))
         except Exception as e:
-            logger.error(f"Error parsing buffered log payload: {e}")
-            
+            logger.error('Error parsing buffered log payload: %s', e)
+
     if not grouped_logs:
-        return "No logs grouped"
-        
+        return 'No logs grouped'
+
     gateways = {g.serial_number: g for g in Gateway.objects.filter(serial_number__in=grouped_logs.keys())}
-    
+
     logs_to_create = []
     for gateway_sn, entries in grouped_logs.items():
         gateway = gateways.get(gateway_sn)
         if not gateway:
-            logger.warning(f"Gateway {gateway_sn} not found for log batch.")
+            logger.warning('Gateway %s not found for log batch.', gateway_sn)
             continue
-            
+
         for entry in entries:
-            ts = entry.get("ts")
-            dt = (
-                datetime.fromtimestamp(ts / 1000.0, tz=dt_timezone.utc)
-                if ts
-                else timezone.now()
-            )
-            
+            ts = entry.get('ts')
+            dt = datetime.fromtimestamp(ts / 1000.0, tz=UTC) if ts else timezone.now()
+
             logs_to_create.append(
                 GatewayLog(
                     gateway=gateway,
                     timestamp=dt,
-                    level=entry.get("level", "INFO"),
-                    logger_name=entry.get("logger", ""),
-                    message=entry.get("message", ""),
-                    module=entry.get("module", ""),
-                    line=entry.get("line"),
+                    level=entry.get('level', 'INFO'),
+                    logger_name=entry.get('logger', ''),
+                    message=entry.get('message', ''),
+                    module=entry.get('module', ''),
+                    line=entry.get('line'),
                 )
             )
-            
+
     if logs_to_create:
         GatewayLog.objects.bulk_create(logs_to_create)
-        logger.info(f"Bulk-created {len(logs_to_create)} gateway logs.")
-        
-    return f"Ingested {len(logs_to_create)} logs."
+        logger.info('Bulk-created %d gateway logs.', len(logs_to_create))
+
+    return f'Ingested {len(logs_to_create)} logs.'

@@ -1,4 +1,4 @@
-# Nodeflow Feature Roadmap — Task Tracker
+# Novena Feature Roadmap — Task Tracker
 
 > **Started:** April 17, 2026  
 > **Build Order:** RBAC → AI Chat → Write-Back → Shared Links → Maintenance → Automations
@@ -23,9 +23,9 @@
 
 ## Sprint 2: AI "Chat With Your Data" — ✅ COMPLETE (Apr 17, 2026)
 
-- [x] Create `apps/chat/system_prompt.py` with Nodeflow-specific IIoT prompt
+- [x] Create `apps/chat/system_prompt.py` with Novena-specific IIoT prompt
 - [x] Create `apps/chat/tools.py` with OpenAI function/tool definitions
-- [x] Create `apps/chat/tool_executor.py` with `NodeflowToolExecutor` class
+- [x] Create `apps/chat/tool_executor.py` with `NovenaToolExecutor` class
 -   - [x] Implement `get_energy_data()` — TimescaleDB energy aggregates
 -   - [x] Implement `get_device_status()` — current readings
 -   - [x] Implement `get_alerts_summary()` — alert statistics
@@ -63,7 +63,7 @@
 - [x] Create public dashboard view (unauthenticated)
 - [x] Create management views: list, create, delete shared links
 - [x] Create `templates/dashboard/public_dashboard.html` — minimal, auto-refresh
-- [x] Add "Powered by Nodeflow" footer with CTA
+- [x] Add "Powered by Novena" footer with CTA
 - [x] Add optional password gate
 - [x] Add expiry enforcement
 - [x] Add view count tracking + analytics

@@ -1,4 +1,4 @@
-# Nodeflow Progress Review v2 — We Are Demo-Ready 🚀
+# Novena Progress Review v2 — We Are Demo-Ready 🚀
 
 > **Date:** April 13, 2026
 > **Previous Review:** [Phase 1 Kickoff (April 10)](./progress_review.md)
@@ -26,7 +26,7 @@ We have completely crushed that punch list. Here is an update on those critical 
 | **Stripe Subscriptions** | ⚠️ Code only | ✅ **DONE** | Business logic implemented in `subscriptions/metadata.py` (Starter, Pro, Business). |
 
 ### The Verdict: Stage 1 is Achieved.
-You now have a platform that you can put in front of an investor or a prospect and say, **"This is Nodeflow."** If you spin up the `device_simulator.py`, the UI lights up, charts start drawing, and value is immediately visible.
+You now have a platform that you can put in front of an investor or a prospect and say, **"This is Novena."** If you spin up the `device_simulator.py`, the UI lights up, charts start drawing, and value is immediately visible.
 
 ---
 
@@ -49,8 +49,8 @@ If we start selling today, we're selling vaporware at the edge. The "Plug-and-Pl
 With Phase 1 (Make it Demoable) and Phase 2 (Make it Sellable) fundamentally complete, we are entering **Phase 3: Making it Real.**
 
 ### 🔥 Priority 1 (CRITICAL): The Edge Gateway MVP (1-2 Weeks)
-* **Goal:** Fork `thingsboard-gateway`, modify the MQTT connector to publish to Nodeflow, ensure the Modbus connector works out-of-the-box, and build an installer script for Raspberry Pi.
-* **Why:** We need this to install Nodeflow at Pilot Customer #1.
+* **Goal:** Fork `thingsboard-gateway`, modify the MQTT connector to publish to Novena, ensure the Modbus connector works out-of-the-box, and build an installer script for Raspberry Pi.
+* **Why:** We need this to install Novena at Pilot Customer #1.
 
 ### 🟡 Priority 2: Automated Energy Reporting (2-3 Days)
 * **Goal:** Use Celery to generate a weekly PDF/Email report summarizing energy usage, peak demand, and alarms for the week, sending it to site managers.

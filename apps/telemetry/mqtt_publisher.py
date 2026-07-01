@@ -5,7 +5,7 @@ import uuid
 import paho.mqtt.client as mqtt
 from django.conf import settings
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 # Singleton MQTT client for publishing (Cloud → Edge)
 _client = None

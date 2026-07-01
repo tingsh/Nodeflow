@@ -1,4 +1,4 @@
-{% if is_resolved %}NODEFLOW ALERT RESOLVED{% else %}NODEFLOW ALERT: {{ rule.severity|upper }}{% endif %}
+{% if is_resolved %}NOVENA ALERT RESOLVED{% else %}NOVENA ALERT: {{ rule.severity|upper }}{% endif %}
 -----------------------------------
 
 Alert Rule: {{ rule.name }}
@@ -13,4 +13,4 @@ View details and acknowledge here:
 {{ dashboard_url }}
 
 --
-Nodeflow IIoT Platform
+Novena Platform

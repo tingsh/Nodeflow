@@ -155,15 +155,15 @@ def send_manager_resolution_email(ticket):
     if not ticket.reported_by or not ticket.reported_by.email:
         return
         
-    subject = f"[Nodeflow] Compliance Ticket Resolved: TKT-{ticket.id}"
+    subject = f"[Novena] Compliance Ticket Resolved: TKT-{ticket.id}"
     body = (
         f"Hi {ticket.reported_by.get_display_name()},\n\n"
         f"The maintenance ticket TKT-{ticket.id} '{ticket.title}' for device '{ticket.device.name}' "
         f"has been marked as RESOLVED by the external contractor.\n\n"
-        f"Please log in to your Nodeflow dashboard to review checklist completion details and any "
+        f"Please log in to your Novena dashboard to review checklist completion details and any "
         f"uploaded photo logsheets or certificates before closing the ticket.\n\n"
         f"Best regards,\n"
-        f"Nodeflow Compliance Bot"
+        f"Novena Compliance Bot"
     )
     try:
         send_mail(

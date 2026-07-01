@@ -1,7 +1,7 @@
 # Edge Simulation Strategy & Integration Blueprint
 
 > **Date:** April 14, 2026
-> **Focus:** Validating the 3-device simulation topology, defining the integration contract between Nodeflow Cloud and Nodeflow Edge, and providing a blueprint for the separate Edge codebase.
+> **Focus:** Validating the 3-device simulation topology, defining the integration contract between Novena Hub and Novena Gateway, and providing a blueprint for the separate Edge codebase.
 
 ---
 
@@ -18,7 +18,7 @@ Why is this better than testing everything on one PC or diving straight into the
 
 ```text
 ┌───────────────────────────┐        ┌────────────────────────────┐        ┌─────────────────────────┐
-│     LAPTOP 2 (Equipment)  │        │ LAPTOP 1 (Nodeflow Edge)   │        │   PC (Nodeflow Cloud)   │
+│     LAPTOP 2 (Equipment)  │        │ LAPTOP 1 (Novena Gateway)   │        │   PC (Novena Hub)   │
 │                           │        │                            │        │                         │
 │ Runs: Modbus TCP Server   │        │ Runs: Python Edge Gateway  │        │ Runs: Django + Postgres │
 │ OS: Windows/Mac/Linux     │        │ OS: Windows/Mac/Linux      │        │ Runs: Mosquitto Broker  │
@@ -26,7 +26,7 @@ Why is this better than testing everything on one PC or diving straight into the
 │                           │        │                            │        │                         │
 │ Behavior: Hosts port 502. ◄────────┼─ Modbus Polling (TCP 502) ─┤        │                         │
 │ Generates fake kW/V data  │        │ Validates data, converts   │        │                         │
-│ in holding registers 1-10.│        │ to Nodeflow JSON schema.   ├────────┼─► MQTT Publish Auth'd   │
+│ in holding registers 1-10.│        │ to Novena JSON schema.   ├────────┼─► MQTT Publish Auth'd   │
 └───────────────────────────┘        └────────────────────────────┘        │   (TCP 1883 or 9001)    │
                                                                            └─────────────────────────┘
 ```
@@ -45,28 +45,28 @@ Uses the Python `pymodbus` library to launch an asynchronous Modbus TCP Server o
 **Script B for Laptop 1 (`simple_edge_gateway.py`):**
 Uses `pymodbus` to read registers from Laptop 2. Takes those numbers, packages them into our expected MQTT JSON format, and uses `paho-mqtt` to publish to the Mosquitto broker running on the PC.
 
-**Success Criteria:** You run script A on Laptop 2, script B on Laptop 1. You look at your PC monitor, and the Nodeflow web dashboard charts are updating in real-time.
+**Success Criteria:** You run script A on Laptop 2, script B on Laptop 1. You look at your PC monitor, and the Novena web dashboard charts are updating in real-time.
 
 ---
 
-## 3. Nodeflow Edge Blueprint (For the New Workspace)
+## 3. Novena Gateway Blueprint (For the New Workspace)
 
-When you are ready to open a new AntiGravity workspace to build the actual **Nodeflow Edge** repository (the TB Gateway fork), you need to give the AI agent context.
+When you are ready to open a new AntiGravity workspace to build the actual **Novena Gateway** repository (the TB Gateway fork), you need to give the AI agent context.
 
 **Copy and paste the following specification into the new workspace's initial prompt or save it as a `blueprint.md` file in the new repo:**
 
 ---
 
-### 📄 BLUEPRINT: NODEFLOW EDGE GATEWAY (DO NOT REMOVE)
+### 📄 BLUEPRINT: NOVENA EDGE GATEWAY (DO NOT REMOVE)
 
 **Project Goal:** 
-You are building `Nodeflow Edge`, a Python-based IoT gateway software designed to run on industrial hardware (Raspberry Pi CM4, Teltonika, etc.). Your goal is to securely read data from local industrial equipment (Modbus TCP/RTU) and publish it to a cloud MQTT broker.
+You are building `Novena Gateway`, a Python-based IoT gateway software designed to run on industrial hardware (Raspberry Pi CM4, Teltonika, etc.). Your goal is to securely read data from local industrial equipment (Modbus TCP/RTU) and publish it to a cloud MQTT broker.
 
 **Architecture:**
-This project is a strategic fork of the open-source `thingsboard-gateway`. We are utilizing their robust protocol connectors (Modbus, OPC-UA), but we are **stripping out their server dependencies**. We do NOT connect to a Java ThingsBoard server. We connect to a custom Django backend (`Nodeflow Cloud`).
+This project is a strategic fork of the open-source `thingsboard-gateway`. We are utilizing their robust protocol connectors (Modbus, OPC-UA), but we are **stripping out their server dependencies**. We do NOT connect to a Java ThingsBoard server. We connect to a custom Django backend (`Novena Hub`).
 
-**Integration Contract with Nodeflow Cloud:**
-You must format all outbound MQTT payloads to match the exact schema expected by the Nodeflow Cloud MQTT Consumer.
+**Integration Contract with Novena Hub:**
+You must format all outbound MQTT payloads to match the exact schema expected by the Novena Hub MQTT Consumer.
 
 1. **MQTT Broker Details:**
    - Mosquitto Broker running at the cloud IP address.

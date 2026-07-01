@@ -35,7 +35,7 @@
             
             <h2 class="text-2xl font-black text-base-content font-heading tracking-tight mb-3">Connect Your First Gateway</h2>
             <p class="text-sm text-base-content/60 max-w-md mx-auto mb-8 font-light leading-relaxed">
-                Welcome to Nodeflow! To start monitoring your factory floor, motor metrics, or sensor values in real-time, connect your first local edge gateway.
+                Welcome to Novena! To start monitoring your factory floor, motor metrics, or sensor values in real-time, connect your first local edge gateway.
             </p>
             
             <div class="flex flex-col sm:flex-row justify-center items-center gap-4">
@@ -258,7 +258,7 @@
                     <div class="p-3 rounded-xl bg-base-200/40 border border-base-content/5 hover:border-indigo-500/30 transition-all group cursor-pointer" onclick="window.location.href='{% url 'web_team:devices:device_detail' team.slug device.pk %}'">
                         <div class="flex items-center gap-2 mb-2">
                             <span class="flex h-2 w-2 shrink-0">
-                                {% if device.status == 'online' %}
+                                {% if device.freshness.status == "live" %}
                                 <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                                 {% else %}
                                 <span class="relative inline-flex rounded-full h-2 w-2 bg-slate-300"></span>
@@ -273,7 +273,7 @@
                         </div>
                         {% endif %}
                         <div class="text-[10px] text-base-content/45 mt-1 font-mono">
-                            {% if device.last_telemetry_at %}{{ device.last_telemetry_at|timesince }} ago{% else %}No data{% endif %}
+                            {{ device.freshness.display }}
                         </div>
                     </div>
                     {% empty %}

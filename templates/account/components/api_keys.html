@@ -20,7 +20,7 @@
 
     <div class="space-y-6">
         <p class="text-sm text-base-content/70 leading-relaxed max-w-2xl">
-            {% translate "API keys allow external applications (like your edge gateways or custom scripts) to securely publish telemetry data to your Nodeflow channels. Keep your API keys private." %}
+            {% translate "API keys allow external applications (like your edge gateways or custom scripts) to securely publish telemetry data to your Novena channels. Keep your API keys private." %}
         </p>
 
         {% for key in api_keys %}
@@ -69,7 +69,7 @@
                 </div>
                 <h4 class="text-sm font-bold text-base-content mb-1">{% translate "No API Credentials Found" %}</h4>
                 <p class="text-xs text-base-content/40 leading-relaxed max-w-sm mx-auto mb-6">
-                    {% translate "You haven't generated any API keys yet. Create one above to allow external devices or services to communicate with Nodeflow." %}
+                    {% translate "You haven't generated any API keys yet. Create one above to allow external devices or services to communicate with Novena." %}
                 </p>
                 <form method="post" action="{% url 'users:create_api_key' %}">
                     {% csrf_token %}

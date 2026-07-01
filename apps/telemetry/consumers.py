@@ -5,7 +5,7 @@ from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from apps.devices.models import Device
 from apps.subscriptions.enforcement import get_latency_limit_for_team
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 class TelemetryConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):

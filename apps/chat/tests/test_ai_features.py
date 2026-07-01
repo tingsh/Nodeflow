@@ -3,7 +3,7 @@ from django.utils import timezone
 
 from apps.chat.models import ChatUsage
 from apps.chat.system_prompt import get_system_prompt
-from apps.chat.tool_executor import NodeflowToolExecutor
+from apps.chat.tool_executor import NovenaToolExecutor
 from apps.devices.models import Device, Site
 from apps.teams.models import Membership, Team
 from apps.telemetry.models import TelemetryData
@@ -39,7 +39,7 @@ class ChatAIFeatureTest(TestCase):
         self.assertEqual(count2, 1)
 
     def test_tool_executor_status(self):
-        executor = NodeflowToolExecutor(self.team)
+        executor = NovenaToolExecutor(self.team)
         status = executor.get_device_status([self.device.id])
 
         self.assertEqual(len(status), 1)
@@ -47,7 +47,7 @@ class ChatAIFeatureTest(TestCase):
         self.assertTrue(any(r["key"] == "active_power" and r["value"] == 150.5 for r in status[0]["readings"]))
 
     def test_tool_executor_energy_aggregation(self):
-        executor = NodeflowToolExecutor(self.team)
+        executor = NovenaToolExecutor(self.team)
         now = timezone.now()
         start = (now - timezone.timedelta(days=1)).isoformat()
         end = (now + timezone.timedelta(days=1)).isoformat()

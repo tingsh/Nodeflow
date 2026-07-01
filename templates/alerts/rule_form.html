@@ -165,7 +165,7 @@
                 <div x-show="webhookEnabled" x-transition class="mt-4" style="display: none;">
                     <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Integration Link (Webhook URL)</label>
                     <input type="url" name="notify_webhook" id="webhook-url-input" value="{{ form.notify_webhook.value|default:'' }}" class="input input-bordered w-full rounded-2xl font-bold font-mono text-sm" placeholder="https://hooks.slack.com/services/... or https://hooks.zapier.com/..." :required="webhookEnabled">
-                    <p class="text-[10px] text-base-content/30 mt-2">Paste the incoming integration link from Zapier, Slack, Microsoft Teams, Make, or your custom server. Nodeflow will send alert details directly to this address.</p>
+                    <p class="text-[10px] text-base-content/30 mt-2">Paste the incoming integration link from Zapier, Slack, Microsoft Teams, Make, or your custom server. Novena will send alert details directly to this address.</p>
                 </div>
 
                 <div class="bg-base-200/50 p-6 rounded-2xl border border-base-content/5 mt-4" x-data="recipientSearch()">

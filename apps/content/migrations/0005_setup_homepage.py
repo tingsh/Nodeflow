@@ -18,7 +18,7 @@ def convert_default_page_to_homepage(apps, schema_editor):
             )
             
             page.content_type = homepage_ct
-            page.title = "Nodeflow | AI-Powered Industrial IoT Platform"
+            page.title = "Novena | AI-Powered Industrial IoT Platform"
             page.slug = "home"
             page.save()
             

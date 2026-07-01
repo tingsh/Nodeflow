@@ -37,10 +37,12 @@
                             </div>
                             <div class="hidden md:block">
                                 <div class="text-xs text-gray-500 dark:text-gray-400">Status</div>
-                                <div class="flex items-center">
-                                    <div class="h-2 w-2 rounded-full mr-1.5 {% if gateway.status == 'online' %}bg-green-500{% else %}bg-gray-400{% endif %}"></div>
-                                    <span class="text-sm text-gray-900 dark:text-white">{{ gateway.get_status_display }}</span>
+                                {% with freshness=gateway.freshness %}
+                                <div class='flex items-center'>
+                                    <div class='h-2 w-2 rounded-full mr-1.5 {% if freshness.status == "live" %}bg-green-500{% elif freshness.status == "maintenance" %}bg-amber-500{% else %}bg-gray-400{% endif %}'></div>
+                                    <span class='text-sm text-gray-900 dark:text-white'>{{ freshness.display }}</span>
                                 </div>
+                                {% endwith %}
                             </div>
                             <div>
                                 <i class="fa fa-chevron-right text-gray-400 text-xs"></i>

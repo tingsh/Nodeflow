@@ -42,7 +42,7 @@ def run_tb_simulator():
             ],
             # To make our consumer happy without real auth, we inject the SN
             # into a known hidden field or just ensure a gateway exists for the test.
-            "serial_number": "NODEFLOW-DEMO-01",
+            "serial_number": "NOVENA-DEMO-01",
         }
 
         client.publish(TOPIC, json.dumps(payload))

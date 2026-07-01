@@ -1,15 +1,15 @@
-# Nodeflow — CTO Progress Review & Unicorn Assessment
+# Novena — CTO Progress Review & Unicorn Assessment
 
 > **Date:** April 27, 2026  
 > **Reviewer:** CTO / Co-founder  
-> **Scope:** Full audit of both `Nodeflow` (Cloud) and `Nodeflow-edge` (IoT Gateway) codebases  
+> **Scope:** Full audit of both `Novena-Hub` and `Novena-Gateway` codebases  
 > **Lens:** What does it take to get from here to a unicorn IIoT SaaS in Singapore & ASEAN?
 
 ---
 
 ## Executive Summary
 
-We've made a remarkable leap since the last review (April 18). The critical gap identified then — **"no edge gateway exists"** — has been fully closed. Nodeflow Edge is now a standalone repo with a complete Python-based gateway, 15 protocol connectors, 44 unit tests, discovery scanning, and a "Plug-Claim-Play" onboarding flow. Combined with our already feature-rich cloud platform, **we now have a full-stack IIoT product for the first time.**
+We've made a remarkable leap since the last review (April 18). The critical gap identified then — **"no edge gateway exists"** — has been fully closed. Novena Gateway is now a standalone repo with a complete Python-based gateway, 15 protocol connectors, 44 unit tests, discovery scanning, and a "Plug-Claim-Play" onboarding flow. Combined with our already feature-rich cloud platform, **we now have a full-stack IIoT product for the first time.**
 
 However, having all the pieces isn't the same as having a product customers will pay for. This review evaluates both repos through the eyes of an SME factory owner in Singapore, identifies the delta to product-market fit, and lays out the path to unicorn.
 
@@ -17,7 +17,7 @@ However, having all the pieces isn't the same as having a product customers will
 
 ## 1. Full Stack Inventory — What We Own
 
-### Nodeflow Cloud (Django) — 13 apps, 20+ commits
+### Novena Hub (Django) — 13 apps, 20+ commits
 
 | Capability | Status | Quality |
 |-----------|--------|---------|
@@ -47,14 +47,14 @@ However, having all the pieces isn't the same as having a product customers will
 | Docker Compose (full stack) | ✅ | 🟢 Production-ready |
 | CI/CD (pre-commit + ruff) | ✅ | 🟢 Clean |
 
-### Nodeflow Edge (Python Gateway) — 1 commit, clean architecture
+### Novena Gateway (Python Gateway) — 1 commit, clean architecture
 
 | Capability | Status | Quality |
 |-----------|--------|---------|
 | Core orchestrator (config → MQTT → connectors) | ✅ | 🟢 Production-grade |
 | MQTT publisher (TLS one-way + mTLS, LWT, auto-reconnect) | ✅ | 🟢 Enterprise-grade |
 | 15 protocol connectors (Modbus TCP/RTU, OPC-UA, BACnet, BLE, CAN, SNMP...) | ✅ | 🟢 Battle-tested (TB fork) |
-| Payload formatter (→ Nodeflow Cloud schema) | ✅ | 🟢 Solid |
+| Payload formatter (→ Novena Hub schema) | ✅ | 🟢 Solid |
 | Remote logging (buffered → cloud) | ✅ | 🟢 Solid |
 | Attribute sync / heartbeat (60s) | ✅ | 🟢 Solid |
 | Remote config handler (hot-reload, atomic write, backup) | ✅ | 🟢 Solid |
@@ -109,7 +109,7 @@ Let me put myself in the shoes of **Mr. Tan**, a factory manager in Jurong who s
 
 | Aspect | Assessment |
 |--------|-----------|
-| **Cloud ↔ Edge contract** | Perfectly aligned. Same MQTT topic schema, same payload formats, same serial-number-based routing. The `NODEFLOW_CLOUD_SPEC.md` serves as a true API contract. |
+| **Cloud ↔ Edge contract** | Perfectly aligned. Same MQTT topic schema, same payload formats, same serial-number-based routing. The `NOVENA_CLOUD_SPEC.md` serves as a true API contract. |
 | **Plug-Claim-Play flow** | `compute_claim_code()` (HMAC-SHA256), Mosquitto Dynamic Security provisioning, and Edge credential rotation are enterprise-grade. This is *better* than most competitors. |
 | **Config push pipeline** | Cloud `config_generator.py` → `mqtt_publisher.py` → Edge `remote_config_handler.py` → hot-reload. Fully automated, no SSH needed. |
 | **Discovery → Register** | Edge scans physical interfaces (RTU + TCP), identifies devices via FC43 MEI, reports to Cloud. Cloud UI shows the Intelligent Port Grid. User clicks "Add Device" → template auto-matched → config auto-pushed to Edge. This is world-class. |
@@ -126,7 +126,7 @@ Let me put myself in the shoes of **Mr. Tan**, a factory manager in Jurong who s
 | **No rate limiting on public shared links** | A bad actor could DDoS the shared dashboard endpoint | Add `django-ratelimit` on the public view |
 | **Telemetry query performance at scale** | `get_latest_telemetry_for_chart()` does `ORDER BY -timestamp LIMIT 20` per key per device. At 100K+ rows this gets slow | Verify TimescaleDB continuous aggregates are actually created. Consider `last()` aggregate function. |
 | **MQTT publisher singleton is process-global** | Works for a single Django process, but will create connection storms under Gunicorn with multiple workers | Use a connection-pool or Celery-based publish queue |
-| **Edge has no OTA update mechanism** | We can push config remotely, but not new Python code/firmware | Phase 2 priority — ship as pip package with `pip install --upgrade nodeflow-edge` via RPC |
+| **Edge has no OTA update mechanism** | We can push config remotely, but not new Python code/firmware | Phase 2 priority — ship as pip package with `pip install --upgrade novena-gateway` via RPC |
 | **No Sentry / error tracking on Edge** | If the gateway crashes in the field, we only see the LWT offline message — no stack trace | Add optional Sentry SDK in `main.py` |
 
 ---
@@ -156,25 +156,25 @@ Let me put myself in the shoes of **Mr. Tan**, a factory manager in Jurong who s
 ┌──────────────────────────────────────────────────────────────────┐
 │                    IIoT PLATFORM COMPARISON                       │
 ├──────────────┬─────────────┬──────────────┬──────────────────────┤
-│ Capability   │ ThingsBoard │ Nodeflow     │ Advantage            │
+│ Capability   │ ThingsBoard │ Novena     │ Advantage            │
 │              │ PE ($10K/yr)│ (Today)      │                      │
 ├──────────────┼─────────────┼──────────────┼──────────────────────┤
 │ MQTT + Data  │ ✅          │ ✅           │ Parity               │
 │ Dashboards   │ ✅ Drag/drop│ ✅ Pre-built │ TB ahead (builder)   │
 │ Alerting     │ ✅          │ ✅           │ Parity               │
 │ Edge Gateway │ ✅          │ ✅ (our fork)│ Parity               │
-│ Device Disco │ ❌          │ ✅ Auto-scan │ ★ Nodeflow ahead     │
-│ Plug & Play  │ ❌          │ ✅ Claim-code│ ★ Nodeflow ahead     │
-│ AI Chat      │ ❌          │ ✅           │ ★ Nodeflow ahead     │
-│ Maintenance  │ ❌          │ ✅ React+PM  │ ★ Nodeflow ahead     │
-│ RBAC         │ ❌ (PE $$)  │ ✅ Free      │ ★ Nodeflow ahead     │
-│ Billing/SaaS │ ❌          │ ✅ Stripe    │ ★ Nodeflow ahead     │
-│ Shared Links │ ❌ (PE $$)  │ ✅ + Kiosk   │ ★ Nodeflow ahead     │
+│ Device Disco │ ❌          │ ✅ Auto-scan │ ★ Novena ahead     │
+│ Plug & Play  │ ❌          │ ✅ Claim-code│ ★ Novena ahead     │
+│ AI Chat      │ ❌          │ ✅           │ ★ Novena ahead     │
+│ Maintenance  │ ❌          │ ✅ React+PM  │ ★ Novena ahead     │
+│ RBAC         │ ❌ (PE $$)  │ ✅ Free      │ ★ Novena ahead     │
+│ Billing/SaaS │ ❌          │ ✅ Stripe    │ ★ Novena ahead     │
+│ Shared Links │ ❌ (PE $$)  │ ✅ + Kiosk   │ ★ Novena ahead     │
 │ Automations  │ ✅ Rule chain│ ✅ Condition │ TB ahead (visual)    │
 │ White-label  │ ❌ (PE $$)  │ ❌           │ Neither (yet)        │
 │ Mobile App   │ ✅ Basic    │ ❌           │ TB ahead             │
 ├──────────────┼─────────────┼──────────────┼──────────────────────┤
-│ Price        │ $10K-30K/yr │ $99-699/mo   │ ★ Nodeflow: 10x      │
+│ Price        │ $10K-30K/yr │ $99-699/mo   │ ★ Novena: 10x      │
 │              │             │              │   cheaper for SMEs    │
 └──────────────┴─────────────┴──────────────┴──────────────────────┘
 ```
@@ -240,7 +240,7 @@ Not every feature matters equally for becoming a unicorn. Here's what creates de
 | **Data Advantage** | Predictive maintenance models trained on aggregate industrial data from hundreds of sites | 🟡 Need real deployments first |
 | **Switching Costs** | Historical data, alert rules, automations, maintenance records — once configured, painful to migrate | ✅ Already built in |
 | **Brand Trust** | PSG listing, case studies, industry event presence, "the platform Singapore SMEs trust" | 🟡 Need real customers |
-| **Distribution** | System integrator partner channel — they recommend and install Nodeflow at every site they service | 🟡 Need white-label |
+| **Distribution** | System integrator partner channel — they recommend and install Novena at every site they service | 🟡 Need white-label |
 | **AI Advantage** | "Chat with your factory" + energy optimization + predictive maintenance — no competitor has all three | ✅ Foundation built |
 
 ---
@@ -269,7 +269,7 @@ If I had to pick **just 3 things** that move us closest to unicorn status:
 Flash the Edge gateway onto an RPi. Plug in the Eastron SDM630 or Siemens S7-1200. Watch real data flow from physical equipment → Edge → Mosquitto → Cloud → Dashboard. Record a video. This is the "holy shit it works" moment that turns our project into a product.
 
 ### 🌐 2. Deploy to Production (Week 2)
-Get `nodeflow.io` (or whatever domain) live on the internet with SSL. Mosquitto broker accessible at `mqtt.nodeflow.io:8883`. Set up the Stripe products. This takes 1-2 days. Without it, we can't demo to anyone.
+Get `${NOVENA_DOMAIN}` (or whatever domain) live on the internet with SSL. Mosquitto broker accessible at `mqtt.${NOVENA_DOMAIN}:8883`. Set up the Stripe products. This takes 1-2 days. Without it, we can't demo to anyone.
 
 ### 📞 3. Talk to 5 Customers (Week 3-4)
 Walk into 5 factories in Jurong/Tuas industrial estate. Show them the demo. Ask: "Would you pay $99/month to see your power consumption in real-time and get WhatsApp alerts when something goes wrong?" Their answers will tell us more than 1000 more lines of code.

@@ -1,10 +1,10 @@
-# Nodeflow Cloud — Bidirectional MQTT Implementation Spec
+# Novena Hub — Bidirectional MQTT Implementation Spec
 
-This document is a complete implementation guide for adding bidirectional MQTT support to the **Nodeflow Cloud** Django backend. The edge gateway (Nodeflow Edge) has already implemented its side. Your job is to build the cloud side so that the two systems can communicate bidirectionally over MQTT.
+This document is a complete implementation guide for adding bidirectional MQTT support to the **Novena Hub** Django backend. The edge gateway (Novena Gateway) has already implemented its side. Your job is to build the cloud side so that the two systems can communicate bidirectionally over MQTT.
 
 ## Context
 
-**Nodeflow Edge** is a Python-based IoT gateway running on Raspberry Pi CM4 devices. It reads data from industrial equipment (Modbus, OPC-UA, etc.) and publishes to a Mosquitto MQTT broker. The cloud side is a Django application (this codebase) that consumes MQTT messages and provides a web dashboard.
+**Novena Gateway** is a Python-based IoT gateway running on Raspberry Pi CM4 devices. It reads data from industrial equipment (Modbus, OPC-UA, etc.) and publishes to a Mosquitto MQTT broker. The cloud side is a Django application (this codebase) that consumes MQTT messages and provides a web dashboard.
 
 Currently, communication is **one-way** (edge → cloud via `v1/gateway/telemetry`). This spec adds **four new features** that require bidirectional MQTT:
 
@@ -17,7 +17,7 @@ Currently, communication is **one-way** (edge → cloud via `v1/gateway/telemetr
 
 ## Mosquitto Broker Configuration
 
-The broker must be configured for **TLS encryption** and **per-gateway authentication** before deployment. All Nodeflow Edge gateways connect to the broker over the public internet.
+The broker must be configured for **TLS encryption** and **per-gateway authentication** before deployment. All Novena Gateways connect to the broker over the public internet.
 
 ### One-Way TLS (Standard — All Customers)
 
@@ -35,8 +35,8 @@ acl_file /etc/mosquitto/acl
 ```
 
 - **Port 8883** — standard MQTT over TLS
-- The server certificate can be obtained via Let's Encrypt (if using a domain like `mqtt.nodeflow.io`) or a self-signed CA
-- Each edge gateway bundles the CA certificate at `/opt/nodeflow-edge/certs/ca.crt` to verify the server
+- The server certificate can be obtained via Let's Encrypt (if using a domain like `mqtt.${NOVENA_DOMAIN}`) or a self-signed CA
+- Each edge gateway bundles the CA certificate at `/opt/novena-gateway/certs/ca.crt` to verify the server
 
 ### Mutual TLS / mTLS (Enterprise Add-On)
 
@@ -153,7 +153,7 @@ class Gateway(models.Model):
     {
       "ts": 1714000000000,
       "level": "INFO",
-      "logger": "nodeflow_edge.connectors.modbus",
+      "logger": "novena_gateway.connectors.modbus",
       "message": "2024-04-25 10:00:00 - INFO - [modbus_connector] - modbus_connector - 142 - Polled 3 registers",
       "module": "modbus_connector",
       "line": 142
@@ -161,9 +161,9 @@ class Gateway(models.Model):
     {
       "ts": 1714000000500,
       "level": "WARNING",
-      "logger": "nodeflow_edge.gateway",
-      "message": "2024-04-25 10:00:01 - WARNING - [nodeflow_gateway] - nodeflow_gateway - 55 - Connection timeout",
-      "module": "nodeflow_gateway",
+      "logger": "novena_gateway.gateway",
+      "message": "2024-04-25 10:00:01 - WARNING - [novena_gateway] - novena_gateway - 55 - Connection timeout",
+      "module": "novena_gateway",
       "line": 55
     }
   ]
@@ -238,7 +238,7 @@ The Django consumer **must handle both identically**: update `Gateway.status = "
   "config": {
     "gateway": { "serial_number": "NF-EDGE-001" },
     "mqtt": {
-      "host": "mqtt.nodeflow.io",
+      "host": "mqtt.${NOVENA_DOMAIN}",
       "port": 8883,
       "topic": "v1/gateway/telemetry",
       "qos": 1,
@@ -246,7 +246,7 @@ The Django consumer **must handle both identically**: update `Gateway.status = "
       "password": "provisioned-password",
       "tls": {
         "mode": "one-way",
-        "ca_certs": "/opt/nodeflow-edge/certs/ca.crt"
+        "ca_certs": "/opt/novena-gateway/certs/ca.crt"
       }
     },
     "features": { ... },
@@ -260,9 +260,9 @@ The Django consumer **must handle both identically**: update `Gateway.status = "
 ```json
 "tls": {
   "mode": "mutual",
-  "ca_certs": "/opt/nodeflow-edge/certs/ca.crt",
-  "certfile": "/opt/nodeflow-edge/certs/client.crt",
-  "keyfile":  "/opt/nodeflow-edge/certs/client.key"
+  "ca_certs": "/opt/novena-gateway/certs/ca.crt",
+  "certfile": "/opt/novena-gateway/certs/client.crt",
+  "keyfile":  "/opt/novena-gateway/certs/client.key"
 }
 ```
 
@@ -313,7 +313,7 @@ On failure, `config_update_status` is `"failed"` and `config_update_error` conta
 | `get_config` | `{}` | Returns `{"config": {...}}` — full current config.json |
 | `get_status` | `{}` | Returns `{"serial_number": ..., "uptime_seconds": ..., "mqtt_connected": ..., "device_count": ..., "devices": [...], "connectors": [...]}` |
 | `get_devices` | `{}` | Returns `{"devices": {...}}` — device registry |
-| `set_log_level` | `{"level": "DEBUG", "logger": "nodeflow_edge.gateway"}` | Change runtime log level. `logger` is optional (defaults to root) |
+| `set_log_level` | `{"level": "DEBUG", "logger": "novena_gateway.gateway"}` | Change runtime log level. `logger` is optional (defaults to root) |
 | `restart_connector` | `{"name": "Modbus TCP Connector"}` | Restart a specific connector by name |
 | `restart_all` | `{}` | Restart all connectors |
 | `reboot` | `{"delay_seconds": 5}` | Reboot the host (requires root/systemd) |
@@ -505,7 +505,7 @@ import uuid
 from django.conf import settings
 import paho.mqtt.client as mqtt
 
-logger = logging.getLogger('iot_platform')
+logger = logging.getLogger('novena_hub')
 
 # Singleton MQTT client for publishing
 _client = None
@@ -519,7 +519,7 @@ def get_mqtt_client():
 
     _client = mqtt.Client(
         callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
-        client_id=settings.MQTT_PUBLISHER_CLIENT_ID,  # e.g., "nodeflow-cloud-publisher"
+        client_id=settings.MQTT_PUBLISHER_CLIENT_ID,  # e.g., "novena-hub-publisher"
         protocol=mqtt.MQTTv311
     )
 
@@ -804,8 +804,8 @@ Add to `settings.py`:
 # MQTT Configuration
 MQTT_BROKER_HOST = env('MQTT_BROKER_HOST', default='localhost')
 MQTT_BROKER_PORT = env.int('MQTT_BROKER_PORT', default=1883)
-MQTT_CONSUMER_CLIENT_ID = env('MQTT_CONSUMER_CLIENT_ID', default='nodeflow-cloud-consumer')
-MQTT_PUBLISHER_CLIENT_ID = env('MQTT_PUBLISHER_CLIENT_ID', default='nodeflow-cloud-publisher')
+MQTT_CONSUMER_CLIENT_ID = env('MQTT_CONSUMER_CLIENT_ID', default='novena-hub-consumer')
+MQTT_PUBLISHER_CLIENT_ID = env('MQTT_PUBLISHER_CLIENT_ID', default='novena-hub-publisher')
 ```
 
 ### Step 6: API Endpoints / Views
@@ -986,7 +986,7 @@ GatewayLog.objects.filter(gateway=gw).order_by('-timestamp')[:10]
 - [ ] Run migrations
 - [ ] Create templates for gateway logs and RPC history pages
 - [ ] Create device control UI ("Send Command" panel on device detail page)
-- [ ] Test end-to-end with a running Nodeflow Edge gateway
+- [ ] Test end-to-end with a running Novena Gateway
 
 ---
 

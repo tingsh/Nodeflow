@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from .models import TelemetryData
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 
 def get_z_score_insight(device, key):

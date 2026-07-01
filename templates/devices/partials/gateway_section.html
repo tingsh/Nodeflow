@@ -9,8 +9,8 @@
             <div>
                 <div class="flex items-center gap-3">
                     <h4 class="text-xl font-black text-base-content font-heading tracking-tight">Gateway: {{ gateway.name }}</h4>
-                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest {% if gateway.status == 'online' %}bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400{% else %}bg-base-200 text-base-content/40{% endif %}">
-                        {{ gateway.get_status_display }}
+                    <span class='inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest {% if gateway.freshness.status == "live" %}bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400{% else %}bg-base-200 text-base-content/40{% endif %}'>
+                        {{ gateway.freshness.display }}
                     </span>
                 </div>
                 <p class="text-xs text-base-content/40 font-mono mt-1">S/N: {{ gateway.serial_number }}</p>
@@ -76,12 +76,12 @@
                         {# REGISTERED STATE #}
                         <a href="{% url 'web_team:devices:device_detail' request.team.slug port_info.device.pk %}" class="h-full bg-base-100 p-5 rounded-3xl border border-base-content/5 hover:border-primary-500/30 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
                             <div class="flex items-center justify-between">
-                                <span class="h-2 w-2 rounded-full {% if port_info.device.status == 'online' %}bg-green-500{% else %}bg-base-300{% endif %}"></span>
+                                <span class='h-2 w-2 rounded-full {% if port_info.device.freshness.status == "live" %}bg-green-500{% elif port_info.device.freshness.status == "delayed" %}bg-amber-500{% elif port_info.device.freshness.status == "alarm" %}bg-red-500{% else %}bg-base-300{% endif %}' title='{{ port_info.device.freshness.display }}'></span>
                                 <i class="fa fa-arrow-right text-[10px] text-base-content/10 group-hover:text-primary-500 transition-colors"></i>
                             </div>
                             <div class="mt-2">
                                 <h5 class="text-sm font-bold text-base-content leading-tight group-hover:text-primary-600 transition-colors">{{ port_info.device.name }}</h5>
-                                <p class="text-[9px] text-base-content/40 uppercase tracking-widest font-mono mt-0.5">{{ port_info.device.get_device_type_display }}</p>
+                                <p class='text-[9px] text-base-content/40 uppercase tracking-widest font-mono mt-0.5'>{{ port_info.device.freshness.display }}</p>
                             </div>
                         </a>
 

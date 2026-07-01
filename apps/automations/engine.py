@@ -9,7 +9,7 @@ from apps.devices.services import send_device_command
 
 from .models import Automation, AutomationLog
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 
 def evaluate_automations(device, telemetry_data):

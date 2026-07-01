@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 MODBUS_SERVER_IP = "127.0.0.1"  # <--- Change this to Laptop 2's LAN IP address
 MODBUS_PORT = 5020
 
-# Target: PC (Nodeflow Cloud / Mosquitto Broker)
+# Target: PC (Novena Hub / Mosquitto Broker)
 MQTT_BROKER_IP = "127.0.0.1"  # <--- Change this to the PC's LAN IP address
 MQTT_PORT = 1883
 MQTT_TOPIC = "v1/gateway/telemetry"
@@ -65,7 +65,7 @@ def run_edge_gateway():
                 voltage = result.registers[0] / 10.0
                 power = result.registers[1] / 10.0
 
-                # Format exactly as Nodeflow Cloud expects
+                # Format exactly as Novena Hub expects
                 payload = {
                     "serial_number": GATEWAY_SN,
                     "values": {

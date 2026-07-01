@@ -5,7 +5,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     environment:
-      - POSTGRES_DB=iot_platform
+      - POSTGRES_DB=novena_hub
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=shouheng
     ports:
@@ -96,7 +96,7 @@ services:
       args:
         MY_UID: ${MY_UID:-1000}
         MY_GID: ${MY_GID:-1000}
-    command: celery -A iot_platform worker -l INFO --beat --pool=solo
+    command: celery -A novena_hub worker -l INFO --beat --pool=solo
     volumes:
       - .:/code
     environment:

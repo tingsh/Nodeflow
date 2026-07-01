@@ -2,7 +2,7 @@
 
 > **Date:** April 18, 2026  
 > **Depends on:** Sprints 1-6 (all complete)  
-> **Context:** Edge gateway exists in separate repo (owner-managed). Focus here: make Nodeflow Cloud world-class.
+> **Context:** Edge gateway exists in separate repo (owner-managed). Focus here: make Novena Hub world-class.
 
 ---
 
@@ -85,7 +85,7 @@ Marketing Site Structure:
 
 #### [MODIFY] `templates/web/components/top_nav.html`
 Replace current basic nav with a premium sticky navigation bar:
-- **Left:** Nodeflow logo/wordmark
+- **Left:** Novena logo/wordmark
 - **Center:** Product | Solutions | Pricing | Resources (dropdown with Blog, Docs, FAQ)
 - **Right:** Sign In | **Get Started** (primary CTA button)
 - **Behavior:** Transparent on hero, becomes solid white/dark with shadow on scroll (Alpine.js)
@@ -131,7 +131,7 @@ Overhaul the home page:
 
 #### [MODIFY] `templates/web/components/footer.html`
 Professional multi-column footer:
-- **Col 1:** Nodeflow logo + tagline + social links
+- **Col 1:** Novena logo + tagline + social links
 - **Col 2:** Product links (Features, Pricing, Integrations)
 - **Col 3:** Resources links (Blog, Docs, FAQ, API)
 - **Col 4:** Company links (About, Contact, Careers)
@@ -172,7 +172,7 @@ Add Alpine.js `x-show` directives to action fields:
 - Show webhook_url only when `action_type == 'webhook'`
 - Show notify_emails only when `action_type == 'notify_email'`
 
-#### [MODIFY] `iot_platform/settings.py`
+#### [MODIFY] `novena_hub/settings.py`
 Add `generate_preventive_tickets` to `CELERY_BEAT_SCHEDULE`
 
 #### [MODIFY] `templates/web/app_home.html`

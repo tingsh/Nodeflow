@@ -4,7 +4,7 @@ Edge Connector Config Generator
 Transforms Cloud DeviceTemplate register maps into Edge-compatible connector
 configurations that can be pushed via MQTT config update.
 
-The generated config follows the Nodeflow Edge connector schema:
+The generated config follows the Novena Gateway connector schema:
 - Groups devices by protocol (modbus_tcp, modbus_rtu, etc.)
 - Emits Edge connector objects with top-level type/name and nested config
 - Includes device_id (UUID) for unambiguous telemetry matching
@@ -12,7 +12,7 @@ The generated config follows the Nodeflow Edge connector schema:
 
 import logging
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 MODBUS_TYPE_MAP = {
     "float32": "32float",

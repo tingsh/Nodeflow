@@ -2,7 +2,7 @@ import os
 import django
 import sys
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'iot_platform.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'novena_hub.settings')
 django.setup()
 
 from django.test import Client

@@ -12,7 +12,7 @@
 
 Since our last review on June 6, we have successfully executed Phase 2 of our strategic roadmap, focusing heavily on integrating the Edge runtime with the Cloud and building out our core user experience layer. The platform has taken a massive leap forward in maturity.
 
-Our overall assessment of product readiness has improved significantly, as we have completed 4 major "must-have" features that were previously missing or only partially built. Nodeflow is now **highly capable** of supporting end-to-end device onboarding, automatic visualization, fleet-wide monitoring, and remote edge lifecycle management.
+Our overall assessment of product readiness has improved significantly, as we have completed 4 major "must-have" features that were previously missing or only partially built. Novena is now **highly capable** of supporting end-to-end device onboarding, automatic visualization, fleet-wide monitoring, and remote edge lifecycle management.
 
 | Product Area | Must-Haves Built | Must-Haves Missing | Readiness |
 |-------------|-----------------|-------------------|-----------|

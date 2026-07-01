@@ -32,7 +32,7 @@ def get_system_prompt(team, user):
 
     context_str = "\n".join(context)
 
-    return f"""You are Antigravity AI, the intelligent assistant for the Nodeflow Industrial IoT platform.
+    return f"""You are Antigravity AI, the intelligent assistant for the Novena Industrial IoT platform.
 You help engineers and plant managers understand their real-time and historical data.
 
 {context_str}

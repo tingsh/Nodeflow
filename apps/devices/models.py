@@ -1,5 +1,9 @@
+import logging
+
 from django.conf import settings
 from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
 
 from apps.teams.models import BaseTeamModel
@@ -78,6 +82,12 @@ class Gateway(BaseTeamModel):
     def __str__(self):
         return f"{self.name} ({self.serial_number})"
 
+    @property
+    def freshness(self):
+        from apps.devices.freshness import gateway_freshness_state
+
+        return gateway_freshness_state(self)
+
 
 class GatewayInventory(models.Model):
     """Factory registry for physical gateways before customer claim."""
@@ -146,7 +156,7 @@ class DeviceTemplate(models.Model):
     is_verified = models.BooleanField(default=False)
 
     SOURCE_CHOICES = (
-        ("curated", _("Curated (Nodeflow)")),
+        ("curated", _("Curated (Novena)")),
         ("ai_generated", _("AI Generated")),
         ("user_created", _("User Created")),
     )
@@ -186,17 +196,38 @@ class Device(BaseTeamModel):
     name = models.CharField(max_length=200)
     device_type = models.CharField(max_length=30, choices=DeviceTemplate.DEVICE_TYPE_CHOICES)
     protocol = models.CharField(max_length=20, choices=DeviceTemplate.PROTOCOL_CHOICES)
-    port = models.CharField(max_length=100, null=True, blank=True, help_text="Interface name or address (e.g., /dev/ttyUSB0, 192.168.1.100:502)")
+    port = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text="Interface name or address (e.g., /dev/ttyUSB0, 192.168.1.100:502)",
+    )
     energy_category = models.CharField(max_length=20, choices=ENERGY_CATEGORY_CHOICES, default="none")
 
     connection_config = models.JSONField(default=dict)
-    discovery_meta = models.JSONField(default=dict, blank=True, help_text="Raw discovery data from Edge (interface, slave_id, baud_rate, etc.)")
+    discovery_meta = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Raw discovery data from Edge (interface, slave_id, baud_rate, etc.)",
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="offline")
     last_telemetry_at = models.DateTimeField(null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
         return f"{self.name} ({self.site.name})"
+
+    @property
+    def freshness(self):
+        from apps.devices.freshness import device_freshness_state
+
+        return device_freshness_state(self)
+
+    @property
+    def gateway_context_display(self):
+        from apps.devices.freshness import device_gateway_context_display
+
+        return device_gateway_context_display(self)
 
 
 class GatewayConfig(BaseTeamModel):
@@ -298,9 +329,6 @@ class FirmwareRelease(models.Model):
         return f"Firmware v{self.version} ({'Active' if self.is_active else 'Draft'})"
 
 
-from django.db.models.signals import post_save
-from django.dispatch import receiver
-
 @receiver(post_save, sender=Device)
 def auto_generate_dashboard_on_template_match(sender, instance, **kwargs):
     if instance.template:
@@ -308,6 +336,6 @@ def auto_generate_dashboard_on_template_match(sender, instance, **kwargs):
             from apps.dashboard.services import generate_default_dashboard
             generate_default_dashboard(instance)
         except Exception as e:
-            logger = logging.getLogger("iot_platform")
+            logger = logging.getLogger("novena_hub")
             logger.error("Failed to auto-generate dashboard for device %s: %s", instance.name, e)
 

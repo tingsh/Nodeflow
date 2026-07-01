@@ -6,63 +6,73 @@ from apps.devices.models import Device, Gateway
 
 from .models import TelemetryData
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 
 def ingest_telemetry_data(gateway_sn, values, timestamp=None, device_id=None):
     """
     Ingests telemetry data from a gateway.
-    Matches the gateway and its devices, and saves data to TimescaleDB.
+    Matches by device ID first, then exact device name, with legacy fallback logged.
     """
+    cloud_received_at = timezone.now()
     if timestamp is None:
-        timestamp = timezone.now()
+        timestamp = cloud_received_at
 
     try:
         gateway = Gateway.objects.get(serial_number=gateway_sn)
     except Gateway.DoesNotExist:
-        logger.warning(f"Gateway with SN {gateway_sn} not found. Ingestion skipped.")
+        logger.warning('Gateway with SN %s not found. Ingestion skipped.', gateway_sn)
         return
 
-    # Update gateway heartbeat
-    gateway.last_seen = timestamp
-    gateway.status = "online"
-    gateway.save(update_fields=["last_seen", "status"])
+    gateway.last_seen = cloud_received_at
+    gateway.status = 'online'
+    gateway.save(update_fields=['last_seen', 'status'])
 
     target_device = None
     values = dict(values)
-    device_name = values.pop("device_name", None)
+    device_name = values.pop('device_name', None)
 
-    # 1. Primary match: device_id (Cloud-assigned UUID, pushed to Edge via config)
     if device_id:
         target_device = gateway.devices.filter(pk=device_id).first()
         if not target_device:
-            logger.debug("device_id %s not found on gateway %s, falling back to name match", device_id, gateway_sn)
+            logger.debug('device_id %s not found on gateway %s, falling back to name match', device_id, gateway_sn)
 
-    # 2. Fallback: match by device_name string
     if not target_device and device_name:
         try:
             target_device = gateway.devices.get(name=device_name)
         except Device.DoesNotExist:
-            logger.info(f"Device {device_name} not found for gateway {gateway_sn}.")
+            logger.info('Device %s not found for gateway %s.', device_name, gateway_sn)
 
-    # 3. Final fallback: first device on the gateway
     if not target_device and gateway.devices.exists():
         target_device = gateway.devices.first()
+        logger.warning(
+            'Using legacy first-device telemetry fallback for gateway %s. '
+            'Payload device_id=%s device_name=%s resolved_device=%s.',
+            gateway_sn,
+            device_id,
+            device_name,
+            target_device.id,
+        )
 
     if not target_device:
-        logger.warning(f"No target device identified for telemetry from gateway {gateway_sn}")
+        logger.warning('No target device identified for telemetry from gateway %s', gateway_sn)
         return
 
-    # Create TelemetryData records for each key
+    db_flushed_at = timezone.now()
     telemetry_objects = []
     for key, value in values.items():
-        data_point = TelemetryData(device=target_device, timestamp=timestamp, key=key)
+        data_point = TelemetryData(
+            device=target_device,
+            timestamp=timestamp,
+            cloud_received_at=cloud_received_at,
+            db_flushed_at=db_flushed_at,
+            key=key,
+        )
 
-        # Determine value type
-        if isinstance(value, int | float):
-            data_point.value_numeric = float(value)
-        elif isinstance(value, bool):
+        if isinstance(value, bool):
             data_point.value_bool = value
+        elif isinstance(value, int | float):
+            data_point.value_numeric = float(value)
         else:
             data_point.value_string = str(value)
 
@@ -71,26 +81,25 @@ def ingest_telemetry_data(gateway_sn, values, timestamp=None, device_id=None):
     if telemetry_objects:
         TelemetryData.objects.bulk_create(telemetry_objects)
 
-        # Check for alerts
         from apps.alerts.services import check_alerts_for_payload
 
         for key, value in values.items():
             check_alerts_for_payload(target_device, key, value)
 
-        # Evaluate automations
         from apps.automations.engine import evaluate_automations
 
         evaluate_automations(target_device, values)
 
-        # Update device last seen
         target_device.last_telemetry_at = timestamp
-        target_device.status = "online"
-        target_device.save(update_fields=["last_telemetry_at", "status"])
+        if target_device.status != 'alarm':
+            target_device.status = 'online'
+            target_device.save(update_fields=['last_telemetry_at', 'status'])
+        else:
+            target_device.save(update_fields=['last_telemetry_at'])
 
-        logger.info(f"Ingested {len(telemetry_objects)} points for device {target_device.name}")
+        logger.info('Ingested %d points for device %s', len(telemetry_objects), target_device.name)
 
     return target_device
-
 
 def get_latest_telemetry_for_chart(device, key, limit=20):
     """

@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from .models import DeviceCommand, Gateway, GatewayInventory
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 
 def compute_claim_code(serial_number: str) -> str:
@@ -52,7 +52,7 @@ def validate_gateway_claim(serial_number: str, claim_code: str):
     existing_gateway = Gateway.objects.filter(serial_number=serial_number).first()
     if not inventory and not existing_gateway:
         raise GatewayClaimError(
-            "This serial number is not in the Nodeflow factory inventory. Please contact support."
+            "This serial number is not in the Novena factory inventory. Please contact support."
         )
     if inventory and inventory.status == "retired":
         raise GatewayClaimError("This gateway has been retired and cannot be claimed.")

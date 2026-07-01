@@ -1,6 +1,6 @@
 # Walkthrough: Sprint 1 â€” Role-Based Access Control (RBAC)
 
-We have successfully overhauled the Nodeflow access control system from a simple Admin/Member model to a robust, 5-tier industrial-grade RBAC system. This foundation ensures that plant managers, operators, and viewers only see and do what they are authorized to.
+We have successfully overhauled the Novena access control system from a simple Admin/Member model to a robust, 5-tier industrial-grade RBAC system. This foundation ensures that plant managers, operators, and viewers only see and do what they are authorized to.
 
 ## ðŸ”‘ The New 5-Tier Role System
 
@@ -66,10 +66,10 @@ During verification, we addressed several critical items:
 
 ## Walkthrough: Sprint 2 â€” AI "Chat With Your Data"
 
-We have successfully integrated a powerful AI assistant that can browse, analyze, and summarize your real-time IoT data. This moves Nodeflow from a simple monitoring tool to an intelligent advisor.
+We have successfully integrated a powerful AI assistant that can browse, analyze, and summarize your real-time IoT data. This moves Novena from a simple monitoring tool to an intelligent advisor.
 
 ### ðŸ¤– Intelligent Tool Execution
-The AI is no longer just a text generator. It has been built with **Function Calling** (via LiteLLM) allowing it to "reach into" the Nodeflow database:
+The AI is no longer just a text generator. It has been built with **Function Calling** (via LiteLLM) allowing it to "reach into" the Novena database:
 - **`get_device_status`**: The AI can check which devices are online and their latest sensor readings.
 - **`get_energy_data`**: The AI can aggregate thousands of telemetry points into clean summaries (hourly/daily).
 - **`get_alerts_summary`**: The AI can audit recent issues across your facilities.
@@ -95,13 +95,13 @@ To ensure cost-predictability for the SaaS model, we implemented:
 
 ## Walkthrough: Sprint 3 — Write-Back / Remote Control
 
-Nodeflow is no longer just a " Read-Only\ dashboard. We have implemented a secure, industrial-grade **Write-Back Engine** that enables remote control of PLCs and equipment directly from the web interface.
+Novena is no longer just a " Read-Only\ dashboard. We have implemented a secure, industrial-grade **Write-Back Engine** that enables remote control of PLCs and equipment directly from the web interface.
 
 ### ?? Bidirectional Control Engine
 Weve integrated a sophisticated MQTT RPC (Remote Procedure Call) bridge:
 - **DeviceCommand Model**: Every click is audited. We track the user who sent it, the exact payload, the transaction ID, and the outcome (Success/Failure).
 - **ThingsBoard Compatibility**: Our command structure follows the 1/gateway/rpc standard, ensuring compatibility with the industrial-standard TB Gateway.
-- **Asynchronous ACK**: When you send a command, Nodeflow doesnt block. It polls for a response from the edge in the background using HTMX.
+- **Asynchronous ACK**: When you send a command, Novena doesnt block. It polls for a response from the edge in the background using HTMX.
 
 ### ??? Dynamic Control UI
 The **Device Detail** page has been upgraded with a dedicated **Remote Controls** section:
@@ -125,7 +125,7 @@ The **Device Detail** page has been upgraded with a dedicated **Remote Controls*
 
 ## Walkthrough: Sprint 4 — Public Shareable Links
 
-Nodeflow now provides teams with the ability to safely share their live facility data with external stakeholders (auditors, executives, or public displays) without requiring them to create an account.
+Novena now provides teams with the ability to safely share their live facility data with external stakeholders (auditors, executives, or public displays) without requiring them to create an account.
 
 ### ?? Secure & Configurable Sharing
 The new **Shared Links** interface allows Managers and Admins to generate unique, tokenized URLs that bypass traditional authentication.
@@ -137,7 +137,7 @@ The new **Shared Links** interface allows Managers and Admins to generate unique
 The public dashboard has been designed with a specific focus on unattended TV displays (e.g., in a reception area or on the factory floor).
 - **Auto-Refresh**: The dashboard automatically refreshes every 60 seconds to ensure the latest data is always on screen.
 - **?kiosk=1 Parameter**: Appending this to the URL entirely hides the navigation header, maximizing screen real-estate for the actual data metrics and active alerts.
-- **Clean Aesthetic**: A minimal, beautiful layout showcasing the Powered by Nodeflow branding.
+- **Clean Aesthetic**: A minimal, beautiful layout showcasing the Powered by Novena branding.
 
 ### ??? RBAC Integration
 We ensured that Public Links adhere to the 5-tier role system.
@@ -157,7 +157,7 @@ We ensured that Public Links adhere to the 5-tier role system.
 
 ## Walkthrough: Sprint 5 - Maintenance Ticketing
 
-Nodeflow now includes a comprehensive, industrial-grade **Maintenance Ticketing System**. We have successfully bridged the gap between automated machine monitoring and human operational workflows.
+Novena now includes a comprehensive, industrial-grade **Maintenance Ticketing System**. We have successfully bridged the gap between automated machine monitoring and human operational workflows.
 
 ### ⚙️ Reactive Maintenance (Automated)
 Your Edge Gateways now talk directly to your service team:
@@ -194,7 +194,7 @@ The UI is built for the factory floor:
 
 ## Walkthrough: Sprint 6 — Logic & Cloud Automations
 
-Nodeflow now features a powerful, rule-based **Automations Engine** that can react to live telemetry streams in real-time, effectively serving as a centralized, cloud-hosted PLC.
+Novena now features a powerful, rule-based **Automations Engine** that can react to live telemetry streams in real-time, effectively serving as a centralized, cloud-hosted PLC.
 
 ### 🧠 Advanced Trigger Conditions
 We expanded beyond simple threshold alerts into a multi-variable logic engine:
@@ -203,7 +203,7 @@ We expanded beyond simple threshold alerts into a multi-variable logic engine:
 - **Dynamic Operators**: Supports strictly mathematical operators (`>`, `<=`, `==`) and boolean state checks (`Is True`, `Is False`).
 
 ### ⚡ Automated Actions Array
-When conditions are satisfied, Nodeflow immediately takes action directly at the execution edge or informs other business systems:
+When conditions are satisfied, Novena immediately takes action directly at the execution edge or informs other business systems:
 - **Send RPC Commands**: Automatically write back to PLC registers or gateways (e.g., *Shut off Pump 1 if Tank Level < 10%*).
 - **Fire Webhooks**: Post JSON payloads out to third-party APIs (like Zapier, Slack, or external CRMs).
 - **Email Notifications**: Alert maintenance teams dynamically.
@@ -230,7 +230,7 @@ We designed a clean, user-friendly builder using Django Formsets that makes crea
 
 ## Phase 2 Sprint 7A: Dashboard Command Center Overhaul
 
-Developed a premium "Command Center" dashboard that transitions Nodeflow from a basic monitoring tool into a professional operations control room.
+Developed a premium "Command Center" dashboard that transitions Novena from a basic monitoring tool into a professional operations control room.
 
 ### Key Work Completed
 
@@ -267,7 +267,7 @@ Transformed the single-page landing page into a comprehensive, professional mult
 *   **Hyper-Realistic Visuals:** Generated and deployed a 3D-style dashboard hero image (`static/images/marketing_hero.png`) to showcase the platform's power.
 *   **Landing Page Redesign:** Completely rewrote `landing_page.html` with sections for social proof, problem/solution, core features, and an AI intelligence spotlight.
 *   **Expansion Architecture:** Created four new dedicated marketing pages:
-    *   `/product/`: Highlighting the 6 core pillars of the Nodeflow platform.
+    *   `/product/`: Highlighting the 6 core pillars of the Novena platform.
     *   `/solutions/`: Vertical-specific case studies for Energy, Cold Chain, and Factory floors.
     *   `/pricing/`: Subscription tiers with a detailed feature comparison matrix and FAQ.
     *   `/about/`: Company mission, values, and an industrial-grade contact system.
@@ -289,22 +289,22 @@ Transformed the single-page landing page into a comprehensive, professional mult
 
 ## Phase 2 Sprint 7C: Onboarding Polish + Architecture Refinements
 
-Finalized the production readiness of Nodeflow's core workflows, ensuring robust security, polished user experience, and automated background maintenance.
+Finalized the production readiness of Novena's core workflows, ensuring robust security, polished user experience, and automated background maintenance.
 
 ### Key Work Completed
 
 *   **Onboarding RBAC Hardening:** Added granular `@require_permission` checks across all `apps/onboarding/` views. Provisioning logic is now restricted to `manager` and `admin` roles, preventing unauthorized infrastructure modification.
 *   **Celebratory Onboarding Completion:** Completely redesigned `onboarding/complete.html`. Added a success celebration card, a configuration summary, and actionable next steps for MQTT gateway integration.
 *   **Automation UX Polish:** Enhanced the `automation_form.html` with Alpine.js to provide conditional field visibility. Configuration fields for Commands, Webhooks, and Notifications now only appear when their respective action types are selected, significantly reducing cognitive load.
-*   **Preventive Maintenance Automation:** Configured the `generate_preventive_tickets` task in `CELERY_BEAT_SCHEDULE` to run daily. Nodeflow will now automatically generate PM orders based on defined schedules without manual intervention.
+*   **Preventive Maintenance Automation:** Configured the `generate_preventive_tickets` task in `CELERY_BEAT_SCHEDULE` to run daily. Novena will now automatically generate PM orders based on defined schedules without manual intervention.
 *   **Foundation Reliability:** Verified the entire platform stability with a clean test suite run, resolving edge-case template rendering issues.
 
 ### Technical Deep Dive
 
-1.  **Backend:** Secured the onboarding URL patterns by switching from basic team login decorators to Nodeflow's specific RBAC permission decorators.
+1.  **Backend:** Secured the onboarding URL patterns by switching from basic team login decorators to Novena's specific RBAC permission decorators.
 2.  **UI/UX:** Used **Alpine.js `x-model` and `x-show`** to create a dynamic, single-page-app feel for complex multi-action forms.
 3.  **Operations:** Integrated Celery Beat for system-wide background task orchestration.
 
 ### Phase 2 Verified Status: ✅ MARKET READY
 
-All 18 major features across Sprints 1-6 are now polished, secured, and wrapped in a premium, multi-page SaaS shell. Nodeflow is ready for real-world pilot deployments.
+All 18 major features across Sprints 1-6 are now polished, secured, and wrapped in a premium, multi-page SaaS shell. Novena is ready for real-world pilot deployments.

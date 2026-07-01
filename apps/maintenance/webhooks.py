@@ -6,7 +6,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .services import process_incoming_whatsapp
 
-logger = logging.getLogger("iot_platform")
+logger = logging.getLogger("novena_hub")
 
 
 @csrf_exempt
@@ -20,7 +20,7 @@ def whatsapp_webhook(request):
         token = request.GET.get("hub.verify_token")
         challenge = request.GET.get("hub.challenge")
 
-        verify_token = getattr(settings, "WHATSAPP_VERIFY_TOKEN", "nodeflow_verify_token")
+        verify_token = getattr(settings, "WHATSAPP_VERIFY_TOKEN", "novena_verify_token")
         if mode == "subscribe" and token == verify_token:
             logger.info("WhatsApp webhook verified successfully.")
             return HttpResponse(challenge)

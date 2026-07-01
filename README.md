@@ -48,10 +48,10 @@ This will create your virtual environment in the `.venv` directory of your proje
 
 *If you are using Docker you can skip these steps.*
 
-Create a database named `iot_platform`.
+Create a database named `novena_hub`.
 
 ```
-createdb iot_platform
+createdb novena_hub
 ```
 
 Create database migrations:
@@ -118,13 +118,13 @@ If you use Docker it will start automatically.
 You can run it using:
 
 ```bash
-celery -A iot_platform worker -l INFO --pool=solo
+celery -A novena_hub worker -l INFO --pool=solo
 ```
 
 Or with celery beat (for scheduled tasks):
 
 ```bash
-celery -A iot_platform worker -l INFO -B --pool=solo
+celery -A novena_hub worker -l INFO -B --pool=solo
 ```
 
 Note: Using the `solo` pool is recommended for development but not for production.

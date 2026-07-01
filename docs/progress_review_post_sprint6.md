@@ -1,4 +1,4 @@
-# Nodeflow Progress Review — Post-Sprint 6 Comprehensive Audit
+# Novena Progress Review — Post-Sprint 6 Comprehensive Audit
 
 > **Date:** April 18, 2026  
 > **Context:** All 6 feature sprints are complete. Time for an honest look at where we stand against the original "Shopify for IIoT" vision, and what separates us from a product people will pay real money for.
@@ -62,7 +62,7 @@ Our v2 review (April 13) upgraded us to **"Stage 1: Demo-Ready"** after we built
 | View count tracking + analytics | ✅ |
 | Kiosk mode (`?kiosk=1`) for TV screens | ✅ |
 | Auto-refresh (60s) | ✅ |
-| "Powered by Nodeflow" branding + CTA | ✅ |
+| "Powered by Novena" branding + CTA | ✅ |
 | RBAC (Manager+ only) | ✅ |
 | Unit tests | ✅ |
 
@@ -99,7 +99,7 @@ Our v2 review (April 13) upgraded us to **"Stage 1: Demo-Ready"** after we built
 
 Let's measure ourselves against the platform we originally considered integrating with, because that's the competitive bar enterprise customers will compare us to:
 
-| Capability | ThingsBoard PE | Nodeflow (Today) | Gap Assessment |
+| Capability | ThingsBoard PE | Novena (Today) | Gap Assessment |
 |-----------|---------------|-------------------|----------------|
 | **Device Management** (CRUD, templates) | ✅ Comprehensive | ✅ Solid | **Parity** — we have sites, gateways, devices, templates |
 | **MQTT Transport** | ✅ Native | ✅ Native (Mosquitto + consumer) | **Parity** |
@@ -126,7 +126,7 @@ Let's measure ourselves against the platform we originally considered integratin
 > [!IMPORTANT]
 > **On the cloud/software side, we are at FUNCTIONAL PARITY with ThingsBoard PE in the areas that matter for SMEs, and AHEAD in several critical areas (AI, maintenance, billing, RBAC, shared links).** 
 >
-> **The existential gap is the Edge.** We have no production edge gateway software. A customer cannot connect a real Modbus power meter to Nodeflow today. This is the single biggest blocker to revenue.
+> **The existential gap is the Edge.** We have no production edge gateway software. A customer cannot connect a real Modbus power meter to Novena today. This is the single biggest blocker to revenue.
 
 ---
 
@@ -163,7 +163,7 @@ I'm categorizing gaps into three tiers:
 |---------|----------------------|--------|
 | **Predictive Maintenance (ML)** | "Your motor will fail in 7 days" — this is the holy grail. Requires historical data from real deployments. | 2-4 months |
 | **Energy Optimization AI** | "You're wasting $800/mo — here's where and why" — instant ROI proof that sells itself. | 1-2 months |
-| **White-label Partner Portal** | System integrators resell Nodeflow under their brand. Channel multiplier. | 2-3 weeks |
+| **White-label Partner Portal** | System integrators resell Novena under their brand. Channel multiplier. | 2-3 weeks |
 | **API + Developer Portal** | Let customers and integrators build on top of us. Platform play. | 2-4 weeks |
 | **OTA Gateway Updates** | Push firmware/config updates to deployed edge gateways remotely. | 1-2 weeks |
 | **Digital Twin / Asset Modeling** | Visual representation of physical equipment hierarchy. Premium feature. | 2-3 months |
@@ -265,13 +265,13 @@ Phase 12 — ASEAN Expansion (12-18 months)
 > [!IMPORTANT]
 > **We need to stop building cloud features and start connecting real hardware.**
 >
-> The cloud platform is genuinely impressive. We have feature parity or superiority to ThingsBoard PE in every area that matters for SMEs. But **not a single real sensor has ever sent data to Nodeflow**. Every chart, every alert, every automation has been powered by our `device_simulator.py` script generating sine waves.
+> The cloud platform is genuinely impressive. We have feature parity or superiority to ThingsBoard PE in every area that matters for SMEs. But **not a single real sensor has ever sent data to Novena**. Every chart, every alert, every automation has been powered by our `device_simulator.py` script generating sine waves.
 >
 > The chasm between "simulation" and "production" is where IIoT startups die. We must cross it NOW.
 
 ### Immediate Next Steps (Priority Order):
 
-1. **🔌 Build the Edge Gateway** — Fork TB Gateway, adapt for our backend, prove it works with your S7-1200 PLC. This is the #1 priority. Nothing else matters until a real device talks to Nodeflow.
+1. **🔌 Build the Edge Gateway** — Fork TB Gateway, adapt for our backend, prove it works with your S7-1200 PLC. This is the #1 priority. Nothing else matters until a real device talks to Novena.
 
 2. **🌐 Deploy to Production** — Get a public URL. You can't demo from `localhost:8000`. DigitalOcean App Platform or Railway can have us live in an afternoon.
 

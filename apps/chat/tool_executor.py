@@ -7,7 +7,7 @@ from apps.alerts.models import Alert
 from apps.telemetry.models import TelemetryData
 
 
-class NodeflowToolExecutor:
+class NovenaToolExecutor:
     def __init__(self, team):
         self.team = team
 

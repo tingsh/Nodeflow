@@ -81,7 +81,7 @@ class EdgeConfigGenerationTest(TestCase):
         )
 
     def test_modbus_tcp_config_matches_edge_connector_contract(self):
-        Device.objects.create(
+        device = Device.objects.create(
             team=self.team,
             site=self.site,
             gateway=self.gateway,
@@ -102,6 +102,7 @@ class EdgeConfigGenerationTest(TestCase):
         self.assertEqual(slave["host"], "10.0.0.20")
         self.assertEqual(slave["port"], 502)
         self.assertEqual(slave["unitId"], 3)
+        self.assertEqual(slave["deviceId"], str(device.id))
         self.assertEqual(slave["type"], "tcp")
         tags = {entry["tag"]: entry for entry in slave["timeseries"]}
         self.assertEqual(tags["voltage"]["type"], "32float")
