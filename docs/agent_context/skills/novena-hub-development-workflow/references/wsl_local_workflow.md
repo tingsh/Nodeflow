@@ -1,0 +1,43 @@
+# WSL Local Development Workflow
+
+## Default Path
+
+cd /home/shouheng/projects/Novena-Hub
+source ~/.venvs/novena/bin/activate
+
+Use the WSL-native Python environment ~/.venvs/novena for Hub work.
+
+## Local Services
+Production-like local development should use native WSL2 services:
+
+- PostgreSQL with TimescaleDB-compatible telemetry storage.
+- Redis for queues/cache/Channels.
+- Mosquitto for MQTT.
+- Django dev server.
+- Celery worker.
+- Celery Beat.
+- MQTT consumer management command.
+- Vite dev server.
+
+## Common Checks
+- python manage.py check
+- python manage.py makemigrations --check --dry-run
+- python manage.py migrate --check --noinput
+- npm run type-check -- --pretty false
+
+Focused tests are preferred while developing:
+
+DJANGO_SETTINGS_MODULE=novena_hub.settings python -m pytest apps/devices/tests/test_infrastructure.py -q
+
+## Service Smoke Tests
+- Django: check http://127.0.0.1:8000/admin/login/ returns a redirect or page.
+- Vite: check http://127.0.0.1:5173/static/@vite/client.
+- Redis: redis-cli ping.
+- Mosquitto: publish/subscribe locally on 127.0.0.1:1883.
+- Celery: inspect ping should show an online worker.
+
+## Hardware Test Notes
+- Local hardware testing has used plain MQTT on port 1883.
+- Production target remains MQTT over TLS on 8883.
+- Keep browser stream status separate from gateway/device health.
+- If Windows networking, Redis, or process-launch quirks appear, prefer documenting them as local caveats instead of designing production behavior around them.
