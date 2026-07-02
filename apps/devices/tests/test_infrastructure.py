@@ -232,3 +232,97 @@ class GatewayFreshnessTest(TestCase):
         )
 
         self.assertEqual(device.gateway_context_display, 'Gateway online · device offline')
+
+    def test_gateway_recent_heartbeat_resolves_live(self):
+        from django.test import override_settings
+        from django.utils import timezone
+
+        gateway = Gateway.objects.create(
+            team=self.team,
+            site=self.site,
+            name='Fresh Gateway',
+            serial_number='GW-FRESH-003',
+            access_token='gw-fresh-token-003',
+            status='online',
+            last_seen=timezone.now() - timezone.timedelta(seconds=30),
+        )
+
+        with override_settings(GATEWAY_OFFLINE_SECONDS=120):
+            self.assertEqual(gateway.freshness.status, 'live')
+            self.assertIn('Gateway online', gateway.freshness.display)
+
+    def test_gateway_stale_heartbeat_resolves_offline_without_celery(self):
+        from django.test import override_settings
+        from django.utils import timezone
+
+        gateway = Gateway.objects.create(
+            team=self.team,
+            site=self.site,
+            name='Computed Stale Gateway',
+            serial_number='GW-FRESH-004',
+            access_token='gw-fresh-token-004',
+            status='online',
+            last_seen=timezone.now() - timezone.timedelta(seconds=121),
+        )
+
+        with override_settings(GATEWAY_OFFLINE_SECONDS=120):
+            self.assertEqual(gateway.freshness.status, 'offline')
+            self.assertIn('Gateway offline', gateway.freshness.display)
+
+    def test_gateway_context_uses_gateway_offline_when_gateway_is_stale(self):
+        from django.test import override_settings
+        from django.utils import timezone
+
+        gateway = Gateway.objects.create(
+            team=self.team,
+            site=self.site,
+            name='Stale Context Gateway',
+            serial_number='GW-FRESH-005',
+            access_token='gw-fresh-token-005',
+            status='online',
+            last_seen=timezone.now() - timezone.timedelta(seconds=121),
+        )
+        template = DeviceTemplate.objects.create(
+            name='Context Meter',
+            device_type='power_meter',
+            protocol='modbus_tcp',
+            register_map={},
+            default_polling_interval=5,
+        )
+        device = Device.objects.create(
+            team=self.team,
+            site=self.site,
+            gateway=gateway,
+            name='Offline Context Meter',
+            template=template,
+            device_type='power_meter',
+            protocol='modbus_tcp',
+            status='offline',
+            last_telemetry_at=timezone.now() - timezone.timedelta(minutes=5),
+        )
+
+        with override_settings(GATEWAY_OFFLINE_SECONDS=120):
+            self.assertIn('Gateway offline', device.gateway_context_display)
+
+    def test_device_detail_context_uses_plan_safe_fallback_polling_interval(self):
+        from django.test import RequestFactory
+
+        from apps.devices.views import DeviceDetailView
+
+        device = Device.objects.create(
+            team=self.team,
+            site=self.site,
+            name='Fallback Interval Meter',
+            device_type='power_meter',
+            protocol='modbus_tcp',
+            status='online',
+        )
+        request = RequestFactory().get('/devices/1/')
+        request.team = self.team
+        view = DeviceDetailView()
+        view.request = request
+        view.object = device
+
+        context = view.get_context_data(object=device)
+
+        self.assertEqual(context['telemetry_fallback_interval_ms'], 10000)

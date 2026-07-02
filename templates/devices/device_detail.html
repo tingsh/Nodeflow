@@ -154,7 +154,7 @@
         let telemetrySampleLimit = 20;
         let telemetrySampleColumns = [];
         let telemetrySampleRows = [];
-        let telemetryFallbackIntervalMs = 5000;
+        let telemetryFallbackIntervalMs = {{ telemetry_fallback_interval_ms|default:5000 }};
         let telemetryStaleTimer = null;
         let telemetryConnectTimer = null;
         const telemetryStaleGraceMs = 15000;

@@ -126,17 +126,16 @@ def gateway_freshness_state(gateway, now=None):
             display='Gateway maintenance · no heartbeat yet',
         )
 
-    if raw_status == 'online' and last_seen:
-        age_seconds = max(0, int((now - last_seen).total_seconds()))
-        return FreshnessState(
-            status='live',
-            label='Gateway online',
-            display=f'Gateway online · heartbeat {compact_timesince(last_seen, now)} ago',
-            age_seconds=age_seconds,
-        )
-
     if last_seen:
         age_seconds = max(0, int((now - last_seen).total_seconds()))
+        gateway_timeout = getattr(settings, 'GATEWAY_OFFLINE_SECONDS', 120)
+        if raw_status == 'online' and age_seconds <= gateway_timeout:
+            return FreshnessState(
+                status='live',
+                label='Gateway online',
+                display=f'Gateway online · heartbeat {compact_timesince(last_seen, now)} ago',
+                age_seconds=age_seconds,
+            )
         return FreshnessState(
             status='offline',
             label='Gateway offline',

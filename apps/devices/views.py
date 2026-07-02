@@ -471,6 +471,11 @@ class DeviceDetailView(PermissionRequiredMixin, DetailView):
         context["ai_insights"] = get_ai_insights(self.object)
         context["recent_commands"] = self.object.commands.all().order_by("-requested_at")[:10]
 
+        from apps.subscriptions.enforcement import get_latency_limit_for_team
+
+        latency_limit_seconds = get_latency_limit_for_team(self.object.team)
+        context["telemetry_fallback_interval_ms"] = int(max(5.0, latency_limit_seconds) * 1000)
+
         # Build structured register data from template
         readable_registers = []
         writable_registers = []
