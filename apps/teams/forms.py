@@ -13,7 +13,7 @@ from .models import Invitation, Membership, Team
 class TeamSignupForm(TurnstileSignupForm):
     invitation_id = forms.CharField(widget=forms.HiddenInput(), required=False)
     team_name = forms.CharField(
-        label=_("Company / Team Name"),
+        label=_("Company / Team Name (required)"),
         max_length=100,
         widget=forms.TextInput(attrs={"placeholder": _("Company / Team Name")}),
         required=False,
@@ -24,6 +24,7 @@ class TeamSignupForm(TurnstileSignupForm):
         super().__init__(*args, **kwargs)
         # blank out overly-verbose help text
         self.fields["password1"].help_text = ""
+        self.fields["team_name"].widget.attrs["required"] = "required"
         link = '<a class="link" href={} target="_blank">{}</a>'.format(
             reverse("web:terms"),
             _("Terms and Conditions"),

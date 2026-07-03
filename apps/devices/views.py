@@ -39,6 +39,7 @@ class SiteDetailView(PermissionRequiredMixin, DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context["active_tab"] = "sites"
         from apps.alerts.models import Alert
         from apps.telemetry.anomaly import get_ai_insights
         from apps.telemetry.services import get_site_summary_stats
@@ -126,6 +127,16 @@ class SiteDeleteView(PermissionRequiredMixin, DeleteView):
     permission_required = "manage_devices"
     model = Site
     template_name = "devices/site_confirm_delete.html"
+
+    def form_valid(self, form):
+        confirmation_name = self.request.POST.get("confirmation_name", "").strip()
+        expected_name = self.object.name.strip()
+
+        if confirmation_name != expected_name:
+            form.add_error(None, "Type the site name exactly to confirm deletion.")
+            return self.form_invalid(form)
+
+        return super().form_valid(form)
 
     def get_success_url(self):
         return reverse_lazy("web_team:devices:site_list", args=[self.request.team.slug])

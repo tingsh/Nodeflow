@@ -48,9 +48,12 @@
                         </span>
                     </div>
                     {% if can_manage %}
-                    <div class="flex space-x-2">
-                        <a href="{% url 'web_team:devices:site_edit' request.team.slug site.pk %}" class="hover:text-primary-600 relative z-10">
+                    <div class="flex space-x-3">
+                        <a href="{% url 'web_team:devices:site_edit' request.team.slug site.pk %}" class="hover:text-primary-600 relative z-10" aria-label="Edit {{ site.name }}">
                             <i class="fa fa-edit"></i>
+                        </a>
+                        <a href="{% url 'web_team:devices:site_delete' request.team.slug site.pk %}" class="hover:text-error relative z-10" aria-label="Delete {{ site.name }}">
+                            <i class="fa fa-trash"></i>
                         </a>
                     </div>
                     {% endif %}

@@ -51,10 +51,6 @@ def team_home(request, team_slug):
     sites_count = Site.objects.filter(team=team).count()
     if sites_count == 0:
         return HttpResponseRedirect(reverse("web_team:onboarding:start", args=[team_slug]))
-    elif sites_count == 1:
-        first_site = Site.objects.filter(team=team).first()
-        return HttpResponseRedirect(reverse("web_team:devices:site_detail", args=[team_slug, first_site.pk]))
-
 
     # --- Cache key prefix ---
     cache_prefix = f"dashboard_{team.id}_"

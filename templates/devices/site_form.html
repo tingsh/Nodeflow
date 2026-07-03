@@ -45,13 +45,22 @@
                     {% endfor %}
                 </div>
 
-                <div class="flex justify-end space-x-3 pt-5 border-t border-base-content/10">
-                    <a href="javascript:history.back()" class="btn btn-ghost rounded-xl">
-                        Cancel
-                    </a>
-                    <button type="submit" class="btn btn-primary rounded-xl px-6 shadow-lg shadow-indigo-600/20">
-                        {% if object %}Update{% else %}Create{% endif %}
-                    </button>
+                <div class="flex flex-col gap-3 border-t border-base-content/10 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        {% if object %}
+                            <a href="{% url 'web_team:devices:site_delete' request.team.slug object.pk %}" class="btn btn-error btn-outline rounded-xl">
+                                <i class="fa fa-trash mr-2"></i>Delete Site
+                            </a>
+                        {% endif %}
+                    </div>
+                    <div class="flex justify-end space-x-3">
+                        <a href="javascript:history.back()" class="btn btn-ghost rounded-xl">
+                            Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary rounded-xl px-6 shadow-lg shadow-indigo-600/20">
+                            {% if object %}Update{% else %}Create{% endif %}
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>

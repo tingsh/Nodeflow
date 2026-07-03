@@ -36,6 +36,9 @@
             <a href="{% url 'web_team:devices:site_edit' request.team.slug site.pk %}" class="inline-flex items-center rounded-2xl bg-base-100 px-5 py-2.5 text-sm font-bold text-base-content shadow-sm ring-1 ring-inset ring-base-content/10 hover:bg-base-200 transition-all">
                 <i class="fa fa-edit mr-2 text-base-content/40"></i>Edit Site
             </a>
+            <a href="{% url 'web_team:devices:site_delete' request.team.slug site.pk %}" class="inline-flex items-center rounded-2xl bg-base-100 px-5 py-2.5 text-sm font-bold text-error shadow-sm ring-1 ring-inset ring-error/20 hover:bg-error/10 transition-all">
+                <i class="fa fa-trash mr-2 text-error/70"></i>Delete Site
+            </a>
             <a href="{% url 'web_team:onboarding:setup_start' request.team.slug %}?site_id={{ site.id }}" class="inline-flex items-center rounded-2xl bg-primary-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary-600/30 hover:bg-primary-700 hover:scale-105 active:scale-95 transition-all">
                 <i class="fa fa-plus-circle mr-2 text-white/70"></i>Add Infrastructure
             </a>

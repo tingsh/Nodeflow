@@ -1,11 +1,11 @@
 {% load i18n %}
 {% load wagtailcore_tags %}
 {% load team_tags %}
-<div class="sticky top-0 z-[100] transition-all duration-300 w-full" 
+<div class="sticky top-0 z-[100] w-full" 
      x-data="{ scrolled: false }" 
      x-init="window.pageYOffset > 50 ? scrolled = true : scrolled = false"
      @scroll.window="window.pageYOffset > 50 ? scrolled = true : scrolled = false"
-     :class="scrolled ? 'bg-base-100/90 backdrop-blur-lg border-b border-base-content/5 shadow-sm py-2' : 'bg-transparent py-4'">
+     :class="scrolled ? 'bg-base-100/90 backdrop-blur-lg border-b border-base-content/5 shadow-sm py-4' : 'bg-transparent py-4'">
   
   <div class="max-w-[1800px] mx-auto px-4 sm:px-8 lg:px-12">
     <div class="flex justify-between items-center h-16">

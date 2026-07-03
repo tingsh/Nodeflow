@@ -326,3 +326,55 @@ class GatewayFreshnessTest(TestCase):
         context = view.get_context_data(object=device)
 
         self.assertEqual(context['telemetry_fallback_interval_ms'], 10000)
+
+class SiteDeleteFlowTest(TestCase):
+    def setUp(self):
+        from apps.teams.models import Membership
+        from apps.teams.roles import ROLE_OWNER
+
+        self.team = Team.objects.create(name="Delete Team", slug="delete-team")
+        self.user = CustomUser.objects.create_user(
+            email="owner-delete@example.com",
+            username="owner-delete@example.com",
+            password="testpass123",
+        )
+        Membership.objects.create(user=self.user, team=self.team, role=ROLE_OWNER)
+        self.site = Site.objects.create(team=self.team, name="Wrongly Typed Site")
+        self.device = Device.objects.create(
+            team=self.team,
+            site=self.site,
+            name="Temporary Meter",
+            device_type="power_meter",
+            protocol="modbus_tcp",
+        )
+        self.client.force_login(self.user)
+
+    def test_site_delete_confirmation_page_renders(self):
+        response = self.client.get(reverse("web_team:devices:site_delete", args=[self.team.slug, self.site.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Delete Site")
+        self.assertContains(response, "Type Wrongly Typed Site to confirm deletion")
+        self.assertContains(response, "Deleting this site will also delete")
+
+    def test_site_delete_rejects_wrong_confirmation_name(self):
+        response = self.client.post(
+            reverse("web_team:devices:site_delete", args=[self.team.slug, self.site.pk]),
+            data={"confirmation_name": "Wrong name"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Type the site name exactly to confirm deletion.")
+        self.assertTrue(Site.objects.filter(pk=self.site.pk).exists())
+        self.assertTrue(Device.objects.filter(pk=self.device.pk).exists())
+
+    def test_site_delete_with_exact_confirmation_deletes_site_and_devices(self):
+        response = self.client.post(
+            reverse("web_team:devices:site_delete", args=[self.team.slug, self.site.pk]),
+            data={"confirmation_name": "Wrongly Typed Site"},
+        )
+
+        self.assertRedirects(response, reverse("web_team:devices:site_list", args=[self.team.slug]))
+        self.assertFalse(Site.objects.filter(pk=self.site.pk).exists())
+        self.assertFalse(Device.objects.filter(pk=self.device.pk).exists())
+

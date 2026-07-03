@@ -10,7 +10,7 @@
   </a>
 </li>
 <li>
-  <a href="/" {% if active_tab == 'dashboard' %}class="menu-active"{% endif %}>
+  <a href="{% url 'web_team:home' team.slug %}" {% if active_tab == 'dashboard' %}class="menu-active"{% endif %}>
     <i class="fa fa-home h-4 w-4"></i>
     {% translate "Dashboard" %}
   </a>

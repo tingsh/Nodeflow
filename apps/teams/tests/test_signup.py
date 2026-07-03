@@ -12,8 +12,22 @@ class TestSignupView(TestCase):
         self._run_test(team_name="Alice Team", expected_slug="alice-team")
 
     def test_signup_no_team(self):
-        # if you don't specify a team it gets taken from email
-        self._run_test(team_name="", expected_slug="alice")
+        password = "Super Secret Pa$$word!"
+        response = self.client.post(
+            reverse("account_signup"),
+            data={
+                "email": "alice@example.com",
+                "password1": password,
+                "password2": password,
+                "team_name": "",
+                "terms_agreement": True,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(0, CustomUser.objects.count())
+        self.assertEqual(0, Team.objects.count())
+        self.assertFormError(response.context["form"], "team_name", "Please provide a Company or Team Name.")
 
     def test_signup_unicode_team(self):
         # unicode team names will fall back to the email address
