@@ -15,6 +15,7 @@
 {% endblock %}
 {% block app %}
 {% has_perm 'manage_team' as can_manage_team %}
+{% has_perm 'delete_team' as can_delete_team %}
 
 <div class="max-w-6xl mx-auto space-y-8">
 
@@ -99,7 +100,7 @@
 
   {% include 'teams/components/team_invitations.html' %}
 
-  {% if can_manage_team %}
+  {% if can_delete_team %}
     <section class="card bg-error/10 border border-error/20 mt-8">
       <div class="card-body flex flex-col md:flex-row items-center justify-between">
         <div>

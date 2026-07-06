@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
 
-from apps.teams.decorators import login_and_team_required, team_admin_required
+from apps.teams.decorators import login_and_team_required, require_permission, team_admin_required
 from apps.teams.forms import InvitationForm, TeamChangeForm
 from apps.teams.helpers import get_open_invitations_for_user
 from apps.teams.invitations import send_invitation
@@ -68,11 +68,19 @@ def manage_team(request, team_slug):
 
 
 
-@team_admin_required
+@require_permission("delete_team")
 @require_POST
 def delete_team(request, team_slug):
-    request.team.delete()
-    messages.success(request, _('The "{team}" team was successfully deleted').format(team=request.team.name))
+    team = request.team
+    confirmation_team_name = request.POST.get("confirmation_team_name", "").strip()
+
+    if confirmation_team_name != team.name:
+        messages.error(request, _("Type the team name exactly to confirm deletion."))
+        return HttpResponseRedirect(reverse("single_team:manage_team", args=[team.slug]))
+
+    team_name = team.name
+    team.delete()
+    messages.success(request, _('The "{team}" team was successfully deleted').format(team=team_name))
     return HttpResponseRedirect(reverse("web:home"))
 
 

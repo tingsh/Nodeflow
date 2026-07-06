@@ -60,6 +60,11 @@ class RBACLogicTest(TestCase):
                 has_permission(user, self.team, "manage_team"), f"{user.email} should NOT have manage_team"
             )
 
+        # delete_team: Owner only
+        self.assertTrue(has_permission(self.owner, self.team, "delete_team"))
+        for user in [self.admin, self.manager, self.operator, self.viewer]:
+            self.assertFalse(has_permission(user, self.team, "delete_team"))
+
         # manage_billing: Owner only
         self.assertTrue(has_permission(self.owner, self.team, "manage_billing"))
         for user in [self.admin, self.manager, self.operator, self.viewer]:
