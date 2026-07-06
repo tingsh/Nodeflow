@@ -1,79 +1,57 @@
-{% if discovered_devices %}
-<div class="space-y-4">
-    {% for disc in discovered_devices %}
-    <div class="p-5 rounded-2xl border border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors" x-data="{ selected: true }">
-        <div class="flex items-start gap-4">
-            <div class="pt-1">
-                <input type="checkbox" name="device_index" value="{{ forloop.counter0 }}" x-model="selected"
-                       class="checkbox checkbox-primary checkbox-sm rounded">
-            </div>
-
-            <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 mb-3">
-                    <div class="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
-                        {% if disc.connection == "tcp" %}
-                        <i class="fa fa-plug text-indigo-600 dark:text-indigo-400 text-sm"></i>
-                        {% else %}
-                        <i class="fa fa-exchange text-indigo-600 dark:text-indigo-400 text-sm"></i>
-                        {% endif %}
-                    </div>
-                    <div>
-                        <span class="text-xs font-mono text-gray-400 dark:text-gray-500">{{ disc.interface|default:disc.port }}</span>
-                        {% if disc.slave_id %}
-                        <span class="text-[10px] text-gray-400 ml-2">Slave {{ disc.slave_id }}</span>
-                        {% endif %}
-                        {% if disc.baud_rate %}
-                        <span class="text-[10px] text-gray-400 ml-1">@ {{ disc.baud_rate }} baud</span>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" x-show="selected">
-                    <div>
-                        <label class="block text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">Device Name</label>
-                        <input type="text" name="name_{{ forloop.counter0 }}"
-                               value="{{ disc.signature|default:'Unknown Device' }}"
-                               class="block w-full px-3 py-2 rounded-lg border-gray-200 dark:border-gray-700 dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500">
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">Hardware Template</label>
-                        <select name="template_{{ forloop.counter0 }}"
-                                class="block w-full px-3 py-2 rounded-lg border-gray-200 dark:border-gray-700 dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500">
-                            <option value="">— Select Template —</option>
-                            {% for tpl in templates %}
-                            <option value="{{ tpl.id }}" {% if disc.matched_template_id == tpl.id %}selected{% endif %}>
-                                {{ tpl.name }}{% if tpl.manufacturer %} ({{ tpl.manufacturer }}){% endif %}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-
-                {% if disc.matched_template_name %}
-                <div class="mt-2 flex items-center gap-1.5">
-                    <i class="fa fa-check-circle text-green-500 text-xs"></i>
-                    <span class="text-xs text-green-600 dark:text-green-400 font-medium">Auto-matched: {{ disc.matched_template_name }}</span>
-                </div>
-                {% endif %}
-            </div>
+{% if commissioning.device_candidates %}
+<div class="p-6 space-y-6">
+    {% if commissioning.ready_candidates %}
+    <section>
+        <div class="mb-3 flex items-center justify-between">
+            <h3 class="text-xs font-bold uppercase tracking-wide text-green-700 dark:text-green-300">Ready to provision</h3>
+            <span class="text-xs text-base-content/45">{{ commissioning.ready_candidates|length }} recommended</span>
         </div>
-    </div>
-    {% endfor %}
+        <div class="space-y-3">
+            {% for candidate in commissioning.ready_candidates %}
+            {% include "onboarding/partials/discovery_device_card.html" with candidate=candidate selected=True templates=templates %}
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if commissioning.needs_template_candidates %}
+    <section>
+        <div class="mb-3 flex items-center justify-between">
+            <h3 class="text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">Needs template</h3>
+            <span class="text-xs text-base-content/45">Choose before provisioning</span>
+        </div>
+        <div class="space-y-3">
+            {% for candidate in commissioning.needs_template_candidates %}
+            {% include "onboarding/partials/discovery_device_card.html" with candidate=candidate selected=False templates=templates %}
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if commissioning.registered_candidates %}
+    <section>
+        <div class="mb-3 flex items-center justify-between">
+            <h3 class="text-xs font-bold uppercase tracking-wide text-base-content/45">Already registered</h3>
+            <span class="text-xs text-base-content/45">Skipped automatically</span>
+        </div>
+        <div class="space-y-3">
+            {% for candidate in commissioning.registered_candidates %}
+            {% include "onboarding/partials/discovery_device_card.html" with candidate=candidate selected=False templates=templates disabled=True %}
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
 </div>
-
-<p class="mt-4 text-xs text-gray-400 dark:text-gray-500 text-center">
-    {{ discovered_devices|length }} device{{ discovered_devices|length|pluralize }} found
-</p>
-
 {% else %}
-<div class="py-16 text-center">
-    <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-        <i class="fa fa-search text-2xl text-gray-300 dark:text-gray-500"></i>
+<div class="py-16 text-center px-6">
+    <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-base-200 text-base-content/35">
+        <i class="fa fa-search text-2xl"></i>
     </div>
-    <p class="text-sm text-gray-500 dark:text-gray-400 font-medium mb-1">Scanning for devices...</p>
-    <p class="text-xs text-gray-400 dark:text-gray-500">Your gateway is performing an auto-scan. Devices will appear here as they are discovered.</p>
-    <div class="mt-4">
-        <span class="loading loading-dots loading-sm text-indigo-500"></span>
+    <p class="text-sm font-semibold text-base-content/60">Scanning for devices...</p>
+    <p class="mt-1 text-xs text-base-content/45">Devices will appear here as the gateway discovers Modbus or other configured interfaces.</p>
+    <div class="mt-5 flex justify-center gap-3">
+        <span class="loading loading-dots loading-sm text-primary"></span>
+        <a href="{% url 'web_team:onboarding:step_3_device' request.team.slug %}" class="text-xs font-bold text-primary">Add manually</a>
     </div>
 </div>
 {% endif %}

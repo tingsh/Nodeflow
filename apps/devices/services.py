@@ -303,3 +303,161 @@ def process_command_response(payload_str):
             logger.info(f"Command {command.transaction_id} updated to {command.status}")
     except Exception as e:
         logger.error(f"Error processing command response: {e}")
+
+
+COMMISSIONING_STAGES = [
+    ("site_created", "Site created"),
+    ("gateway_claimed", "Gateway claimed"),
+    ("gateway_connected", "Gateway connected"),
+    ("device_scan_running", "Device scan running"),
+    ("devices_discovered", "Devices discovered"),
+    ("templates_selected", "Templates selected"),
+    ("config_pushed", "Config pushed to gateway"),
+    ("first_telemetry_received", "First telemetry received"),
+    ("dashboard_ready", "Dashboard ready"),
+]
+
+
+def _session_value(session, key):
+    if not session:
+        return None
+    try:
+        return session.get(key)
+    except AttributeError:
+        return None
+
+
+def _gateway_from_context(team, gateway=None, session=None):
+    if gateway:
+        return gateway
+    gateway_id = _session_value(session, "onboarding_gateway_id")
+    if gateway_id:
+        return Gateway.objects.filter(id=gateway_id, team=team).select_related("site").first()
+    return Gateway.objects.filter(team=team).select_related("site").order_by("-created_at").first()
+
+
+def _site_from_context(team, gateway=None, session=None):
+    if gateway:
+        return gateway.site
+    site_id = _session_value(session, "onboarding_site_id")
+    if site_id:
+        return team.site_set.filter(id=site_id).first()
+    return team.site_set.order_by("created_at").first()
+
+
+def _commissioning_candidates(gateway):
+    if not gateway:
+        return []
+
+    from .models import DeviceTemplate
+
+    registered_ports = {
+        str(device.port): device.name
+        for device in gateway.devices.exclude(port__isnull=True).exclude(port="")
+    }
+    candidates = []
+    for index, discovery in enumerate((gateway.discovery_data or {}).get("devices", [])):
+        interface = str(discovery.get("interface") or discovery.get("port") or "")
+        matched_template = None
+        matched_template_id = discovery.get("matched_template_id")
+        if matched_template_id:
+            matched_template = DeviceTemplate.objects.filter(id=matched_template_id).first()
+        status = "ready" if matched_template else "needs_template"
+        if interface and interface in registered_ports:
+            status = "registered"
+        candidates.append({
+            "index": index,
+            "interface": interface,
+            "signature": discovery.get("signature") or "Unknown device",
+            "connection": discovery.get("connection") or "unknown",
+            "slave_id": discovery.get("slave_id"),
+            "baud_rate": discovery.get("baud_rate"),
+            "matched_template": matched_template,
+            "matched_template_name": discovery.get("matched_template_name") or (matched_template.name if matched_template else ""),
+            "status": status,
+            "recommended": status == "ready",
+            "raw": discovery,
+        })
+    return candidates
+
+
+def build_commissioning_context(team, gateway=None, session=None):
+    """Return a normalized, template-friendly commissioning state for onboarding and gateway pages."""
+    gateway = _gateway_from_context(team, gateway=gateway, session=session)
+    site = _site_from_context(team, gateway=gateway, session=session)
+    devices = list(gateway.devices.select_related("template", "site") if gateway else [])
+    candidates = _commissioning_candidates(gateway)
+    latest_config = gateway.config_history.first() if gateway else None
+    first_live_device = next((device for device in devices if device.last_telemetry_at), None)
+
+    completed = []
+    if site:
+        completed.append("site_created")
+    if gateway:
+        completed.append("gateway_claimed")
+    gateway_state = gateway.freshness if gateway else None
+    if gateway_state and gateway_state.status == "live":
+        completed.append("gateway_connected")
+    if gateway and (gateway.lifecycle_status == "commissioning" or devices or candidates):
+        completed.append("device_scan_running")
+    if devices or candidates:
+        completed.append("devices_discovered")
+    if devices or any(candidate["matched_template"] for candidate in candidates):
+        completed.append("templates_selected")
+    if latest_config:
+        completed.append("config_pushed")
+    if first_live_device:
+        completed.append("first_telemetry_received")
+        completed.append("dashboard_ready")
+
+    stage_keys = [stage[0] for stage in COMMISSIONING_STAGES]
+    current_stage = next((stage for stage in stage_keys if stage not in completed), "dashboard_ready")
+    blocking_stage = current_stage if current_stage != "dashboard_ready" else None
+
+    primary_actions = {
+        "site_created": "Create site",
+        "gateway_claimed": "Claim gateway",
+        "gateway_connected": "Power on gateway",
+        "device_scan_running": "Scan for devices",
+        "devices_discovered": "Wait for scan results",
+        "templates_selected": "Select templates",
+        "config_pushed": "Provision selected devices",
+        "first_telemetry_received": "Wait for first telemetry",
+        "dashboard_ready": "Open dashboard",
+    }
+    messages = {
+        "site_created": "Create the physical site where this gateway will be installed.",
+        "gateway_claimed": "Claim the gateway using the serial number and sticker claim code.",
+        "gateway_connected": "Gateway claimed. Power it on and connect it to the network.",
+        "device_scan_running": "Gateway is online. Start or wait for the device discovery scan.",
+        "devices_discovered": "Review discovered devices and pick the correct hardware templates.",
+        "templates_selected": "Templates are selected. Provision devices to push config to the gateway.",
+        "config_pushed": "Config has been sent. Waiting for the gateway to apply it.",
+        "first_telemetry_received": "Devices are configured. Waiting for the first live telemetry sample.",
+        "dashboard_ready": "Live data is flowing. The dashboard is ready.",
+    }
+
+    checklist = [
+        {"key": key, "label": label, "complete": key in completed, "current": key == current_stage}
+        for key, label in COMMISSIONING_STAGES
+    ]
+    return {
+        "current_stage": current_stage,
+        "completed_stages": completed,
+        "blocking_stage": blocking_stage,
+        "primary_action": {"label": primary_actions[current_stage], "stage": current_stage},
+        "status_message": messages[current_stage],
+        "checklist": checklist,
+        "site": site,
+        "gateway": gateway,
+        "gateway_state": gateway_state,
+        "device_candidates": candidates,
+        "ready_candidates": [candidate for candidate in candidates if candidate["status"] == "ready"],
+        "needs_template_candidates": [candidate for candidate in candidates if candidate["status"] == "needs_template"],
+        "registered_candidates": [candidate for candidate in candidates if candidate["status"] == "registered"],
+        "provisioned_devices": devices,
+        "latest_config_status": latest_config.status if latest_config else None,
+        "latest_config": latest_config,
+        "first_live_device": first_live_device,
+        "dashboard_ready": current_stage == "dashboard_ready",
+    }
