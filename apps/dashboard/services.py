@@ -1,12 +1,32 @@
 import datetime
 
 from django.conf import settings
-from django.db.models import Count
+from django.core.cache import cache
+from django.db.models import Count, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 
-from apps.users.models import CustomUser
 from apps.dashboard.models import Dashboard, Widget
+from apps.users.models import CustomUser
+
+ENERGY_KEYS = {"active_power", "energy", "voltage", "current", "power_factor", "frequency"}
+MOTOR_KEYS = {"run_status", "speed", "motor_speed", "output_frequency", "frequency_command", "fault", "fault_code"}
+PUMP_KEYS = {"pressure", "flow", "flow_rate", "pump_status", "pump_fault"}
+PLC_KEYS = {"plc_status", "alarm", "fault", "process_value", "setpoint", "input", "output"}
+COLD_CHAIN_KEYS = {"temperature", "humidity", "door_status", "door_open", "compressor_status"}
+PROCESS_TREND_KEYS = [
+    "active_power", "energy", "output_frequency", "frequency", "speed", "pressure", "flow_rate", "flow",
+    "temperature", "humidity", "current", "voltage",
+]
+WIDGET_TREND_KEYS = {"active_power", "energy", "output_frequency", "frequency_command"}
+UNIT_LIMITS = {
+    "V": {"min": 0, "max": 500},
+    "A": {"min": 0, "max": 100},
+    "degC": {"min": 0, "max": 120},
+    "bar": {"min": 0, "max": 16},
+    "%": {"min": 0, "max": 100},
+    "Hz": {"min": 0, "max": 60},
+}
 
 
 def get_user_signups(start: datetime.date | None = None, end: datetime.date | None = None, include_unconfirmed=None):
@@ -14,9 +34,7 @@ def get_user_signups(start: datetime.date | None = None, end: datetime.date | No
     if include_unconfirmed is None:
         include_unconfirmed = settings.ACCOUNT_EMAIL_VERIFICATION != "mandatory"
     if not include_unconfirmed:
-        extra_filter_kwargs = {
-            "emailaddress__verified": True,
-        }
+        extra_filter_kwargs = {"emailaddress__verified": True}
     end = end or timezone.now()
     start = start or end - datetime.timedelta(days=90)
     data = (
@@ -29,76 +47,155 @@ def get_user_signups(start: datetime.date | None = None, end: datetime.date | No
     return data
 
 
+def _register_items(device, include_writable_display=False):
+    if not device.template or not device.template.register_map:
+        return []
+    items = []
+    for key, config in device.template.register_map.items():
+        if not isinstance(config, dict):
+            continue
+        writable = bool(config.get("writable"))
+        role = config.get("dashboard_role", "control" if writable else "secondary")
+        if writable and not include_writable_display and not config.get("display") and role not in {"primary", "trend", "health", "secondary"}:
+            continue
+        items.append({
+            "key": key,
+            "label": config.get("label", key.replace("_", " ").title()),
+            "unit": config.get("unit", ""),
+            "type": config.get("type", "uint16"),
+            "priority": int(config.get("priority", 50)),
+            "dashboard_role": role,
+            "writable": writable,
+            "min": config.get("min"),
+            "max": config.get("max"),
+            "normal_min": config.get("normal_min"),
+            "normal_max": config.get("normal_max"),
+            "address": config.get("address", 0),
+            "functionCode": config.get("functionCode", 3),
+            "objectsCount": config.get("objectsCount", 1),
+            "control": config.get("control", "input"),
+            "labels": config.get("labels", ["OFF", "ON"]),
+            "config": config,
+        })
+    return sorted(items, key=lambda item: (item["priority"], item["label"]))
+
+
+def _latest_point(device, key=None):
+    from apps.telemetry.models import TelemetryData
+
+    qs = TelemetryData.objects.filter(device=device)
+    if key:
+        qs = qs.filter(key=key)
+    return qs.order_by("-timestamp").first()
+
+
+def _point_value(point):
+    if not point:
+        return None
+    if point.value_numeric is not None:
+        return point.value_numeric
+    if point.value_bool is not None:
+        return point.value_bool
+    return point.value_string
+
+
+def _format_value(value):
+    if value is None:
+        return "--"
+    if isinstance(value, bool):
+        return "ON" if value else "OFF"
+    if isinstance(value, float):
+        return f"{value:.1f}"
+    return str(value)
+
+
+def _recent_keys(device):
+    from apps.telemetry.models import TelemetryData
+
+    return set(
+        TelemetryData.objects.filter(device=device)
+        .order_by()
+        .values_list("key", flat=True)
+        .distinct()[:20]
+    )
+
+
+def _device_keys(device):
+    keys = {item["key"] for item in _register_items(device, include_writable_display=True)}
+    if not keys:
+        keys = _recent_keys(device)
+    return keys
+
+
+def classify_device(device):
+    keys = _device_keys(device)
+    device_type = device.device_type or "other"
+    category = getattr(device.template, "category", "") if device.template else ""
+    if device_type == "vfd" or keys & MOTOR_KEYS:
+        return {"type": "motor", "label": "Motor / VFD", "keys": keys}
+    if keys & PUMP_KEYS:
+        return {"type": "pump", "label": "Pump", "keys": keys}
+    if device_type == "plc" or keys & PLC_KEYS:
+        return {"type": "plc", "label": "PLC", "keys": keys}
+    if device_type in {"temp_sensor", "chiller"} or category == "cold_chain" or keys & COLD_CHAIN_KEYS:
+        return {"type": "temperature", "label": "Temperature", "keys": keys}
+    if device_type in {"power_meter", "solar_inverter"} or category == "energy" or keys & ENERGY_KEYS:
+        return {"type": "energy", "label": "Energy", "keys": keys}
+    return {"type": "generic", "label": "General", "keys": keys}
+
+
+def _widget_definition(device, key, config):
+    label = config.get("label", key.replace("_", " ").title())
+    unit = config.get("unit", "")
+    reg_type = str(config.get("type", "uint16")).lower()
+    role = config.get("dashboard_role", "")
+    key_lower = key.lower()
+    width = 3
+    height = 3
+    widget_config = {}
+
+    if role == "trend" or key_lower in WIDGET_TREND_KEYS:
+        widget_type = "timeseries"
+        width = 6
+        height = 4
+    elif reg_type in {"bool", "bits"} or "status" in key_lower or "alarm" in key_lower or "fault" in key_lower:
+        widget_type = "indicator"
+    elif unit in UNIT_LIMITS or unit == "°C" or any(token in key_lower for token in ["voltage", "current", "temperature", "pressure", "flow", "speed", "frequency"]):
+        widget_type = "gauge"
+    else:
+        widget_type = "value"
+
+    if role == "primary" and widget_type == "value":
+        width = 4
+    if widget_type == "gauge":
+        default_limits = UNIT_LIMITS.get(unit, UNIT_LIMITS.get("degC") if unit == "°C" else {"min": 0, "max": 100})
+        widget_config = {"min": config.get("min", default_limits["min"]), "max": config.get("max", default_limits["max"])}
+        if config.get("normal_min") is not None:
+            widget_config["normal_min"] = config["normal_min"]
+        if config.get("normal_max") is not None:
+            widget_config["normal_max"] = config["normal_max"]
+
+    return label, unit, widget_type, width, height, widget_config
+
+
 def generate_default_dashboard(device):
-    """
-    Auto-generates a default Dashboard and Widget set for a provisioned Device
-    based on its DeviceTemplate register map.
-    """
+    """Generate a default dashboard from DeviceTemplate register-map hints."""
     if not device.template or not device.template.register_map:
         return None
 
-    # Check if a default dashboard for this device already exists
     dashboard, created = Dashboard.objects.get_or_create(
         team=device.team,
         device=device,
-        defaults={
-            "name": f"{device.name} Overview",
-            "site": device.site,
-            "is_default": True,
-        }
+        defaults={"name": f"{device.name} Overview", "site": device.site, "is_default": True},
     )
-
     if not created:
-        # If it already exists, clear existing widgets to regenerate
         dashboard.widgets.all().delete()
 
-    register_map = device.template.register_map
     row_idx = 0
     col_idx = 0
-
-    for key, config in register_map.items():
-        if not isinstance(config, dict):
-            continue
-
-        label = config.get("label", key.replace("_", " ").title())
-        unit = config.get("unit", "")
-        reg_type = config.get("type", "uint16")
-        writable = config.get("writable", False)
-
-        # Decide widget type
-        if key in ["energy", "active_power", "output_frequency", "frequency_command"]:
-            widget_type = "timeseries"
-            width = 6
-            height = 4
-        elif reg_type == "bool":
-            widget_type = "indicator"
-            width = 3
-            height = 3
-        elif unit in ["V", "A", "°C", "bar", "m³/h", "%"] or key in ["voltage", "current", "temperature", "pressure", "flow_rate"]:
-            widget_type = "gauge"
-            width = 3
-            height = 3
-        else:
-            widget_type = "value"
-            width = 3
-            height = 3
-
-        # Add min/max configs for gauge
-        widget_config = {}
-        if widget_type == "gauge":
-            if unit == "V":
-                widget_config = {"min": 0, "max": 500}
-            elif unit == "A":
-                widget_config = {"min": 0, "max": 100}
-            elif unit == "°C":
-                widget_config = {"min": 0, "max": 120}
-            elif unit == "bar":
-                widget_config = {"min": 0, "max": 16}
-            elif unit == "%":
-                widget_config = {"min": 0, "max": 100}
-            else:
-                widget_config = {"min": config.get("min", 0), "max": config.get("max", 100)}
-
+    for item in _register_items(device):
+        key = item["key"]
+        label, unit, widget_type, width, height, widget_config = _widget_definition(device, key, item["config"])
         Widget.objects.create(
             team=device.team,
             dashboard=dashboard,
@@ -111,13 +208,209 @@ def generate_default_dashboard(device):
             col=col_idx,
             width=width,
             height=height,
-            config=widget_config
+            config=widget_config,
         )
-
         col_idx += width
         if col_idx >= 12:
             col_idx = 0
             row_idx += 1
-
     return dashboard
 
+
+def _latest_readings_for_device(device, limit=4):
+    items = _register_items(device)[:limit]
+    readings = []
+    if items:
+        for item in items:
+            point = _latest_point(device, item["key"])
+            value = _point_value(point)
+            readings.append({
+                "key": item["key"],
+                "label": item["label"],
+                "unit": item["unit"],
+                "value": value,
+                "display_value": _format_value(value),
+                "timestamp": point.timestamp if point else None,
+            })
+        return readings
+
+    point = _latest_point(device)
+    if point:
+        value = _point_value(point)
+        readings.append({
+            "key": point.key,
+            "label": point.key.replace("_", " ").title(),
+            "unit": "",
+            "value": value,
+            "display_value": _format_value(value),
+            "timestamp": point.timestamp,
+        })
+    return readings
+
+
+def _trend_candidates(devices):
+    candidates = []
+    for device in devices:
+        classification = classify_device(device)
+        items = _register_items(device)
+        if items:
+            for item in items:
+                if item["key"] in PROCESS_TREND_KEYS or item["dashboard_role"] == "trend":
+                    candidates.append((device, item, classification))
+        else:
+            for key in _recent_keys(device):
+                if key in PROCESS_TREND_KEYS:
+                    candidates.append((device, {"key": key, "label": key.replace("_", " ").title(), "unit": ""}, classification))
+    priority = {key: idx for idx, key in enumerate(PROCESS_TREND_KEYS)}
+    candidates.sort(key=lambda row: priority.get(row[1]["key"], 99))
+    return candidates
+
+
+def _build_operations_trend(team, devices):
+    from apps.telemetry.models import TelemetryData
+
+    cache_key = f"dashboard_{team.id}_operations_trend"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    now = timezone.now()
+    start = now - datetime.timedelta(hours=24)
+    selected = None
+    for device, item, classification in _trend_candidates(devices):
+        if TelemetryData.objects.filter(device=device, key=item["key"], timestamp__gte=start).exists():
+            selected = (device, item, classification)
+            break
+
+    if not selected:
+        trend = {"title": "Recent Telemetry Activity", "subtitle": "No numeric trend is available yet.", "key": "", "unit": "", "labels": [], "values": [], "empty": True}
+        cache.set(cache_key, trend, 60)
+        return trend
+
+    _device, item, classification = selected
+    labels = []
+    values = []
+    for i in range(23, -1, -1):
+        hour_start = now - datetime.timedelta(hours=i + 1)
+        hour_end = now - datetime.timedelta(hours=i)
+        value = (
+            TelemetryData.objects.filter(device__team=team, key=item["key"], timestamp__gte=hour_start, timestamp__lt=hour_end)
+            .aggregate(Sum("value_numeric"))["value_numeric__sum"]
+            or 0
+        )
+        labels.append(hour_end.strftime("%H:%M"))
+        values.append(round(float(value), 2))
+
+    trend = {"title": "Operations Trend", "subtitle": f"{item['label']} across {classification['label']} assets", "key": item["key"], "unit": item.get("unit", ""), "labels": labels, "values": values, "empty": False}
+    cache.set(cache_key, trend, 60)
+    return trend
+
+
+def _build_attention_items(devices, gateways, active_alerts, open_tickets, overdue_pms):
+    items = []
+    for device in devices:
+        state = device.freshness
+        gateway_state = device.gateway.freshness if device.gateway else None
+        if state.status == "alarm":
+            items.append({"tone": "red", "title": device.name, "message": state.display, "kind": "Device alarm", "device": device})
+        elif state.status == "offline" and gateway_state and gateway_state.status == "live":
+            items.append({"tone": "amber", "title": device.name, "message": "Gateway online - device offline", "kind": "Field device", "device": device})
+    for gateway in gateways:
+        state = gateway.freshness
+        if state.status == "offline":
+            items.append({"tone": "gray", "title": gateway.name, "message": state.display, "kind": "Gateway", "gateway": gateway})
+    for alert in active_alerts[:5]:
+        items.append({"tone": "red", "title": alert.rule.name, "message": f"{alert.device.name} triggered {alert.trigger_value:g}", "kind": "Alert", "alert": alert, "device": alert.device})
+    if overdue_pms:
+        items.append({"tone": "amber", "title": "Preventive maintenance overdue", "message": f"{overdue_pms} schedule needs attention", "kind": "Maintenance"})
+    if open_tickets:
+        items.append({"tone": "blue", "title": "Open maintenance work", "message": f"{open_tickets} ticket(s) in progress", "kind": "Maintenance"})
+    return items[:8]
+
+
+def build_team_operations_dashboard(team):
+    from apps.alerts.models import Alert
+    from apps.automations.models import Automation
+    from apps.devices.models import Device, Gateway, Site
+    from apps.events.models import ActivityLog
+    from apps.maintenance.models import MaintenanceTicket, PreventiveSchedule
+
+    sites = list(Site.objects.filter(team=team).order_by("name"))
+    devices = list(Device.objects.filter(team=team).select_related("site", "gateway", "template").order_by("-last_telemetry_at", "name"))
+    gateways = list(Gateway.objects.filter(team=team).select_related("site"))
+
+    device_health = {"live": 0, "delayed": 0, "offline": 0, "alarm": 0}
+    for device in devices:
+        device_health[device.freshness.status] = device_health.get(device.freshness.status, 0) + 1
+    gateway_health = {"live": 0, "offline": 0, "maintenance": 0}
+    for gateway in gateways:
+        gateway_health[gateway.freshness.status] = gateway_health.get(gateway.freshness.status, 0) + 1
+
+    active_alerts_qs = Alert.objects.filter(device__team=team, status="active").select_related("device", "rule").order_by("-triggered_at")
+    active_alerts_count = active_alerts_qs.count()
+    active_alerts = list(active_alerts_qs[:10])
+    recent_alerts = list(Alert.objects.filter(device__team=team).select_related("device", "rule").order_by("-triggered_at")[:5])
+    open_tickets = MaintenanceTicket.objects.filter(team=team, status__in=["open", "in_progress", "waiting"]).count()
+    overdue_pms = PreventiveSchedule.objects.filter(team=team, is_active=True, next_due_at__lt=timezone.now()).count()
+    active_automations = Automation.objects.filter(team=team, is_active=True).count()
+    total_automations = Automation.objects.filter(team=team).count()
+
+    classifications = {}
+    metric_groups = {}
+    for device in devices:
+        classification = classify_device(device)
+        classifications[device.id] = classification
+        metric_groups.setdefault(classification["type"], {"label": classification["label"], "count": 0})["count"] += 1
+
+    top_devices = []
+    for device in devices[:8]:
+        readings = _latest_readings_for_device(device, limit=2)
+        top_devices.append({
+            "device": device,
+            "classification": classifications[device.id],
+            "freshness": device.freshness,
+            "gateway_context": device.gateway_context_display,
+            "latest_reading": readings[0] if readings else None,
+        })
+
+    return {
+        "sites": sites,
+        "sites_count": len(sites),
+        "gateways_count": len(gateways),
+        "devices_count": len(devices),
+        "device_health": device_health,
+        "gateway_health": gateway_health,
+        "devices_live": device_health.get("live", 0),
+        "devices_attention": device_health.get("delayed", 0) + device_health.get("offline", 0) + device_health.get("alarm", 0),
+        "gateways_online": gateway_health.get("live", 0),
+        "gateways_offline": gateway_health.get("offline", 0),
+        "active_alerts_count": active_alerts_count,
+        "open_tickets": open_tickets,
+        "overdue_pms": overdue_pms,
+        "active_automations": active_automations,
+        "total_automations": total_automations,
+        "metric_groups": list(metric_groups.values()),
+        "has_energy_widgets": "energy" in metric_groups,
+        "operations_trend": _build_operations_trend(team, devices),
+        "recent_alerts": recent_alerts,
+        "top_devices": top_devices,
+        "attention_items": _build_attention_items(devices, gateways, active_alerts, open_tickets, overdue_pms),
+        "logs": ActivityLog.objects.filter(team=team).order_by("-timestamp")[:15],
+    }
+
+
+def build_device_dashboard_context(device):
+    dashboard = Dashboard.objects.filter(device=device, is_default=True).first()
+    widgets = dashboard.widgets.all() if dashboard else []
+    registers = _register_items(device, include_writable_display=True)
+    readable_registers = [item for item in registers if not item["writable"]]
+    writable_registers = [item for item in registers if item["writable"]]
+    return {
+        "classification": classify_device(device),
+        "latest_readings": _latest_readings_for_device(device, limit=4),
+        "dashboard": dashboard,
+        "widgets": widgets,
+        "readable_registers": readable_registers,
+        "writable_registers": writable_registers,
+        "has_template": bool(device.template and device.template.register_map),
+    }

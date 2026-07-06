@@ -472,67 +472,24 @@ class DeviceDetailView(PermissionRequiredMixin, DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        from apps.dashboard.services import build_device_dashboard_context
+        from apps.subscriptions.enforcement import get_latency_limit_for_team
         from apps.telemetry.anomaly import get_ai_insights
 
+        dashboard_context = build_device_dashboard_context(self.object)
+        context.update(dashboard_context)
         context["ai_insights"] = get_ai_insights(self.object)
         context["recent_commands"] = self.object.commands.all().order_by("-requested_at")[:10]
-
-        from apps.subscriptions.enforcement import get_latency_limit_for_team
 
         latency_limit_seconds = get_latency_limit_for_team(self.object.team)
         context["telemetry_fallback_interval_ms"] = int(max(5.0, latency_limit_seconds) * 1000)
 
-        # Build structured register data from template
-        readable_registers = []
-        writable_registers = []
-        writable_keys = []  # backward compat for old toggle/slider controls
-        has_template = bool(self.object.template and self.object.template.register_map)
+        # Backward compatibility for existing control JavaScript/template code.
+        context["writable_keys"] = [
+            {"key": reg["key"], "label": reg["label"], "type": reg["config"].get("control", "toggle")}
+            for reg in context["writable_registers"]
+        ]
 
-        if has_template:
-            for key, config in self.object.template.register_map.items():
-                if not isinstance(config, dict):
-                    continue
-                reg = {
-                    "key": key,
-                    "label": config.get("label", key.replace("_", " ").title()),
-                    "address": config.get("address", 0),
-                    "functionCode": config.get("functionCode", 3),
-                    "type": config.get("type", "uint16"),
-                    "unit": config.get("unit", ""),
-                    "objectsCount": config.get("objectsCount", 1),
-                }
-                if config.get("writable"):
-                    reg.update({
-                        "control": config.get("control", "input"),
-                        "min": config.get("min", 0),
-                        "max": config.get("max", 65535),
-                        "labels": config.get("labels", ["OFF", "ON"]),
-                    })
-                    writable_registers.append(reg)
-                    # backward compat
-                    writable_keys.append({
-                        "key": key,
-                        "label": reg["label"],
-                        "type": config.get("control", "toggle"),
-                    })
-                else:
-                    readable_registers.append(reg)
-
-        context["readable_registers"] = readable_registers
-        context["writable_registers"] = writable_registers
-        context["writable_keys"] = writable_keys
-        context["has_template"] = has_template
-
-        # Get auto-generated dashboard and widgets
-        from apps.dashboard.models import Dashboard
-        dashboard = Dashboard.objects.filter(device=self.object, is_default=True).first()
-        context["dashboard"] = dashboard
-        if dashboard:
-            context["widgets"] = dashboard.widgets.all()
-        else:
-            context["widgets"] = []
-
-        # RPC endpoint URL (needs gateway_pk and device_pk)
         if self.object.gateway_id:
             context["rpc_url"] = reverse_lazy(
                 "web_team:devices:device_rpc_command",
@@ -997,4 +954,3 @@ def gateway_ota_update(request, team_slug, pk):
         f'</div>'
         f'</div>'
     )
-

@@ -231,7 +231,7 @@ class GatewayFreshnessTest(TestCase):
             last_telemetry_at=timezone.now() - timezone.timedelta(minutes=5),
         )
 
-        self.assertEqual(device.gateway_context_display, 'Gateway online · device offline')
+        self.assertEqual(device.gateway_context_display, 'Gateway online - device offline')
 
     def test_gateway_recent_heartbeat_resolves_live(self):
         from django.test import override_settings
