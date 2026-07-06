@@ -65,6 +65,9 @@ def _publish_dynsec_command(command):
     client = _get_dynsec_client()
     payload = json.dumps({"commands": [command]})
     result = client.publish(DYNSEC_TOPIC, payload, qos=1)
+    result.wait_for_publish(timeout=5)
+    if result.rc != mqtt.MQTT_ERR_SUCCESS:
+        raise RuntimeError(f"Dynsec command {command.get('command')} failed to publish (rc={result.rc})")
     logger.debug("Dynsec command published (rc=%s): %s", result.rc, command.get("command"))
     return result
 

@@ -3,6 +3,7 @@ import json
 import logging
 
 from django.db import transaction
+from django.contrib.auth.hashers import make_password
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse_lazy
@@ -248,19 +249,12 @@ class GatewayDeleteView(PermissionRequiredMixin, DeleteView):
 
         success_url = self.get_success_url()
 
-        with transaction.atomic():
-            inventory = GatewayInventory.objects.select_for_update().filter(gateway=self.object).first()
-            if inventory:
-                inventory.status = "unclaimed"
-                inventory.gateway = None
-                inventory.claimed_by_team = None
-                inventory.claimed_at = None
-                inventory.save(update_fields=["status", "gateway", "claimed_by_team", "claimed_at"])
+        # Release for self-serve onboarding redo. The Gateway row is preserved so
+        # the same serial number + printed claim code can be used again.
+        self._deprovision_mqtt_credentials()
+        from .services import release_gateway_for_redo
 
-            # Deprovision MQTT credentials from Mosquitto before deleting the gateway.
-            # The gateway is still released if broker cleanup fails, matching the prior delete behavior.
-            self._deprovision_mqtt_credentials()
-            self.object.delete()
+        release_gateway_for_redo(self.object)
 
         return HttpResponseRedirect(success_url)
 
@@ -304,8 +298,9 @@ def gateway_rotate_password(request, team_slug, pk):
     publish_credential_rotation(gateway, new_password)
 
     # 3. Update Cloud DB
-    gateway.mqtt_password = new_password
-    gateway.save(update_fields=["mqtt_password"])
+    gateway.mqtt_password = make_password(new_password)
+    gateway.credential_rotation_status = "pending"
+    gateway.save(update_fields=["mqtt_password", "credential_rotation_status"])
 
     logger.info("Password rotated for gateway %s", gateway.serial_number)
 
@@ -802,6 +797,9 @@ def gateway_discovery_api(request, team_slug):
         discovered = data.get("discovered_devices", [])
 
         gateway = Gateway.objects.get(serial_number=serial)
+        from .discovery_matching import enrich_discovered_device
+
+        discovered = [enrich_discovered_device(device) for device in discovered]
 
         # Store for the UI to display
         gateway.discovery_data = {"last_discovered_at": str(timezone.now()), "devices": discovered}
@@ -965,9 +963,26 @@ def gateway_ota_update(request, team_slug, pk):
         return HttpResponse("Firmware release not found.", status=404)
 
     url = request.build_absolute_uri(release.file.url)
+    sha256 = release.sha256
+    if not sha256 and release.file:
+        import hashlib
+
+        h = hashlib.sha256()
+        release.file.open("rb")
+        try:
+            for chunk in iter(lambda: release.file.read(1024 * 1024), b""):
+                h.update(chunk)
+        finally:
+            release.file.close()
+        sha256 = h.hexdigest()
+        release.sha256 = sha256
+        release.size_bytes = release.file.size
+        release.save(update_fields=["sha256", "size_bytes"])
+
     params = {
         "version": release.version,
         "url": url,
+        "sha256": sha256,
         "token": "novena_internal_token_mock",
     }
 

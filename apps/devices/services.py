@@ -6,6 +6,7 @@ import secrets
 import uuid
 
 from django.conf import settings
+from django.contrib.auth.hashers import make_password
 from django.db import transaction
 from django.utils import timezone
 
@@ -59,15 +60,26 @@ def validate_gateway_claim(serial_number: str, claim_code: str):
     return inventory
 
 
+def generate_operational_mqtt_password() -> str:
+    """Create the random credential the gateway uses after claim activation."""
+    return secrets.token_urlsafe(32)
+
+
 @transaction.atomic
 def claim_gateway_for_team(team, site, name: str, serial_number: str, claim_code: str):
     """Bind a manufactured gateway to a customer team/site after sticker validation."""
     serial_number = normalize_gateway_serial(serial_number)
     inventory = validate_gateway_claim(serial_number, claim_code)
-    mqtt_password = claim_code.strip().upper()
+    operational_password = generate_operational_mqtt_password()
 
     existing_gateway = Gateway.objects.select_for_update().filter(serial_number=serial_number).first()
-    if existing_gateway and existing_gateway.team != team:
+    existing_can_transfer = (
+        existing_gateway
+        and inventory
+        and inventory.status in ("unclaimed", "released")
+        and existing_gateway.lifecycle_status == "release_pending"
+    )
+    if existing_gateway and existing_gateway.team != team and not existing_can_transfer:
         raise GatewayClaimError(
             "This serial number is already registered to another team. Please contact support if this is an error."
         )
@@ -81,15 +93,23 @@ def claim_gateway_for_team(team, site, name: str, serial_number: str, claim_code
 
     if existing_gateway:
         gateway = existing_gateway
+        gateway.team = team
         gateway.site = site
         gateway.name = name
         gateway.mqtt_username = serial_number
-        gateway.mqtt_password = mqtt_password
+        gateway.mqtt_password = make_password(operational_password)
+        gateway.mqtt_provisioning_status = "pending"
+        gateway.mqtt_provisioning_error = ""
+        gateway.credential_rotation_status = "pending"
         if gateway.status == "online":
-            gateway.lifecycle_status = "online"
+            gateway.lifecycle_status = "activating"
         elif gateway.lifecycle_status not in ("commissioning", "active"):
             gateway.lifecycle_status = "claimed"
-        gateway.save(update_fields=["site", "name", "mqtt_username", "mqtt_password", "lifecycle_status"])
+        gateway.save(update_fields=[
+            "team", "site", "name", "mqtt_username", "mqtt_password",
+            "mqtt_provisioning_status", "mqtt_provisioning_error",
+            "credential_rotation_status", "lifecycle_status",
+        ])
     else:
         gateway = Gateway.objects.create(
             team=team,
@@ -98,7 +118,9 @@ def claim_gateway_for_team(team, site, name: str, serial_number: str, claim_code
             serial_number=serial_number,
             access_token=secrets.token_hex(20),
             mqtt_username=serial_number,
-            mqtt_password=mqtt_password,
+            mqtt_password=make_password(operational_password),
+            mqtt_provisioning_status="pending",
+            credential_rotation_status="pending",
             lifecycle_status="claimed",
         )
 
@@ -113,14 +135,69 @@ def claim_gateway_for_team(team, site, name: str, serial_number: str, claim_code
     try:
         from .mqtt_provisioning import provision_gateway_mqtt
 
-        provision_gateway_mqtt(gateway, mqtt_password)
+        provision_gateway_mqtt(gateway, operational_password)
+        gateway.mqtt_provisioning_status = "success"
+        gateway.mqtt_provisioning_error = ""
+        gateway.mqtt_provisioned_at = timezone.now()
+        gateway.save(update_fields=["mqtt_provisioning_status", "mqtt_provisioning_error", "mqtt_provisioned_at"])
+        try:
+            from apps.telemetry.mqtt_publisher import publish_gateway_activation
+
+            publish_gateway_activation(gateway, operational_password)
+        except Exception as e:
+            logger.info("Gateway activation publish deferred for %s: %s", gateway.serial_number, e)
     except Exception as e:
+        gateway.mqtt_provisioning_status = "failed"
+        gateway.mqtt_provisioning_error = str(e)
+        gateway.save(update_fields=["mqtt_provisioning_status", "mqtt_provisioning_error"])
         logger.warning(
             "Mosquitto provisioning failed for gateway %s: %s (gateway saved, manual setup may be required)",
             gateway.serial_number,
             e,
         )
+        if getattr(settings, "MQTT_PROVISIONING_REQUIRED", False):
+            raise GatewayClaimError(
+                "Gateway ownership verified, but MQTT access could not be provisioned. Please retry."
+            ) from e
 
+    return gateway
+
+
+@transaction.atomic
+def release_gateway_for_redo(gateway):
+    """
+    Release a gateway for customer self-serve onboarding redo.
+
+    The Gateway row is kept so the physical device can fall back to bootstrap mode
+    and be re-claimed with the same serial number + printed claim code.
+    """
+    gateway = Gateway.objects.select_for_update().get(pk=gateway.pk)
+    gateway.devices.all().delete()
+    gateway.config_history.all().delete()
+    gateway.rpc_commands.all().delete()
+
+    inventory = GatewayInventory.objects.select_for_update().filter(gateway=gateway).first()
+    if inventory:
+        inventory.status = "released"
+        inventory.claimed_by_team = None
+        inventory.claimed_at = None
+        inventory.save(update_fields=["status", "claimed_by_team", "claimed_at"])
+
+    gateway.status = "offline"
+    gateway.lifecycle_status = "release_pending"
+    gateway.discovery_data = {}
+    gateway.config = {}
+    gateway.connected_devices = []
+    gateway.active_connectors = []
+    gateway.mqtt_provisioning_status = "not_started"
+    gateway.mqtt_provisioning_error = ""
+    gateway.credential_rotation_status = "not_started"
+    gateway.last_seen = None
+    gateway.save(update_fields=[
+        "status", "lifecycle_status", "discovery_data", "config",
+        "connected_devices", "active_connectors", "mqtt_provisioning_status",
+        "mqtt_provisioning_error", "credential_rotation_status", "last_seen",
+    ])
     return gateway
 
 
