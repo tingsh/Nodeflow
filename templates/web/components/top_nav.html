@@ -42,10 +42,12 @@
                class="absolute left-0 mt-0 pt-4 w-48">
             <div class="bg-base-100 rounded-2xl shadow-2xl border border-base-content/5 overflow-hidden p-2">
               {% slugurl 'blog' as blog_url %}
+              {% if blog_url %}
               <a href="{{ blog_url }}" class="flex items-center p-3 rounded-xl hover:bg-base-200 transition-colors">
                 <i class="fa fa-newspaper text-indigo-500 mr-3 w-4"></i>
                 <span class="text-xs font-bold">Blog</span>
               </a>
+              {% endif %}
               <a href="/content/docs/" class="flex items-center p-3 rounded-xl hover:bg-base-200 transition-colors">
                 <i class="fa fa-book text-indigo-500 mr-3 w-4"></i>
                 <span class="text-xs font-bold">Documentation</span>
@@ -199,7 +201,9 @@
       <a href="/solutions/" class="block text-lg font-bold text-base-content/80 hover:text-indigo-500">Solutions</a>
       <a href="/pricing/" class="block text-lg font-bold text-base-content/80 hover:text-indigo-500">Pricing</a>
       {% slugurl 'blog' as blog_url %}
+      {% if blog_url %}
       <a href="{{ blog_url }}" class="block text-lg font-bold text-base-content/80 hover:text-indigo-500">Blog</a>
+      {% endif %}
       {% endblock %}
       <div class="pt-6 border-t border-base-content/10">
         {% if not user.is_authenticated %}

@@ -256,12 +256,21 @@ def export_telemetry_csv(request, team_slug, device_id):
     response["Content-Disposition"] = f'attachment; filename="{device.name}_telemetry.csv"'
 
     writer = csv.writer(response)
-    writer.writerow(["Timestamp", "Key", "Value"])
+    writer.writerow(["Timestamp", "Metric", "Key", "Value", "Unit"])
+    columns, _ = _device_telemetry_columns(device)
+    metric_meta = {
+        column["key"]: {
+            "label": column.get("label") or column["key"].replace("_", " ").title(),
+            "unit": column.get("unit", ""),
+        }
+        for column in columns
+    }
 
     cutoff = timezone.now() - timezone.timedelta(days=days)
     qs = TelemetryData.objects.filter(device=device, timestamp__gte=cutoff).order_by("-timestamp")
     for point in qs[:5000]:  # Limit export for safety
         val = point.value_numeric if point.value_numeric is not None else (point.value_string or point.value_bool)
-        writer.writerow([point.timestamp, point.key, val])
+        meta = metric_meta.get(point.key, {"label": point.key.replace("_", " ").title(), "unit": ""})
+        writer.writerow([point.timestamp, meta["label"], point.key, val, meta["unit"]])
 
     return response

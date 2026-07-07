@@ -222,6 +222,44 @@ def test_alert_auto_resolution():
 
 
 @pytest.mark.django_db
+def test_device_specific_alert_rule_does_not_trigger_for_other_device_at_same_site():
+    team = Team.objects.create(name="Test Team", slug="test-team")
+    site = Site.objects.create(team=team, name="Test Site")
+    power_meter = Device.objects.create(
+        team=team,
+        site=site,
+        name="Power Meter",
+        device_type="power_meter",
+        protocol="modbus_tcp",
+        status="online",
+    )
+    chiller = Device.objects.create(
+        team=team,
+        site=site,
+        name="Chiller",
+        device_type="chiller",
+        protocol="modbus_tcp",
+        status="online",
+    )
+    rule = AlertRule.objects.create(
+        team=team,
+        name="Power Meter Spike",
+        device=power_meter,
+        site=site,
+        telemetry_key="active_power",
+        condition="gt",
+        threshold=1200.0,
+        is_active=True,
+        notify_email=False,
+        notify_whatsapp=False,
+    )
+
+    check_alerts_for_payload(chiller, "active_power", 1500.0)
+
+    assert Alert.objects.filter(rule=rule).count() == 0
+
+
+@pytest.mark.django_db
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_cooldown_hardening():
     team = Team.objects.create(name="Test Team", slug="test-team")
@@ -410,5 +448,3 @@ def test_manual_escalate_alert_permission_denied():
     response = client.post(url)
     assert response.status_code == 403
     assert alert.ticket is None
-
-

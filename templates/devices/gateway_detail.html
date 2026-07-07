@@ -48,7 +48,7 @@
                 <i class="fa fa-scroll mr-1.5"></i> Logs
             </a>
             <a href="{% url 'web_team:devices:gateway_rpc_history' request.team.slug gateway.pk %}" class="btn btn-ghost btn-sm rounded-xl text-sm font-bold">
-                <i class="fa fa-history mr-1.5"></i> RPC History
+                <i class="fa fa-history mr-1.5"></i> Command History
             </a>
             <a href="{% url 'web_team:devices:gateway_edit' request.team.slug gateway.pk %}" class="btn btn-ghost btn-sm rounded-xl text-sm font-bold">
                 <i class="fa fa-edit mr-1.5"></i> Edit
@@ -193,7 +193,7 @@
                         </div>
                         <div>
                             <h3 class="font-bold text-gray-900 dark:text-white leading-none">Remote Commands</h3>
-                            <p class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mt-1">RPC to Edge Gateway</p>
+                            <p class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mt-1">Send a command to this gateway</p>
                         </div>
                     </div>
                 </div>
@@ -217,7 +217,7 @@
                             body: 'method=scan_devices&params={}'
                         }).then(r => r.json()).then(d => { rpcResult = d; loading = false; }).catch(() => { loading = false; })
                     " class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition text-sm font-bold text-gray-700 dark:text-gray-300">
-                        <span><i class="fa fa-search mr-2 text-emerald-500"></i> Trigger Port Scan</span>
+                        <span><i class="fa fa-search mr-2 text-emerald-500"></i> Scan Ports for Devices</span>
                         <i class="fa fa-play text-xs text-gray-400"></i>
                     </button>
                     <button @click="

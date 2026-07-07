@@ -16,7 +16,7 @@ ONBOARDING_STEPS = [
 @require_permission("manage_devices")
 def onboarding_start(request, team_slug):
     if Site.objects.filter(team=request.team).exists():
-        return redirect("web_team:home", team_slug=team_slug)
+        return redirect("web_team:onboarding:setup_start", team_slug=team_slug)
     return render(request, "onboarding/welcome.html")
 
 
