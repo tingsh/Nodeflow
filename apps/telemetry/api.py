@@ -119,15 +119,29 @@ def export_telemetry_csv(request, team_slug, device_id):
         days = plan_days
 
     start_time = timezone.now() - timedelta(days=days)
-    queryset = (
-        TelemetryData.objects.filter(device=device, timestamp__gte=start_time)
-        .order_by("-timestamp")
-        .values_list("timestamp", "key", "value_numeric", "value_text")
-    )
+    queryset = TelemetryData.objects.filter(device=device, timestamp__gte=start_time).order_by("-timestamp")
+
+    metric_meta = {}
+    if device.template and device.template.register_map:
+        for key, config in device.template.register_map.items():
+            if not isinstance(config, dict) or config.get("writable"):
+                continue
+            metric_meta[key] = {
+                "label": config.get("label") or key.replace("_", " ").title(),
+                "unit": config.get("unit", ""),
+            }
 
     def row_generator():
-        yield ["Timestamp", "Metric Key", "Numeric Value", "Text Value"]
-        yield from queryset.iterator()
+        yield ["Timestamp", "Metric", "Key", "Value", "Unit"]
+        for point in queryset.iterator(chunk_size=1000):
+            meta = metric_meta.get(point.key, {"label": point.key.replace("_", " ").title(), "unit": ""})
+            if point.value_numeric is not None:
+                value = point.value_numeric
+            elif point.value_bool is not None:
+                value = point.value_bool
+            else:
+                value = point.value_string
+            yield [point.timestamp, meta["label"], point.key, value, meta["unit"]]
 
     pseudo_buffer = Echo()
     writer = csv.writer(pseudo_buffer)

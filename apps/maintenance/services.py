@@ -28,7 +28,7 @@ def auto_create_ticket(alert, force=False):
     title = f"[{rule.get_severity_display().upper()}] {rule.name} on {alert.device.name}"
     description = (
         f"Automated ticket generated from alert on {alert.device.name}.\n"
-        f"Telemetry Key: {rule.telemetry_key}\n"
+        f"Measurement: {rule.telemetry_key.replace('_', ' ').title()}\n"
         f"Triggered Value: {alert.trigger_value} (Threshold: {rule.condition} {rule.threshold})"
     )
 
@@ -377,4 +377,3 @@ def advance_schedule_due_date(schedule):
         schedule.next_due_at = now + timedelta(days=1)
 
     schedule.save(update_fields=["next_due_at"])
-

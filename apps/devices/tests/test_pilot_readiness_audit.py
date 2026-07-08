@@ -1,17 +1,16 @@
 import csv
 import io
 
+import pytest
 from django.core.management import call_command
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 
-import pytest
-
 from apps.alerts.models import Alert
 from apps.devices.management.commands.pilot_readiness_audit import AUDIT_USER_EMAIL, SCENARIOS
 from apps.devices.models import Device, Gateway, GatewayInventory, Site
-from apps.maintenance.models import MaintenanceTicket, PreventiveSchedule, SharedTicketLink
+from apps.maintenance.models import MaintenanceTicket, PreventiveSchedule, SharedTicketLink, TicketComment
 from apps.teams.models import Team
 from apps.telemetry.models import TelemetryData
 from apps.users.models import CustomUser
@@ -136,6 +135,41 @@ def test_factory_telemetry_csv_export_includes_labels_units_and_raw_keys():
     assert response.status_code == 200
     assert rows[0] == ["Timestamp", "Metric", "Key", "Value", "Unit"]
     assert any(row[1:] == ["Active Power", "active_power", "820.0", "W"] for row in rows[1:])
+
+
+@pytest.mark.django_db
+def test_internal_ticket_comment_is_team_scoped_and_saved():
+    call_command("pilot_readiness_audit", "simulate")
+    user = CustomUser.objects.get(email=AUDIT_USER_EMAIL)
+    ticket = MaintenanceTicket.objects.get(team__slug="pilot-facilities")
+    client = Client()
+    client.force_login(user)
+
+    response = client.post(
+        reverse("web_team:maintenance:ticket_comment", args=["pilot-facilities", ticket.id]),
+        {"content": "Operator confirmed the latest reading and assigned the technician."},
+    )
+
+    assert response.status_code == 302
+    comment = TicketComment.objects.get(
+        ticket=ticket,
+        content="Operator confirmed the latest reading and assigned the technician.",
+    )
+    assert comment.team == ticket.team
+    assert comment.author == user
+
+
+@pytest.mark.django_db
+def test_registered_discovery_does_not_keep_prompting_setup_notification():
+    call_command("pilot_readiness_audit", "simulate")
+
+    from apps.alerts.templatetags.notification_tags import get_unread_notifications
+
+    team = Team.objects.get(slug="pilot-factory-energy")
+    data = get_unread_notifications(team)
+
+    assert data["discoveries"] == []
+    assert data["unread_count"] == Alert.objects.filter(team=team, status="active").count()
 
 
 @pytest.mark.django_db
