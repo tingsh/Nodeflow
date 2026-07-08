@@ -298,6 +298,10 @@ class RpcCommand(BaseTeamModel):
 class DeviceCommand(BaseTeamModel):
     """A control command sent to a device (write-back)."""
 
+    COMMAND_TYPE_CHOICES = (
+        ("read", _("Read")),
+        ("write", _("Write")),
+    )
     STATUS_CHOICES = (
         ("pending", _("Pending")),
         ("sent", _("Sent to Gateway")),
@@ -308,9 +312,17 @@ class DeviceCommand(BaseTeamModel):
 
     device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name="commands")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    rpc_command = models.OneToOneField(
+        RpcCommand,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="device_command",
+    )
 
+    command_type = models.CharField(max_length=10, choices=COMMAND_TYPE_CHOICES, default="write")
     command_key = models.CharField(max_length=100)  # e.g., 'motor_speed'
-    value = models.JSONField()  # The value to write
+    value = models.JSONField(null=True, blank=True)  # The value to write, if any
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     transaction_id = models.CharField(max_length=100, unique=True, null=True, blank=True)

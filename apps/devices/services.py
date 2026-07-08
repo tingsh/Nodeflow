@@ -1,3 +1,4 @@
+import contextlib
 import hashlib
 import hmac
 import json
@@ -211,87 +212,199 @@ def release_gateway_for_redo(gateway):
     return gateway
 
 
-def send_device_command(device, user, key, value):
+READ_FUNCTION_CODES = {1, 2, 3, 4}
+WRITE_FUNCTION_CODES = {5, 6, 15, 16}
+
+
+def _normalize_command_value(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        with contextlib.suppress(ValueError):
+            return float(value)
+    return value
+
+
+def _register_params_from_template(device, key, command_type, value):
+    register = None
+    if device.template and device.template.register_map:
+        register = device.template.register_map.get(key)
+
+    if not register or "address" not in register:
+        if command_type == "write":
+            logger.warning(
+                "No register map entry for key '%s' on device %s — using fallback FC6/addr0",
+                key,
+                device.name,
+            )
+            return {"functionCode": 6, "address": 0, "value": value}
+        raise ValueError(f"No readable register map entry found for '{key}'.")
+
+    params = {
+        "address": register["address"],
+        "functionCode": register.get("functionCode", 6 if command_type == "write" else 3),
+    }
+    if register.get("type") and register["type"] != "bool":
+        params["type"] = register["type"]
+    if "objectsCount" in register:
+        params["objectsCount"] = register["objectsCount"]
+    elif command_type == "read":
+        params["objectsCount"] = 1
+    if command_type == "write":
+        params["value"] = value
+    return params
+
+
+def _validate_device_command_params(command_type, params):
+    function_code = params.get("functionCode")
+    if function_code is None:
+        raise ValueError("Missing functionCode.")
+    function_code = int(function_code)
+    params["functionCode"] = function_code
+
+    if "address" not in params:
+        raise ValueError("Missing register address.")
+    params["address"] = int(params["address"])
+
+    if command_type == "write":
+        if function_code not in WRITE_FUNCTION_CODES:
+            raise ValueError("Write commands must use function code 5, 6, 15, or 16.")
+        if "value" not in params:
+            raise ValueError("Write commands require a value.")
+        params["value"] = _normalize_command_value(params["value"])
+    elif command_type == "read":
+        if function_code not in READ_FUNCTION_CODES:
+            raise ValueError("Read commands must use function code 1, 2, 3, or 4.")
+        params["objectsCount"] = int(params.get("objectsCount", 1))
+    else:
+        raise ValueError("Command type must be 'read' or 'write'.")
+
+
+def send_device_command(device, user, key, value=None, *, command_type="write", params=None):
     """
-    Sends a remote control command to a device via the associated gateway.
-    Uses the persistent MQTT publisher and the per-gateway RPC topic.
+    Sends a customer-facing command to a device via the associated gateway.
+    DeviceCommand is the customer audit record; RpcCommand is the transport record.
     """
     from apps.telemetry.mqtt_publisher import publish_rpc_command
 
     if not device.gateway:
         raise ValueError("Device is not assigned to a gateway.")
+    if command_type not in {"read", "write"}:
+        raise ValueError("Command type must be 'read' or 'write'.")
 
-    # 1. Create DeviceCommand record
+    value = _normalize_command_value(value)
+    command_key = key or f"manual_{command_type}"
+    rpc_params = dict(params or _register_params_from_template(device, command_key, command_type, value))
+    rpc_params["device_name"] = device.name
+    _validate_device_command_params(command_type, rpc_params)
+
     transaction_id = str(uuid.uuid4())
 
     command = DeviceCommand.objects.create(
         team=device.team,
         device=device,
         created_by=user,
-        command_key=key,
-        value=value,
+        command_type=command_type,
+        command_key=command_key,
+        value=rpc_params.get("value") if command_type == "write" else None,
         transaction_id=transaction_id,
-        payload={},
+        payload={
+            "method": f"{command_type}_device",
+            "params": rpc_params,
+        },
         status="pending",
     )
 
-    # 2. Build Modbus-aware params from the device template register map
-    params = {"device_name": device.name}
-    register = None
-    if device.template and device.template.register_map:
-        register = device.template.register_map.get(key)
-
-    if register and "address" in register:
-        params["address"] = register["address"]
-        params["functionCode"] = register.get("functionCode", 6)
-        params["value"] = value
-        if register.get("type") and register["type"] != "bool":
-            params["type"] = register["type"]
-        if "objectsCount" in register:
-            params["objectsCount"] = register["objectsCount"]
-    else:
-        # Fallback for devices without a template — caller must know the address
-        params["functionCode"] = 6
-        params["address"] = 0
-        params["value"] = value
-        logger.warning(
-            "No register map entry for key '%s' on device %s — using fallback FC6/addr0",
-            key, device.name,
-        )
-
-    # 3. Publish via the persistent MQTT publisher using write_device RPC
     try:
         rpc = publish_rpc_command(
             device.gateway,
-            method="write_device",
-            params=params,
+            method=f"{command_type}_device",
+            params=rpc_params,
         )
 
-        # Link the RpcCommand to the DeviceCommand
         command.payload = {
             "rpc_request_id": str(rpc.request_id),
-            "method": "write_device",
+            "method": f"{command_type}_device",
             "device_name": device.name,
+            "params": rpc_params,
         }
+        command.rpc_command = rpc
         command.status = "sent"
-        command.save()
-        logger.info("Command %s=%s sent to %s (tx: %s, rpc: %s)", key, value, device.name, transaction_id, rpc.request_id)
+        command.save(update_fields=["payload", "rpc_command", "status", "updated_at"])
+        logger.info(
+            "%s command %s sent to %s (tx: %s, rpc: %s)",
+            command_type.title(),
+            command_key,
+            device.name,
+            transaction_id,
+            rpc.request_id,
+        )
         return command
     except Exception as e:
         command.status = "failed"
         command.error_message = str(e)
-        command.save()
+        command.save(update_fields=["status", "error_message", "updated_at"])
         logger.error("Failed to publish command to MQTT: %s", e)
         raise
 
 
+def sync_device_command_from_rpc(rpc_record):
+    """Mirror a transport-level RpcCommand result onto its customer-facing DeviceCommand."""
+    try:
+        command = rpc_record.device_command
+    except DeviceCommand.DoesNotExist:
+        return None
+
+    command.response_payload = {
+        "status": rpc_record.status,
+        "result": rpc_record.result,
+        "error": rpc_record.error_message or "",
+    }
+    if rpc_record.status == "success":
+        command.status = "executed"
+        command.error_message = ""
+        command.executed_at = rpc_record.responded_at or timezone.now()
+    elif rpc_record.status == "timeout":
+        command.status = "timed_out"
+        command.error_message = rpc_record.error_message or "Timed out waiting for gateway response."
+    elif rpc_record.status == "error":
+        command.status = "failed"
+        command.error_message = rpc_record.error_message or "Gateway command failed."
+        command.executed_at = rpc_record.responded_at or timezone.now()
+    else:
+        return command
+
+    command.save(update_fields=["status", "response_payload", "error_message", "executed_at", "updated_at"])
+    return command
+
+
 def process_command_response(payload_str):
     """
-    Processes an incoming RPC response from the gateway.
-    Payload format: {"device": "Device A", "id": "uuid", "data": {"success": true}}
+    Processes an incoming command response.
+    Supports the current gateway RPC response shape and the legacy id/data shape.
     """
     try:
         payload = json.loads(payload_str)
+        request_id = payload.get("request_id")
+        if request_id:
+            from .models import RpcCommand
+
+            rpc = RpcCommand.objects.filter(request_id=request_id).first()
+            if not rpc:
+                return
+            rpc.status = payload.get("status", "error")
+            rpc.result = payload.get("result")
+            rpc.error_message = payload.get("error", "") or ""
+            rpc.responded_at = timezone.now()
+            rpc.save(update_fields=["status", "result", "error_message", "responded_at", "updated_at"])
+            sync_device_command_from_rpc(rpc)
+            return
+
         tx_id = payload.get("id")
 
         if not tx_id:

@@ -881,8 +881,13 @@
                             <tr>
                                 <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500 font-mono">{{ command.requested_at|date:"H:i:s" }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-xs">
-                                    <span class="font-bold text-indigo-600 dark:text-indigo-400">{{ command.command_key }}</span>
+                                    <span class="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-black uppercase tracking-widest {% if command.command_type == 'read' %}bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300{% else %}bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300{% endif %}">
+                                        {{ command.command_type }}
+                                    </span>
+                                    <span class="font-bold text-indigo-600 dark:text-indigo-400 ml-2">{{ command.command_key }}</span>
+                                    {% if command.command_type == 'write' %}
                                     <span class="text-gray-400 ml-1">→ {{ command.value }}</span>
+                                    {% endif %}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500">{{ command.created_by.get_display_name }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap">
@@ -903,7 +908,7 @@
 
     <!-- ── Device Control JS ── -->
     <script>
-    const RPC_URL = "{{ rpc_url }}";
+    const COMMAND_URL = "{{ command_url }}";
     const CSRF = "{{ csrf_token }}";
 
     function getCookie(name) {
@@ -911,33 +916,48 @@
         return v ? v.pop() : '';
     }
 
-    async function rpcCall(method, params) {
-        const res = await fetch(RPC_URL, {
+    async function commandCall(commandType, key, value, params = null) {
+        const body = new URLSearchParams({command_type: commandType, key});
+        if (value !== null && value !== undefined) body.set('value', value);
+        if (params) body.set('params', JSON.stringify({...params, command_key: key}));
+        const res = await fetch(COMMAND_URL, {
             method: 'POST',
             headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': getCookie('csrftoken')},
-            body: new URLSearchParams({method, params: JSON.stringify(params)})
+            body
         });
         return res.json();
     }
 
-    async function pollRpcResult(requestId, maxAttempts = 15) {
-        const statusUrl = RPC_URL.replace(/command\/?$/, 'rpc-status/' + requestId + '/');
+    async function pollCommandResult(transactionId, maxAttempts = 15) {
+        const statusUrl = COMMAND_URL.replace(/command\/?$/, 'command/status/' + transactionId + '/?format=json');
         for (let i = 0; i < maxAttempts; i++) {
             await new Promise(r => setTimeout(r, 1000));
             try {
                 const res = await fetch(statusUrl);
                 const data = await res.json();
-                if (data.status !== 'pending') return data;
+                if (data.status !== 'pending' && data.status !== 'sent') return data;
             } catch (e) { /* retry */ }
         }
-        return {status: 'timeout', result: null, error: 'Timed out waiting for response'};
+        return {status: 'timed_out', result: null, error: 'Timed out waiting for response'};
     }
 
     function setStatus(elId, status, text) {
         const el = document.getElementById(elId);
         if (!el) return;
-        const colors = {pending: 'text-yellow-500', success: 'text-green-500', error: 'text-red-500', timeout: 'text-gray-400'};
-        const icons = {pending: 'fa-spinner fa-spin', success: 'fa-check-circle', error: 'fa-times-circle', timeout: 'fa-clock'};
+        const colors = {
+            pending: 'text-yellow-500',
+            sent: 'text-blue-500',
+            executed: 'text-green-500',
+            failed: 'text-red-500',
+            timed_out: 'text-gray-400'
+        };
+        const icons = {
+            pending: 'fa-spinner fa-spin',
+            sent: 'fa-paper-plane',
+            executed: 'fa-check-circle',
+            failed: 'fa-times-circle',
+            timed_out: 'fa-clock'
+        };
         el.innerHTML = `<span class="${colors[status] || 'text-gray-400'} font-bold text-xs"><i class="fa ${icons[status] || 'fa-circle'} mr-1"></i>${text || status}</span>`;
     }
 
@@ -947,10 +967,11 @@
         try {
             const params = {functionCode: fc, address: address, value: value};
             if (dataType && dataType !== 'bool') params.type = dataType;
-            const data = await rpcCall('write_device', params);
+            const data = await commandCall('write', key, value, params);
+            if (data.error) throw new Error(data.error);
             setStatus(statusEl, 'pending', 'Waiting...');
-            const result = await pollRpcResult(data.request_id);
-            setStatus(statusEl, result.status, result.status === 'success' ? (label || 'Done') : (result.error || 'Failed'));
+            const result = await pollCommandResult(data.transaction_id);
+            setStatus(statusEl, result.status, result.status === 'executed' ? (label || 'Done') : (result.error || 'Failed'));
         } catch (e) {
             setStatus(statusEl, 'error', 'Send failed');
         }
@@ -962,11 +983,13 @@
         try {
             const params = {functionCode: fc, address: address, objectsCount: count};
             if (dataType) params.type = dataType;
-            const data = await rpcCall('read_device', params);
-            const result = await pollRpcResult(data.request_id);
+            const data = await commandCall('read', key, null, params);
+            if (data.error) throw new Error(data.error);
+            const result = await pollCommandResult(data.transaction_id);
             if (valEl) {
-                if (result.status === 'success' && result.result) {
-                    const val = result.result.value !== undefined ? result.result.value : JSON.stringify(result.result);
+                if (result.status === 'executed' && result.result) {
+                    const response = result.result.response || result.result;
+                    const val = response.value !== undefined ? response.value : JSON.stringify(response);
                     valEl.textContent = val;
                 } else {
                     valEl.innerHTML = '<span class="text-red-400 text-[10px]">Error</span>';
@@ -1031,7 +1054,6 @@
                 resultData.textContent = 'Sending...';
                 resultTime.textContent = '';
 
-                const method = this.operation === 'write' ? 'write_device' : 'read_device';
                 const params = {
                     functionCode: parseInt(this.fc),
                     address: parseInt(this.address),
@@ -1043,9 +1065,12 @@
                     params.value = parseFloat(this.value);
                 }
                 try {
-                    const data = await rpcCall(method, params);
+                    const key = this.operation === 'write' ? 'advanced_write' : 'advanced_read';
+                    const value = this.operation === 'write' ? params.value : null;
+                    const data = await commandCall(this.operation, key, value, params);
+                    if (data.error) throw new Error(data.error);
                     resultData.textContent = 'Waiting for response...';
-                    const result = await pollRpcResult(data.request_id);
+                    const result = await pollCommandResult(data.transaction_id);
                     resultTime.textContent = new Date().toLocaleTimeString();
                     resultData.textContent = JSON.stringify(result.result || {error: result.error}, null, 2);
                 } catch (e) {
@@ -1057,5 +1082,3 @@
     </script>
 </div>
 {% endblock %}
-
-

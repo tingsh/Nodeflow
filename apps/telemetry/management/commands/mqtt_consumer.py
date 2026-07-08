@@ -288,6 +288,9 @@ class Command(BaseCommand):
             rpc_record.error_message = payload.get("error", "") or ""
             rpc_record.responded_at = timezone.now()
             rpc_record.save()
+            from apps.devices.services import sync_device_command_from_rpc
+
+            sync_device_command_from_rpc(rpc_record)
             logger.info(
                 "RPC response for %s (%s): %s",
                 request_id,

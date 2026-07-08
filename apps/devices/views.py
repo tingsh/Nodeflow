@@ -1,4 +1,3 @@
-import contextlib
 import json
 import logging
 
@@ -387,21 +386,30 @@ def gateway_rpc_history(request, team_slug, pk):
 @require_permission("manage_devices")
 @require_POST
 def device_rpc_command(request, team_slug, gateway_pk, device_pk):
-    """Send a write/read command to a device via its gateway using RPC."""
-    from apps.telemetry.mqtt_publisher import publish_rpc_command
+    """Compatibility endpoint: routes customer device RPC through DeviceCommand audit."""
+    from .services import send_device_command
 
     gateway = Gateway.objects.get(pk=gateway_pk, team=request.team)
     device = Device.objects.get(pk=device_pk, gateway=gateway)
 
     method = request.POST.get("method")  # 'write_device' or 'read_device'
     params = json.loads(request.POST.get("params", "{}"))
-    params["device_name"] = device.name  # Inject the device name
-
-    rpc = publish_rpc_command(gateway, method, params)
+    command_type = "read" if method == "read_device" else "write"
+    key = params.pop("command_key", f"manual_{command_type}")
+    value = params.get("value")
+    command = send_device_command(
+        device,
+        request.user,
+        key,
+        value,
+        command_type=command_type,
+        params=params,
+    )
 
     return JsonResponse(
         {
-            "request_id": str(rpc.request_id),
+            "request_id": str(command.rpc_command.request_id) if command.rpc_command else None,
+            "transaction_id": str(command.transaction_id),
             "method": method,
             "device": device.name,
             "status": "sent",
@@ -491,11 +499,16 @@ class DeviceDetailView(PermissionRequiredMixin, DetailView):
         ]
 
         if self.object.gateway_id:
+            context["command_url"] = reverse_lazy(
+                "web_team:devices:device_send_command",
+                args=[self.request.team.slug, self.object.pk],
+            )
             context["rpc_url"] = reverse_lazy(
                 "web_team:devices:device_rpc_command",
                 args=[self.request.team.slug, self.object.gateway_id, self.object.pk],
             )
         else:
+            context["command_url"] = ""
             context["rpc_url"] = ""
 
         return context
@@ -509,25 +522,45 @@ def device_send_command(request, team_slug, pk):
     from django.shortcuts import get_object_or_404
 
     device = get_object_or_404(Device, pk=pk, team=request.team)
-    key = request.POST.get("key")
-    value = request.POST.get("value")
-
-    # Handle value types
-    if value.lower() == "true":
-        value = True
-    elif value.lower() == "false":
-        value = False
-    else:
-        with contextlib.suppress(ValueError):
-            value = float(value)
+    command_type = request.POST.get("command_type") or request.POST.get("type") or "write"
+    method = request.POST.get("method", "")
+    if method == "read_device":
+        command_type = "read"
+    elif method == "write_device":
+        command_type = "write"
+    key = request.POST.get("key") or request.POST.get("command_key") or f"manual_{command_type}"
+    raw_value = request.POST.get("value")
+    params = None
+    if request.POST.get("params"):
+        params = json.loads(request.POST.get("params", "{}"))
+        key = params.pop("command_key", key)
 
     try:
         from .services import send_device_command
 
-        command = send_device_command(device, request.user, key, value)
-        return render(request, "devices/partials/command_status_badge.html", {"command": command})
+        command = send_device_command(
+            device,
+            request.user,
+            key,
+            raw_value,
+            command_type=command_type,
+            params=params,
+        )
+        if request.headers.get("HX-Request"):
+            return render(request, "devices/partials/command_status_badge.html", {"command": command})
+        return JsonResponse(
+            {
+                "transaction_id": str(command.transaction_id),
+                "status": command.status,
+                "command_type": command.command_type,
+                "command_key": command.command_key,
+                "rpc_request_id": str(command.rpc_command.request_id) if command.rpc_command else None,
+            }
+        )
     except Exception as e:
-        return HttpResponse(f'<span class="text-error text-xs font-bold">{str(e)}</span>', status=400)
+        if request.headers.get("HX-Request"):
+            return HttpResponse(f'<span class="text-error text-xs font-bold">{str(e)}</span>', status=400)
+        return JsonResponse({"error": str(e)}, status=400)
 
 
 @require_permission("view_devices")
@@ -537,6 +570,19 @@ def device_command_status(request, team_slug, pk, tx_id):
     from .models import DeviceCommand
 
     command = get_object_or_404(DeviceCommand, transaction_id=tx_id, team=request.team)
+    if request.GET.get("format") == "json" or "application/json" in request.headers.get("Accept", ""):
+        result = command.response_payload.get("result") if isinstance(command.response_payload, dict) else None
+        return JsonResponse(
+            {
+                "transaction_id": str(command.transaction_id),
+                "status": command.status,
+                "command_type": command.command_type,
+                "command_key": command.command_key,
+                "result": result,
+                "response_payload": command.response_payload,
+                "error": command.error_message or None,
+            }
+        )
     return render(request, "devices/partials/command_status_badge.html", {"command": command})
 
 
