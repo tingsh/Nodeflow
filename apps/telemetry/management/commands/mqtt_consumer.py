@@ -227,6 +227,25 @@ class Command(BaseCommand):
             "buffered_event_count": "buffered_event_count",
             "last_replay_status": "last_replay_status",
             "replay_failure_count": "replay_failure_count",
+            "connectivity_checked_ts": "connectivity_checked_ts",
+            "internet_reachable": "internet_reachable",
+            "default_route_ok": "default_route_ok",
+            "default_route_error": "default_route_error",
+            "dns_ok": "dns_ok",
+            "dns_error": "dns_error",
+            "broker_host": "broker_host",
+            "broker_port": "broker_port",
+            "broker_tcp_ok": "broker_tcp_ok",
+            "broker_tcp_error": "broker_tcp_error",
+            "tls_ok": "tls_ok",
+            "tls_error": "tls_error",
+            "mqtt_connected": "mqtt_connected",
+            "mqtt_last_error": "mqtt_last_error",
+            "device_health": "device_health",
+            "ota_status": "ota_status",
+            "ota_version": "ota_version",
+            "ota_error": "ota_error",
+            "ota_rollback_performed": "ota_rollback_performed",
         }
 
         for attr_key, model_field in field_mapping.items():
@@ -253,8 +272,16 @@ class Command(BaseCommand):
                 config_status = attrs.get("config_update_status", "unknown")
                 config_record.status = config_status
                 config_record.error_message = attrs.get("config_update_error", "") or ""
+                config_record.rollback_performed = bool(attrs.get("rollback_performed", False))
+                config_record.connector_results = attrs.get("connector_results", []) or []
                 config_record.acknowledged_at = timezone.now()
-                config_record.save()
+                config_record.save(update_fields=[
+                    "status",
+                    "error_message",
+                    "rollback_performed",
+                    "connector_results",
+                    "acknowledged_at",
+                ])
                 if config_status == "success":
                     gateway.lifecycle_status = "active"
                     gateway.save(update_fields=["lifecycle_status"])

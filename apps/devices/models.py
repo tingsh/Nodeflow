@@ -90,6 +90,29 @@ class Gateway(BaseTeamModel):
     last_replay_status = models.CharField(max_length=30, blank=True, default="")
     replay_failure_count = models.IntegerField(default=0)
 
+    # Broker / firewall diagnostics emitted by Novena Gateway
+    connectivity_checked_ts = models.PositiveBigIntegerField(null=True, blank=True)
+    internet_reachable = models.BooleanField(null=True, blank=True)
+    default_route_ok = models.BooleanField(null=True, blank=True)
+    default_route_error = models.TextField(blank=True)
+    dns_ok = models.BooleanField(null=True, blank=True)
+    dns_error = models.TextField(blank=True)
+    broker_host = models.CharField(max_length=255, blank=True)
+    broker_port = models.IntegerField(null=True, blank=True)
+    broker_tcp_ok = models.BooleanField(null=True, blank=True)
+    broker_tcp_error = models.TextField(blank=True)
+    tls_ok = models.BooleanField(null=True, blank=True)
+    tls_error = models.TextField(blank=True)
+    mqtt_connected = models.BooleanField(null=True, blank=True)
+    mqtt_last_error = models.TextField(blank=True)
+
+    # Edge diagnostics for customer support
+    device_health = models.JSONField(default=dict, blank=True)
+    ota_status = models.CharField(max_length=30, blank=True)
+    ota_version = models.CharField(max_length=50, blank=True)
+    ota_error = models.TextField(blank=True)
+    ota_rollback_performed = models.BooleanField(default=False)
+
     def __str__(self):
         return f"{self.name} ({self.serial_number})"
 
@@ -250,6 +273,7 @@ class GatewayConfig(BaseTeamModel):
         ("pending", _("Pending")),
         ("success", _("Success")),
         ("failed", _("Failed")),
+        ("rolled_back", _("Rolled Back")),
     )
 
     gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="config_history")
@@ -259,6 +283,8 @@ class GatewayConfig(BaseTeamModel):
     action = models.CharField(max_length=30, default="full_update")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     error_message = models.TextField(blank=True)
+    rollback_performed = models.BooleanField(default=False)
+    connector_results = models.JSONField(default=list, blank=True)
     acknowledged_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
