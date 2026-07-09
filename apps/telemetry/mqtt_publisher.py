@@ -163,6 +163,33 @@ def publish_credential_rotation(gateway, new_password):
     )
 
 
+def publish_gateway_activation(gateway, operational_password):
+    """
+    Send fresh operational MQTT credentials while the gateway is in bootstrap mode.
+    """
+    request_id = str(uuid.uuid4())
+    topic = f"v1/gateway/{gateway.serial_number}/bootstrap/activate"
+    payload = {
+        "request_id": request_id,
+        "action": "activate",
+        "mqtt": {
+            "username": gateway.mqtt_username or gateway.serial_number,
+            "password": operational_password,
+            "client_id": f"novena-gateway-{gateway.serial_number}",
+        },
+    }
+
+    client = get_mqtt_client()
+    result = client.publish(topic, json.dumps(payload), qos=1)
+    logger.info(
+        "Published gateway activation to %s (request_id=%s, rc=%s)",
+        gateway.serial_number,
+        request_id,
+        result.rc,
+    )
+    return request_id
+
+
 def publish_attribute_push(gateway, attributes):
     """
     Push attributes to a gateway.

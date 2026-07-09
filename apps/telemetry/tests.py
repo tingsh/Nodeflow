@@ -6,11 +6,70 @@ from django.http import Http404
 from django.test import RequestFactory
 from django.utils import timezone
 
-from apps.devices.models import Device, DeviceTemplate, Gateway, Site
+from apps.devices.models import Device, DeviceTemplate, Gateway, GatewayConfig, Site
 from apps.teams.models import Team
+from apps.telemetry.management.commands.mqtt_consumer import Command as MqttConsumerCommand
 from apps.telemetry.models import TelemetryData
 from apps.telemetry.tasks import flush_telemetry_buffer_task
 from apps.users.models import CustomUser
+
+
+@pytest.mark.django_db
+def test_gateway_attribute_ingest_persists_edge_diagnostics():
+    team = Team.objects.create(name="Gateway Diagnostics", slug="gateway-diagnostics")
+    site = Site.objects.create(team=team, name="Factory")
+    gateway = Gateway.objects.create(
+        team=team,
+        site=site,
+        name="GW-DIAG",
+        serial_number="GW-DIAG-001",
+        access_token="diag-token",
+    )
+    config_record = GatewayConfig.objects.create(
+        team=team,
+        gateway=gateway,
+        config_json={"connectors": []},
+        request_id="11111111-1111-1111-1111-111111111111",
+    )
+
+    command = MqttConsumerCommand()
+    command._handle_attributes({
+        "serial_number": "GW-DIAG-001",
+        "attributes": {
+            "status": "online",
+            "internet_reachable": False,
+            "dns_ok": True,
+            "broker_tcp_ok": False,
+            "broker_tcp_error": "timed out",
+            "tls_ok": False,
+            "mqtt_connected": False,
+            "mqtt_last_error": "unexpected_disconnect_rc_7",
+            "device_health": {"Power Meter 1": {"poll_status": "degraded"}},
+            "ota_status": "rolled_back",
+            "ota_version": "1.2.0",
+            "ota_error": "health check failed",
+            "ota_rollback_performed": True,
+            "config_update_request_id": str(config_record.request_id),
+            "config_update_status": "rolled_back",
+            "config_update_error": "Broken Modbus",
+            "rollback_performed": True,
+            "connector_results": [{"name": "Broken Modbus", "status": "error"}],
+        },
+    })
+
+    gateway.refresh_from_db()
+    config_record.refresh_from_db()
+
+    assert gateway.internet_reachable is False
+    assert gateway.dns_ok is True
+    assert gateway.broker_tcp_ok is False
+    assert gateway.broker_tcp_error == "timed out"
+    assert gateway.device_health["Power Meter 1"]["poll_status"] == "degraded"
+    assert gateway.ota_status == "rolled_back"
+    assert gateway.ota_rollback_performed is True
+    assert config_record.status == "rolled_back"
+    assert config_record.rollback_performed is True
+    assert config_record.connector_results[0]["name"] == "Broken Modbus"
 
 
 @pytest.mark.django_db

@@ -46,8 +46,9 @@ class Command(BaseCommand):
             client.subscribe("v1/gateway/logs")
             client.subscribe("v1/gateway/attributes")
             client.subscribe("v1/gateway/rpc/response")
+            client.subscribe("v1/gateway/+/bootstrap/hello")
             self.stdout.write(
-                self.style.NOTICE("Subscribed to: telemetry, logs, attributes, rpc/response")
+                self.style.NOTICE("Subscribed to: telemetry, logs, attributes, rpc/response, bootstrap")
             )
         else:
             self.stdout.write(self.style.ERROR(f"Connection failed with code {reason_code}"))
@@ -64,6 +65,8 @@ class Command(BaseCommand):
                 self._handle_attributes(payload)
             elif msg.topic == "v1/gateway/rpc/response":
                 self._handle_rpc_response(payload)
+            elif msg.topic.endswith("/bootstrap/hello"):
+                self._handle_bootstrap_hello(payload)
             else:
                 logger.warning("Unknown MQTT topic: %s", msg.topic)
         except Exception as e:
@@ -168,6 +171,24 @@ class Command(BaseCommand):
 
     # ── Attribute Sync / Heartbeat ──────────────────────────────────────
 
+    def _handle_bootstrap_hello(self, payload):
+        """Mark a released/unclaimed gateway as visible in bootstrap mode."""
+        from apps.devices.models import Gateway
+
+        gateway_sn = payload.get("serial_number")
+        if not gateway_sn:
+            return
+        gateway = Gateway.objects.filter(serial_number=gateway_sn).first()
+        if not gateway:
+            logger.info("Bootstrap hello from unknown gateway %s", gateway_sn)
+            return
+        gateway.last_bootstrap_seen_at = timezone.now()
+        if gateway.lifecycle_status in ("claimed", "release_pending"):
+            gateway.lifecycle_status = "bootstrap_seen"
+            gateway.save(update_fields=["last_bootstrap_seen_at", "lifecycle_status"])
+        else:
+            gateway.save(update_fields=["last_bootstrap_seen_at"])
+
     def _handle_attributes(self, payload):
         """Update gateway status from heartbeat attributes or LWT."""
         from apps.devices.models import Gateway, GatewayConfig
@@ -203,6 +224,28 @@ class Command(BaseCommand):
             "wifi_status": "wifi_status",
             "fourg_status": "fourg_status",
             "signal_strength": "signal_strength",
+            "buffered_event_count": "buffered_event_count",
+            "last_replay_status": "last_replay_status",
+            "replay_failure_count": "replay_failure_count",
+            "connectivity_checked_ts": "connectivity_checked_ts",
+            "internet_reachable": "internet_reachable",
+            "default_route_ok": "default_route_ok",
+            "default_route_error": "default_route_error",
+            "dns_ok": "dns_ok",
+            "dns_error": "dns_error",
+            "broker_host": "broker_host",
+            "broker_port": "broker_port",
+            "broker_tcp_ok": "broker_tcp_ok",
+            "broker_tcp_error": "broker_tcp_error",
+            "tls_ok": "tls_ok",
+            "tls_error": "tls_error",
+            "mqtt_connected": "mqtt_connected",
+            "mqtt_last_error": "mqtt_last_error",
+            "device_health": "device_health",
+            "ota_status": "ota_status",
+            "ota_version": "ota_version",
+            "ota_error": "ota_error",
+            "ota_rollback_performed": "ota_rollback_performed",
         }
 
         for attr_key, model_field in field_mapping.items():
@@ -229,8 +272,16 @@ class Command(BaseCommand):
                 config_status = attrs.get("config_update_status", "unknown")
                 config_record.status = config_status
                 config_record.error_message = attrs.get("config_update_error", "") or ""
+                config_record.rollback_performed = bool(attrs.get("rollback_performed", False))
+                config_record.connector_results = attrs.get("connector_results", []) or []
                 config_record.acknowledged_at = timezone.now()
-                config_record.save()
+                config_record.save(update_fields=[
+                    "status",
+                    "error_message",
+                    "rollback_performed",
+                    "connector_results",
+                    "acknowledged_at",
+                ])
                 if config_status == "success":
                     gateway.lifecycle_status = "active"
                     gateway.save(update_fields=["lifecycle_status"])
@@ -239,6 +290,11 @@ class Command(BaseCommand):
                 )
             except GatewayConfig.DoesNotExist:
                 pass
+
+        credential_status = attrs.get("credential_update_status")
+        if credential_status:
+            gateway.credential_rotation_status = credential_status
+            gateway.save(update_fields=["credential_rotation_status"])
 
         logger.debug("Updated attributes for gateway %s (status=%s)", gateway_sn, attrs.get("status"))
 
@@ -259,6 +315,9 @@ class Command(BaseCommand):
             rpc_record.error_message = payload.get("error", "") or ""
             rpc_record.responded_at = timezone.now()
             rpc_record.save()
+            from apps.devices.services import sync_device_command_from_rpc
+
+            sync_device_command_from_rpc(rpc_record)
             logger.info(
                 "RPC response for %s (%s): %s",
                 request_id,
@@ -275,36 +334,10 @@ class Command(BaseCommand):
         Process a discovery report from the Edge gateway.
         Stores it in Gateway.discovery_data and auto-matches against DeviceTemplates.
         """
-        from apps.devices.models import DeviceTemplate
-
         discovered_devices = report.get("discovered_devices", [])
+        from apps.devices.discovery_matching import enrich_discovered_device
 
-        # Auto-match each discovered device against templates
-        for device in discovered_devices:
-            identification = device.get("identification") or {}
-            vendor = (identification.get("vendor") or "").strip().lower()
-            model = (identification.get("model") or "").strip().lower()
-            signature = (device.get("signature") or "").strip().lower()
-
-            matched_template = None
-
-            # 1. Try exact vendor + model match
-            if vendor and model:
-                matched_template = DeviceTemplate.objects.filter(
-                    manufacturer__iexact=vendor,
-                    model_number__iexact=model,
-                ).first()
-
-            # 2. Fallback: match by signature against template name
-            if not matched_template and signature and signature != "unknown":
-                matched_template = (
-                    DeviceTemplate.objects.filter(name__icontains=signature).first()
-                    or DeviceTemplate.objects.filter(manufacturer__icontains=signature).first()
-                )
-
-            if matched_template:
-                device["matched_template_id"] = matched_template.id
-                device["matched_template_name"] = matched_template.name
+        discovered_devices = [enrich_discovered_device(device) for device in discovered_devices]
 
         # Store enriched discovery data
         gateway.discovery_data = {

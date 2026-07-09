@@ -2,6 +2,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from apps.alerts.models import AlertRule
 from apps.devices.models import Device, DeviceTemplate, Gateway, Site
+from apps.devices.services import build_commissioning_context
 from apps.teams.decorators import require_permission
 
 ONBOARDING_STEPS = [
@@ -15,7 +16,7 @@ ONBOARDING_STEPS = [
 @require_permission("manage_devices")
 def onboarding_start(request, team_slug):
     if Site.objects.filter(team=request.team).exists():
-        return redirect("web_team:home", team_slug=team_slug)
+        return redirect("web_team:onboarding:setup_start", team_slug=team_slug)
     return render(request, "onboarding/welcome.html")
 
 
@@ -98,14 +99,16 @@ def step_2b_wait(request, team_slug):
         return redirect("web_team:onboarding:step_2_gateway", team_slug=team_slug)
     gateway = get_object_or_404(Gateway, id=gateway_id, team=request.team)
 
-    # If already online, skip straight to discovery step
-    if gateway.status == "online":
-        if gateway.lifecycle_status == "claimed":
-            gateway.lifecycle_status = "online"
-            gateway.save(update_fields=["lifecycle_status"])
-        return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+    if gateway.status == "online" and gateway.lifecycle_status == "claimed":
+        gateway.lifecycle_status = "online"
+        gateway.save(update_fields=["lifecycle_status"])
 
-    context = {"steps": ONBOARDING_STEPS, "current_step": 2, "gateway": gateway}
+    context = {
+        "steps": ONBOARDING_STEPS,
+        "current_step": 2,
+        "gateway": gateway,
+        "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
+    }
     return render(request, "onboarding/step_2b_wait.html", context)
 
 
@@ -117,7 +120,11 @@ def gateway_status_poll(request, team_slug):
         return render(request, "onboarding/partials/gateway_status_badge.html", {"status": "unknown"})
     gateway = Gateway.objects.filter(id=gateway_id, team=request.team).first()
     status = gateway.status if gateway else "unknown"
-    return render(request, "onboarding/partials/gateway_status_badge.html", {"status": status, "gateway": gateway})
+    return render(request, "onboarding/partials/gateway_status_badge.html", {
+        "status": status,
+        "gateway": gateway,
+        "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
+    })
 
 
 @require_permission("manage_devices")
@@ -210,6 +217,7 @@ def step_3_discover(request, team_slug):
         "gateway": gateway,
         "discovered_devices": discovered_devices,
         "templates": templates,
+        "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
     }
     return render(request, "onboarding/step_3_discover.html", context)
 
@@ -227,6 +235,7 @@ def discovery_poll(request, team_slug):
         "discovered_devices": discovered_devices,
         "templates": templates,
         "gateway": gateway,
+        "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
     })
 
 
@@ -305,12 +314,32 @@ def step_4_alert(request, team_slug):
                 )
             return redirect("web_team:onboarding:complete", team_slug=team_slug)
 
-    context = {"steps": ONBOARDING_STEPS, "current_step": 4, "device": device, "rule": existing_rule}
+    context = {
+        "steps": ONBOARDING_STEPS,
+        "current_step": 4,
+        "device": device,
+        "rule": existing_rule,
+        "commissioning": build_commissioning_context(request.team, gateway=device.gateway, session=request.session),
+    }
     return render(request, "onboarding/step_4_alert.html", context)
 
 
 @require_permission("manage_devices")
 def complete(request, team_slug):
+    gateway_id = request.session.get("onboarding_gateway_id")
+    device_id = request.session.get("onboarding_device_id")
+    gateway = Gateway.objects.filter(id=gateway_id, team=request.team).first() if gateway_id else None
+    commissioning = build_commissioning_context(request.team, gateway=gateway, session=request.session)
+    provisioned_devices = commissioning.get("provisioned_devices", [])
+    redirect_target = None
+
+    if device_id and len(provisioned_devices) == 1 and commissioning.get("first_live_device"):
+        redirect_target = redirect("web_team:devices:device_detail", team_slug=team_slug, pk=device_id)
+    elif gateway and len(provisioned_devices) > 1:
+        redirect_target = redirect("web_team:devices:site_detail", team_slug=team_slug, pk=gateway.site_id)
+    elif gateway and not commissioning.get("first_live_device"):
+        redirect_target = redirect("web_team:devices:gateway_detail", team_slug=team_slug, pk=gateway.pk)
+
     for key in [
         "onboarding_site_id",
         "onboarding_gateway_id",
@@ -320,6 +349,9 @@ def complete(request, team_slug):
     ]:
         if key in request.session:
             del request.session[key]
+
+    if redirect_target:
+        return redirect_target
     return render(request, "onboarding/complete.html")
 
 

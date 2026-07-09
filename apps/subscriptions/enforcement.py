@@ -1,38 +1,51 @@
 import logging
 
-from apps.devices.models import Device
+from apps.devices.models import Device, Gateway
 
 logger = logging.getLogger("novena_hub")
 
-# Plan Limits
-# mapping slug -> limit
-PLAN_DEVICE_LIMITS = {
-    "starter": 10,
-    "professional": 50,
-    "business": 200,
-}
-
 DEFAULT_LIMIT = 3  # For teams with no active subscription
+DEFAULT_GATEWAY_LIMIT = 1
+DEFAULT_LATENCY_LIMIT = 10.0
+
+
+def get_product_metadata_for_team(team):
+    """Return the active subscription metadata for a team, if one exists."""
+    if not team.subscription or not team.has_active_subscription():
+        return None
+
+    try:
+        from apps.subscriptions.metadata import get_product_with_metadata
+
+        subscription = team.active_stripe_subscription
+        for item in subscription.items.select_related("price__product"):
+            return get_product_with_metadata(item.price.product).metadata
+    except Exception:
+        logger.exception("Unable to resolve subscription metadata for team %s", getattr(team, "id", None))
+
+    return None
 
 
 def get_device_limit_for_team(team):
     """
     Returns the maximum number of devices allowed for a team.
     """
-    if not team.subscription or not team.has_active_subscription():
-        return DEFAULT_LIMIT
-
-    # Get the product slug from metadata
-    wrapped = team.wrapped_subscription
-    if wrapped and wrapped.product:
-        # We'll use the product slug from Pegasus metadata
-        from apps.subscriptions.metadata import get_product_with_metadata
-
-        product_metadata = get_product_with_metadata(wrapped.product).metadata
-        slug = product_metadata.slug
-        return PLAN_DEVICE_LIMITS.get(slug, DEFAULT_LIMIT)
+    product_metadata = get_product_metadata_for_team(team)
+    if product_metadata:
+        return product_metadata.device_limit
 
     return DEFAULT_LIMIT
+
+
+def get_gateway_limit_for_team(team):
+    """
+    Returns the maximum number of gateways allowed for a team.
+    """
+    product_metadata = get_product_metadata_for_team(team)
+    if product_metadata:
+        return product_metadata.gateway_limit
+
+    return DEFAULT_GATEWAY_LIMIT
 
 
 def can_add_device(team):
@@ -47,30 +60,35 @@ def can_add_device(team):
     return count < limit
 
 
-# Latency limits gating: slug -> min interval in seconds
-PLAN_LATENCY_LIMITS = {
-    "starter": 10.0,       # 10s refresh
-    "professional": 5.0,  # 5s refresh
-    "business": 1.0,      # 1s refresh (Real-time)
-}
+def can_add_gateway(team):
+    """
+    Returns True if the team has not reached its gateway limit.
+    """
+    limit = get_gateway_limit_for_team(team)
+    if limit == -1 or limit >= 9999:
+        return True
 
-DEFAULT_LATENCY_LIMIT = 10.0  # Default for free tier/no active subscription
+    count = Gateway.objects.filter(team=team).count()
+    return count < limit
 
 
 def get_latency_limit_for_team(team):
     """
     Returns the minimum telemetry update interval (in seconds) allowed for a team.
     """
-    if not team.subscription or not team.has_active_subscription():
-        return DEFAULT_LATENCY_LIMIT
-
-    wrapped = team.wrapped_subscription
-    if wrapped and wrapped.product:
-        from apps.subscriptions.metadata import get_product_with_metadata
-
-        product_metadata = get_product_with_metadata(wrapped.product).metadata
-        slug = product_metadata.slug
-        return PLAN_LATENCY_LIMITS.get(slug, DEFAULT_LATENCY_LIMIT)
+    product_metadata = get_product_metadata_for_team(team)
+    if product_metadata:
+        return product_metadata.telemetry_interval_seconds
 
     return DEFAULT_LATENCY_LIMIT
 
+
+def get_retention_limit_days_for_team(team):
+    """
+    Returns the telemetry retention window allowed for a team.
+    """
+    product_metadata = get_product_metadata_for_team(team)
+    if product_metadata:
+        return product_metadata.retention_days
+
+    return 7

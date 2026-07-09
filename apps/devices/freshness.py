@@ -74,13 +74,13 @@ def device_freshness_state(device, now=None):
             return FreshnessState(
                 status='alarm',
                 label='Alarm',
-                display=f'Alarm · last sample {compact_timesince(last_seen, now)} ago',
+                display=f'Alarm - last sample {compact_timesince(last_seen, now)} ago',
                 age_seconds=int((now - last_seen).total_seconds()),
             )
-        return FreshnessState(status='alarm', label='Alarm', display='Alarm · no samples yet')
+        return FreshnessState(status='alarm', label='Alarm', display='Alarm - no samples yet')
 
     if not last_seen:
-        return FreshnessState(status='offline', label='Offline', display='Offline · no samples yet')
+        return FreshnessState(status='offline', label='Offline', display='Offline - no samples yet')
 
     age_seconds = max(0, int((now - last_seen).total_seconds()))
     delayed_seconds, offline_seconds = device_freshness_thresholds(device)
@@ -89,20 +89,20 @@ def device_freshness_state(device, now=None):
         return FreshnessState(
             status='offline',
             label='Offline',
-            display=f'Offline · last sample {compact_timesince(last_seen, now)} ago',
+            display=f'Offline - last sample {compact_timesince(last_seen, now)} ago',
             age_seconds=age_seconds,
         )
     if age_seconds >= delayed_seconds:
         return FreshnessState(
             status='delayed',
             label='Delayed',
-            display=f'Delayed · last sample {compact_timesince(last_seen, now)} ago',
+            display=f'Delayed - last sample {compact_timesince(last_seen, now)} ago',
             age_seconds=age_seconds,
         )
     return FreshnessState(
         status='live',
         label='Live',
-        display=f'Live · updated {compact_timesince(last_seen, now)} ago',
+        display=f'Live - updated {compact_timesince(last_seen, now)} ago',
         age_seconds=age_seconds,
     )
 
@@ -117,13 +117,13 @@ def gateway_freshness_state(gateway, now=None):
             return FreshnessState(
                 status='maintenance',
                 label='Gateway maintenance',
-                display=f'Gateway maintenance · heartbeat {compact_timesince(last_seen, now)} ago',
+                display=f'Gateway maintenance - heartbeat {compact_timesince(last_seen, now)} ago',
                 age_seconds=int((now - last_seen).total_seconds()),
             )
         return FreshnessState(
             status='maintenance',
             label='Gateway maintenance',
-            display='Gateway maintenance · no heartbeat yet',
+            display='Gateway maintenance - no heartbeat yet',
         )
 
     if last_seen:
@@ -133,17 +133,17 @@ def gateway_freshness_state(gateway, now=None):
             return FreshnessState(
                 status='live',
                 label='Gateway online',
-                display=f'Gateway online · heartbeat {compact_timesince(last_seen, now)} ago',
+                display=f'Gateway online - heartbeat {compact_timesince(last_seen, now)} ago',
                 age_seconds=age_seconds,
             )
         return FreshnessState(
             status='offline',
             label='Gateway offline',
-            display=f'Gateway offline · last heartbeat {compact_timesince(last_seen, now)} ago',
+            display=f'Gateway offline - last heartbeat {compact_timesince(last_seen, now)} ago',
             age_seconds=age_seconds,
         )
 
-    return FreshnessState(status='offline', label='Gateway offline', display='Gateway offline · no heartbeat yet')
+    return FreshnessState(status='offline', label='Gateway offline', display='Gateway offline - no heartbeat yet')
 
 
 def device_offline_cutoff(device, now=None):
@@ -160,5 +160,5 @@ def device_gateway_context_display(device):
     device_state = device_freshness_state(device)
     gateway_state = gateway_freshness_state(gateway)
     if device_state.status == 'offline' and gateway_state.status == 'live':
-        return 'Gateway online · device offline'
+        return 'Gateway online - device offline'
     return gateway_state.display

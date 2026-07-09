@@ -1,0 +1,40 @@
+<div class="rounded-lg border border-base-content/10 bg-base-100 p-4" x-data="{ selected: {% if selected %}true{% else %}false{% endif %} }">
+    <div class="flex items-start gap-4">
+        <div class="pt-1">
+            <input type="checkbox" name="device_index" value="{{ candidate.index }}" x-model="selected" {% if disabled %}disabled{% endif %}
+                   class="checkbox checkbox-primary checkbox-sm rounded">
+        </div>
+        <div class="min-w-0 flex-1">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-sm font-bold text-base-content">{{ candidate.signature }}</p>
+                    <p class="mt-1 text-xs text-base-content/45 font-mono">
+                        {{ candidate.interface|default:"Unknown interface" }}{% if candidate.slave_id %} · Slave {{ candidate.slave_id }}{% endif %}{% if candidate.baud_rate %} · {{ candidate.baud_rate }} baud{% endif %}
+                    </p>
+                </div>
+                <span class="rounded-md px-2 py-1 text-[10px] font-bold uppercase {% if candidate.status == 'ready' %}bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-300{% elif candidate.status == 'registered' %}bg-base-200 text-base-content/50{% else %}bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300{% endif %}">
+                    {{ candidate.status|title }}
+                </span>
+            </div>
+            <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2" x-show="selected">
+                <div>
+                    <label class="block text-[10px] font-bold uppercase tracking-wide text-base-content/45 mb-1">Device Name</label>
+                    <input type="text" name="name_{{ candidate.index }}" value="{{ candidate.signature }}" {% if disabled %}disabled{% endif %}
+                           class="input input-bordered input-sm w-full rounded-md">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold uppercase tracking-wide text-base-content/45 mb-1">Hardware Template</label>
+                    <select name="template_{{ candidate.index }}" {% if disabled %}disabled{% endif %} class="select select-bordered select-sm w-full rounded-md">
+                        <option value="">Select template</option>
+                        {% for tpl in templates %}
+                        <option value="{{ tpl.id }}" {% if candidate.matched_template and candidate.matched_template.id == tpl.id %}selected{% endif %}>{{ tpl.name }}{% if tpl.manufacturer %} ({{ tpl.manufacturer }}){% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            {% if candidate.matched_template_name %}
+            <p class="mt-3 text-xs font-medium text-green-700 dark:text-green-300"><i class="fa fa-check-circle mr-1"></i>Matched to {{ candidate.matched_template_name }}</p>
+            {% endif %}
+        </div>
+    </div>
+</div>

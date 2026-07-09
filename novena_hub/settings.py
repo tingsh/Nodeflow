@@ -127,6 +127,8 @@ MQTT_PUBLISHER_CLIENT_ID = env("MQTT_PUBLISHER_CLIENT_ID", default="novena-hub-p
 MQTT_DYNSEC_PORT = env.int("MQTT_DYNSEC_PORT", default=1884)
 MQTT_DYNSEC_ADMIN_USER = env("MQTT_DYNSEC_ADMIN_USER", default="dynsec-admin")
 MQTT_DYNSEC_ADMIN_PASS = env("MQTT_DYNSEC_ADMIN_PASS", default="dynsec-password")
+MQTT_PROVISIONING_REQUIRED = env.bool("MQTT_PROVISIONING_REQUIRED", default=False)
+NOVENA_DEPLOYMENT_MODE = env("NOVENA_DEPLOYMENT_MODE", default="local")
 
 # Gateway Claim Code (HMAC secret for deriving claim codes from serial numbers)
 GATEWAY_CLAIM_SECRET = env("GATEWAY_CLAIM_SECRET", default="change-me-in-production")

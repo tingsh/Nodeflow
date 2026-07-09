@@ -32,9 +32,12 @@ class Gateway(BaseTeamModel):
     )
     LIFECYCLE_CHOICES = (
         ("claimed", _("Claimed")),
+        ("bootstrap_seen", _("Bootstrap Seen")),
+        ("activating", _("Activating")),
         ("online", _("Online")),
         ("commissioning", _("Commissioning")),
         ("active", _("Active")),
+        ("release_pending", _("Release Pending")),
     )
     TLS_MODE_CHOICES = (
         ("none", _("None")),
@@ -58,10 +61,15 @@ class Gateway(BaseTeamModel):
 
     # MQTT credentials (per-gateway authentication)
     mqtt_username = models.CharField(max_length=100, unique=True, null=True, blank=True)
-    mqtt_password = models.CharField(max_length=255, blank=True, help_text=_("Bcrypt hash of the MQTT password"))
+    mqtt_password = models.CharField(max_length=255, blank=True, help_text=_("Hashed operational MQTT password"))
     tls_mode = models.CharField(max_length=10, choices=TLS_MODE_CHOICES, default="one-way")
     client_cert_pem = models.TextField(blank=True, help_text=_("Client certificate PEM for mTLS"))
     client_key_pem = models.TextField(blank=True, help_text=_("Client private key PEM for mTLS"))
+    mqtt_provisioning_status = models.CharField(max_length=20, default="not_started")
+    mqtt_provisioning_error = models.TextField(blank=True)
+    mqtt_provisioned_at = models.DateTimeField(null=True, blank=True)
+    credential_rotation_status = models.CharField(max_length=20, default="not_started")
+    last_bootstrap_seen_at = models.DateTimeField(null=True, blank=True)
 
     # Heartbeat / attribute sync fields (populated by edge gateway)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
@@ -78,6 +86,32 @@ class Gateway(BaseTeamModel):
     wifi_status = models.CharField(max_length=20, blank=True, default="unknown")
     fourg_status = models.CharField(max_length=20, blank=True, default="unknown")
     signal_strength = models.IntegerField(null=True, blank=True)
+    buffered_event_count = models.IntegerField(null=True, blank=True)
+    last_replay_status = models.CharField(max_length=30, blank=True, default="")
+    replay_failure_count = models.IntegerField(default=0)
+
+    # Broker / firewall diagnostics emitted by Novena Gateway
+    connectivity_checked_ts = models.PositiveBigIntegerField(null=True, blank=True)
+    internet_reachable = models.BooleanField(null=True, blank=True)
+    default_route_ok = models.BooleanField(null=True, blank=True)
+    default_route_error = models.TextField(blank=True)
+    dns_ok = models.BooleanField(null=True, blank=True)
+    dns_error = models.TextField(blank=True)
+    broker_host = models.CharField(max_length=255, blank=True)
+    broker_port = models.IntegerField(null=True, blank=True)
+    broker_tcp_ok = models.BooleanField(null=True, blank=True)
+    broker_tcp_error = models.TextField(blank=True)
+    tls_ok = models.BooleanField(null=True, blank=True)
+    tls_error = models.TextField(blank=True)
+    mqtt_connected = models.BooleanField(null=True, blank=True)
+    mqtt_last_error = models.TextField(blank=True)
+
+    # Edge diagnostics for customer support
+    device_health = models.JSONField(default=dict, blank=True)
+    ota_status = models.CharField(max_length=30, blank=True)
+    ota_version = models.CharField(max_length=50, blank=True)
+    ota_error = models.TextField(blank=True)
+    ota_rollback_performed = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.name} ({self.serial_number})"
@@ -95,6 +129,7 @@ class GatewayInventory(models.Model):
     STATUS_CHOICES = (
         ("unclaimed", _("Unclaimed")),
         ("claimed", _("Claimed")),
+        ("released", _("Released")),
         ("retired", _("Retired")),
     )
 
@@ -150,6 +185,7 @@ class DeviceTemplate(models.Model):
     device_type = models.CharField(max_length=30, choices=DEVICE_TYPE_CHOICES)
     protocol = models.CharField(max_length=20, choices=PROTOCOL_CHOICES)
     register_map = models.JSONField(help_text=_("Definition of registers. Keys can have 'writable': true."))
+    discovery_hints = models.JSONField(default=dict, blank=True)
     default_polling_interval = models.IntegerField(default=5)
     category = models.CharField(max_length=20, choices=VERTICAL_CHOICES, default="energy")
     alert_presets = models.JSONField(default=list, blank=True)
@@ -237,6 +273,7 @@ class GatewayConfig(BaseTeamModel):
         ("pending", _("Pending")),
         ("success", _("Success")),
         ("failed", _("Failed")),
+        ("rolled_back", _("Rolled Back")),
     )
 
     gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="config_history")
@@ -246,6 +283,8 @@ class GatewayConfig(BaseTeamModel):
     action = models.CharField(max_length=30, default="full_update")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     error_message = models.TextField(blank=True)
+    rollback_performed = models.BooleanField(default=False)
+    connector_results = models.JSONField(default=list, blank=True)
     acknowledged_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
@@ -285,6 +324,10 @@ class RpcCommand(BaseTeamModel):
 class DeviceCommand(BaseTeamModel):
     """A control command sent to a device (write-back)."""
 
+    COMMAND_TYPE_CHOICES = (
+        ("read", _("Read")),
+        ("write", _("Write")),
+    )
     STATUS_CHOICES = (
         ("pending", _("Pending")),
         ("sent", _("Sent to Gateway")),
@@ -295,9 +338,17 @@ class DeviceCommand(BaseTeamModel):
 
     device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name="commands")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    rpc_command = models.OneToOneField(
+        RpcCommand,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="device_command",
+    )
 
+    command_type = models.CharField(max_length=10, choices=COMMAND_TYPE_CHOICES, default="write")
     command_key = models.CharField(max_length=100)  # e.g., 'motor_speed'
-    value = models.JSONField()  # The value to write
+    value = models.JSONField(null=True, blank=True)  # The value to write, if any
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     transaction_id = models.CharField(max_length=100, unique=True, null=True, blank=True)
@@ -319,6 +370,8 @@ class FirmwareRelease(models.Model):
     version = models.CharField(max_length=50, unique=True, help_text=_("Version string, e.g. '1.1.0'"))
     release_notes = models.TextField(blank=True)
     file = models.FileField(upload_to="firmware/", help_text=_("The firmware binary tarball (.tar.gz)"))
+    sha256 = models.CharField(max_length=64, blank=True)
+    size_bytes = models.PositiveBigIntegerField(null=True, blank=True)
     is_active = models.BooleanField(default=False, help_text=_("Whether this release is available to gateways"))
     released_at = models.DateTimeField(auto_now_add=True)
 
@@ -338,4 +391,3 @@ def auto_generate_dashboard_on_template_match(sender, instance, **kwargs):
         except Exception as e:
             logger = logging.getLogger("novena_hub")
             logger.error("Failed to auto-generate dashboard for device %s: %s", instance.name, e)
-

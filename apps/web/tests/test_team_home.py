@@ -31,5 +31,7 @@ class TeamHomeRoutingTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "web/app_home.html")
         self.assertContains(response, "Command Center")
+        self.assertContains(response, 'id="app-shell"')
+        self.assertContains(response, 'hx-select="#app-shell"')
         site_detail_url = reverse("web_team:devices:site_detail", args=[self.team.slug, site.pk])
         self.assertNotEqual(getattr(response, "url", None), site_detail_url)

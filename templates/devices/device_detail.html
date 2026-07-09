@@ -53,8 +53,23 @@
         </div>
     </div>
 
+    {% if latest_readings %}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        {% for reading in latest_readings %}
+        <div class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm">
+            <p class="text-[11px] font-bold uppercase tracking-wide text-base-content/45 truncate">{{ reading.label }}</p>
+            <div class="mt-2 flex items-baseline gap-1">
+                <span id="latest-value-{{ reading.key }}" class="text-2xl font-mono font-bold text-base-content">{{ reading.display_value }}</span>
+                {% if reading.unit %}<span class="text-xs font-semibold text-base-content/45">{{ reading.unit }}</span>{% endif %}
+            </div>
+            {% if reading.timestamp %}<p class="mt-1 text-[10px] text-base-content/40">{{ reading.timestamp|timesince }} ago</p>{% else %}<p class="mt-1 text-[10px] text-base-content/40">Waiting for sample</p>{% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     {% if ai_insights %}
-    <div class="mb-8 p-6 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl shadow-lg border border-indigo-500/30 relative overflow-hidden">
+    <div class="mb-8 p-6 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-lg shadow-lg border border-indigo-500/30 relative overflow-hidden">
         <!-- Decoration -->
         <div class="absolute -right-4 -bottom-4 opacity-10">
             <i class="fa fa-brain text-8xl text-white"></i>
@@ -67,7 +82,7 @@
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {% for insight in ai_insights %}
-                <div class="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/10 flex items-start">
+                <div class="bg-white/10 backdrop-blur-md rounded-md p-4 border border-white/10 flex items-start">
                     <div class="mr-3 mt-0.5">
                         {% if insight.type == 'anomaly' %}
                         <i class="fa fa-exclamation-triangle text-amber-300"></i>
@@ -77,37 +92,6 @@
                     </div>
                     <div>
                         <p class="text-sm font-medium text-white">{{ insight.message }}</p>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- AI Insights Section (Preserved) -->
-    {% if ai_insights %}
-    <div class="mb-8 p-6 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-3xl shadow-lg border border-indigo-500/30 relative overflow-hidden">
-        <div class="absolute -right-4 -bottom-4 opacity-10">
-            <i class="fa fa-brain text-8xl text-white"></i>
-        </div>
-        <div class="relative z-10">
-            <div class="flex items-center mb-4 text-white">
-                <i class="fa fa-sparkles mr-2 text-indigo-300"></i>
-                <h3 class="text-xs font-black uppercase tracking-widest opacity-80">AI Fleet Insights</h3>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {% for insight in ai_insights %}
-                <div class="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 flex items-start group hover:bg-white/20 transition-all">
-                    <div class="mr-3 mt-0.5">
-                        {% if insight.type == 'anomaly' %}
-                        <i class="fa fa-exclamation-triangle text-amber-300 animate-pulse"></i>
-                        {% else %}
-                        <i class="fa fa-chart-line text-green-300"></i>
-                        {% endif %}
-                    </div>
-                    <div>
-                        <p class="text-sm font-medium text-white leading-snug">{{ insight.message }}</p>
                     </div>
                 </div>
                 {% endfor %}
@@ -129,11 +113,11 @@
         </div>
         
         <div class="flex items-center space-x-3">
-            <a href="{% url 'web_team:telemetry:telemetry_analyzer' request.team.slug device.id %}" class="btn btn-ghost btn-sm rounded-xl text-indigo-500 font-black text-xs uppercase tracking-widest bg-indigo-500/5 hover:bg-indigo-500/10 transition-all border border-indigo-500/10">
+            <a href="{% url 'web_team:telemetry:telemetry_analyzer' request.team.slug device.id %}" class="btn btn-ghost btn-sm rounded-md text-indigo-500 font-black text-xs uppercase tracking-widest bg-indigo-500/5 hover:bg-indigo-500/10 transition-all border border-indigo-500/10">
                 <i class="fa fa-history mr-2"></i> History & Export
             </a>
 
-            <div class="flex items-center space-x-2 bg-base-100 p-1.5 rounded-2xl border border-base-content/5 shadow-sm">
+            <div class="flex items-center space-x-2 bg-base-100 p-1.5 rounded-lg border border-base-content/5 shadow-sm">
                 <i class="fa fa-bolt text-indigo-500 animate-pulse ml-2 text-xs"></i>
                 <span class="text-[10px] font-black uppercase tracking-widest text-base-content/40 mr-1">Live Feed:</span>
                 <span id="streaming-latency-badge" class="text-xs font-bold text-indigo-600 mr-2 uppercase">Connecting...</span>
@@ -190,7 +174,7 @@
 
                     if (data.metrics.length === 0) {
                         container.innerHTML = `
-                            <div class="col-span-full py-20 text-center bg-base-100 rounded-3xl border border-dashed border-base-content/10">
+                            <div class="col-span-full py-20 text-center bg-base-100 rounded-lg border border-dashed border-base-content/10">
                                 <i class="fa fa-database text-4xl text-base-content/10 mb-4"></i>
                                 <h3 class="text-lg font-bold text-base-content/40">No Telemetry Recorded</h3>
                                 <p class="text-sm text-base-content/30 mt-1">Once the sensors start transmitting, charts will appear here automatically.</p>
@@ -239,7 +223,7 @@
         function createMetricCard(metric) {
             const container = document.getElementById('metrics-container');
             const card = document.createElement('div');
-            card.className = "bg-base-100 rounded-3xl p-6 border border-base-content/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)] col-span-6";
+            card.className = "bg-base-100 rounded-lg p-6 border border-base-content/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)] col-span-6";
             card.innerHTML = `
                 <div class="flex items-center justify-between mb-4">
                     <div>
@@ -249,7 +233,7 @@
                             <span class="text-xs font-bold text-base-content/30 uppercase tracking-tighter">${metric.unit}</span>
                         </div>
                     </div>
-                    <div class="p-2 bg-base-200 rounded-xl">
+                    <div class="p-2 bg-base-200 rounded-md">
                           <i class="fa fa-chart-area text-base-content/20 text-sm"></i>
                     </div>
                 </div>
@@ -562,7 +546,7 @@
             <div id="metrics-container" class="grid grid-cols-1 md:grid-cols-12 gap-6">
                 {% if widgets %}
                     {% for widget in widgets %}
-                        <div class="col-span-12 md:col-span-{{ widget.width }} bg-base-100 rounded-3xl p-6 border border-base-content/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)] flex flex-col justify-between" id="widget-card-{{ widget.telemetry_key }}">
+                        <div class="col-span-12 md:col-span-{{ widget.width }} bg-base-100 rounded-lg p-6 border border-base-content/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.2)] flex flex-col justify-between" id="widget-card-{{ widget.telemetry_key }}">
                             {% if widget.widget_type == 'timeseries' %}
                                 <div class="flex items-center justify-between mb-4">
                                     <div>
@@ -572,7 +556,7 @@
                                             <span class="text-xs font-bold text-base-content/30 uppercase tracking-tighter">{{ widget.unit }}</span>
                                         </div>
                                     </div>
-                                    <div class="p-2 bg-base-200 rounded-xl">
+                                    <div class="p-2 bg-base-200 rounded-md">
                                          <i class="fa fa-chart-area text-base-content/20 text-sm"></i>
                                     </div>
                                 </div>
@@ -604,7 +588,7 @@
                             {% else %}
                                 <div class="flex items-center justify-between mb-4">
                                     <h4 class="text-xs font-black uppercase tracking-widest text-base-content/40">{{ widget.title }}</h4>
-                                    <div class="p-2 bg-base-200 rounded-xl">
+                                    <div class="p-2 bg-base-200 rounded-md">
                                          <i class="fa fa-database text-base-content/20 text-sm"></i>
                                     </div>
                                 </div>
@@ -617,18 +601,18 @@
                     {% endfor %}
                 {% else %}
                     <!-- Skeleton Loaders -->
-                    <div class="bg-base-100 rounded-3xl p-6 border border-base-content/5 animate-pulse h-64 col-span-6"></div>
-                    <div class="bg-base-100 rounded-3xl p-6 border border-base-content/5 animate-pulse h-64 col-span-6"></div>
+                    <div class="bg-base-100 rounded-lg p-6 border border-base-content/5 animate-pulse h-64 col-span-6"></div>
+                    <div class="bg-base-100 rounded-lg p-6 border border-base-content/5 animate-pulse h-64 col-span-6"></div>
                 {% endif %}
             </div>
 
             <!-- Live Telemetry Samples -->
-            <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                 <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
                         <h3 class="text-sm font-black uppercase tracking-widest text-gray-500">Live Telemetry Samples</h3>
                     </div>
-                    <select id="telemetry-sample-limit" class="select select-bordered select-sm rounded-xl text-xs font-bold bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
+                    <select id="telemetry-sample-limit" class="select select-bordered select-sm rounded-md text-xs font-bold bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
                         <option value="10">10 samples</option>
                         <option value="20" selected>20 samples</option>
                         <option value="30">30 samples</option>
@@ -658,10 +642,10 @@
 
             <!-- ── Section 1: Quick Controls (writable registers) ── -->
             {% if writable_registers %}
-            <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                 <div class="p-6 border-b border-gray-100 dark:border-gray-700 bg-indigo-50/30 dark:bg-indigo-900/10">
                     <div class="flex items-center space-x-3">
-                        <div class="p-2 bg-indigo-600 rounded-xl text-white">
+                        <div class="p-2 bg-indigo-600 rounded-md text-white">
                             <i class="fa fa-sliders"></i>
                         </div>
                         <div>
@@ -681,11 +665,11 @@
                         {% if reg.control == 'toggle' %}
                         <div class="flex items-center space-x-3">
                             <button onclick="sendWriteCommand('{{ reg.key }}', {{ reg.functionCode }}, {{ reg.address }}, 0, '{{ reg.type }}', '{{ reg.labels.0|default:"OFF" }}')"
-                                    class="flex-1 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-700 text-xs font-bold hover:bg-red-600 hover:text-white transition-all">
+                                    class="flex-1 py-2.5 rounded-md bg-gray-100 dark:bg-gray-700 text-xs font-bold hover:bg-red-600 hover:text-white transition-all">
                                 {{ reg.labels.0|default:"OFF" }}
                             </button>
                             <button onclick="sendWriteCommand('{{ reg.key }}', {{ reg.functionCode }}, {{ reg.address }}, 1, '{{ reg.type }}', '{{ reg.labels.1|default:"ON" }}')"
-                                    class="flex-1 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-700 text-xs font-bold hover:bg-green-600 hover:text-white transition-all">
+                                    class="flex-1 py-2.5 rounded-md bg-gray-100 dark:bg-gray-700 text-xs font-bold hover:bg-green-600 hover:text-white transition-all">
                                 {{ reg.labels.1|default:"ON" }}
                             </button>
                         </div>
@@ -699,7 +683,7 @@
                             </div>
                             <input type="range" x-model="val" class="range range-indigo range-sm w-full" min="{{ reg.min }}" max="{{ reg.max }}">
                             <button @click="sendWriteCommand('{{ reg.key }}', {{ reg.functionCode }}, {{ reg.address }}, Number(val), '{{ reg.type }}')"
-                                    class="w-full py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-all">
+                                    class="w-full py-2 rounded-md bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-all">
                                 Set {{ reg.label }}
                             </button>
                         </div>
@@ -708,11 +692,11 @@
                         <div class="flex items-center space-x-3" x-data="{val: ''}">
                             <div class="relative flex-1">
                                 <input type="number" x-model="val" min="{{ reg.min }}" max="{{ reg.max }}" placeholder="{{ reg.min }}–{{ reg.max }}"
-                                       class="input input-bordered input-sm w-full pr-12 rounded-xl font-mono">
+                                       class="input input-bordered input-sm w-full pr-12 rounded-md font-mono">
                                 <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">{{ reg.unit }}</span>
                             </div>
                             <button @click="sendWriteCommand('{{ reg.key }}', {{ reg.functionCode }}, {{ reg.address }}, Number(val), '{{ reg.type }}')"
-                                    class="py-2 px-4 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-all whitespace-nowrap">
+                                    class="py-2 px-4 rounded-md bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-all whitespace-nowrap">
                                 Set
                             </button>
                         </div>
@@ -730,10 +714,10 @@
 
             <!-- ── Section 2: On-Demand Read ── -->
             {% if readable_registers %}
-            <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                 <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
                     <div class="flex items-center space-x-3">
-                        <div class="p-2 bg-emerald-600 rounded-xl text-white">
+                        <div class="p-2 bg-emerald-600 rounded-md text-white">
                             <i class="fa fa-eye"></i>
                         </div>
                         <div>
@@ -741,7 +725,7 @@
                             <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mt-1">Live register values</p>
                         </div>
                     </div>
-                    <button onclick="readAllRegisters()" class="btn btn-ghost btn-xs rounded-xl text-emerald-600 font-bold text-[10px] uppercase tracking-widest bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100">
+                    <button onclick="readAllRegisters()" class="btn btn-ghost btn-xs rounded-md text-emerald-600 font-bold text-[10px] uppercase tracking-widest bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100">
                         <i class="fa fa-refresh mr-1"></i> Read All
                     </button>
                 </div>
@@ -767,10 +751,10 @@
 
             <!-- ── Section 3: Advanced Controls (collapsible) ── -->
             {% if rpc_url %}
-            <div x-data="{showAdvanced: false}" class="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div x-data="{showAdvanced: false}" class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                 <button @click="showAdvanced = !showAdvanced" class="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-all">
                     <div class="flex items-center space-x-3">
-                        <div class="p-2 bg-gray-500 rounded-xl text-white">
+                        <div class="p-2 bg-gray-500 rounded-md text-white">
                             <i class="fa fa-terminal"></i>
                         </div>
                         <div class="text-left">
@@ -786,14 +770,14 @@
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Operation</label>
-                                <select x-model="operation" @change="updateFcOptions()" class="select select-bordered select-sm w-full rounded-xl text-xs">
+                                <select x-model="operation" @change="updateFcOptions()" class="select select-bordered select-sm w-full rounded-md text-xs">
                                     <option value="read">Read</option>
                                     <option value="write">Write</option>
                                 </select>
                             </div>
                             <div>
                                 <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Function Code</label>
-                                <select x-model="fc" class="select select-bordered select-sm w-full rounded-xl text-xs">
+                                <select x-model="fc" class="select select-bordered select-sm w-full rounded-md text-xs">
                                     <template x-for="opt in fcOptions" :key="opt.value">
                                         <option :value="opt.value" x-text="opt.label"></option>
                                     </template>
@@ -803,11 +787,11 @@
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Register Address</label>
-                                <input type="number" x-model="address" min="0" class="input input-bordered input-sm w-full rounded-xl font-mono text-xs" placeholder="0">
+                                <input type="number" x-model="address" min="0" class="input input-bordered input-sm w-full rounded-md font-mono text-xs" placeholder="0">
                             </div>
                             <div>
                                 <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Data Type</label>
-                                <select x-model="dataType" class="select select-bordered select-sm w-full rounded-xl text-xs">
+                                <select x-model="dataType" class="select select-bordered select-sm w-full rounded-md text-xs">
                                     <option value="16uint">16-bit Unsigned</option>
                                     <option value="16int">16-bit Signed</option>
                                     <option value="32float">32-bit Float</option>
@@ -820,22 +804,22 @@
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Count</label>
-                                <input type="number" x-model="count" min="1" max="125" class="input input-bordered input-sm w-full rounded-xl font-mono text-xs" placeholder="1">
+                                <input type="number" x-model="count" min="1" max="125" class="input input-bordered input-sm w-full rounded-md font-mono text-xs" placeholder="1">
                             </div>
                             <div x-show="operation === 'write'">
                                 <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Value</label>
-                                <input type="number" x-model="value" class="input input-bordered input-sm w-full rounded-xl font-mono text-xs" placeholder="0">
+                                <input type="number" x-model="value" class="input input-bordered input-sm w-full rounded-md font-mono text-xs" placeholder="0">
                             </div>
                         </div>
                         <div class="flex space-x-3">
-                            <button @click="sendAdvancedCommand()" class="flex-1 py-2.5 rounded-xl text-white text-xs font-bold transition-all"
+                            <button @click="sendAdvancedCommand()" class="flex-1 py-2.5 rounded-md text-white text-xs font-bold transition-all"
                                     :class="operation === 'write' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'">
                                 <i class="fa mr-1" :class="operation === 'write' ? 'fa-pen' : 'fa-eye'"></i>
                                 <span x-text="operation === 'write' ? 'Write Register' : 'Read Register'"></span>
                             </button>
                         </div>
                         <!-- Result display -->
-                        <div id="advanced-result" class="hidden rounded-xl bg-gray-50 dark:bg-gray-900/50 p-4">
+                        <div id="advanced-result" class="hidden rounded-md bg-gray-50 dark:bg-gray-900/50 p-4">
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Result</span>
                                 <span id="advanced-result-time" class="text-[10px] text-gray-400 font-mono"></span>
@@ -843,7 +827,7 @@
                             <pre id="advanced-result-data" class="text-xs font-mono text-gray-700 dark:text-gray-300 whitespace-pre-wrap"></pre>
                         </div>
 
-                        <div class="p-3 bg-amber-50 dark:bg-amber-900/10 rounded-xl border border-amber-100 dark:border-amber-900/20">
+                        <div class="p-3 bg-amber-50 dark:bg-amber-900/10 rounded-md border border-amber-100 dark:border-amber-900/20">
                             <p class="text-[10px] text-amber-700 dark:text-amber-500 font-medium leading-relaxed">
                                 <i class="fa fa-triangle-exclamation mr-1"></i> <strong>Expert mode.</strong> Incorrect register writes can damage equipment. Use only if you know the device's register map.
                             </p>
@@ -854,7 +838,7 @@
             {% endif %}
 
             <!-- ── Metadata Card ── -->
-            <div class="bg-white dark:bg-gray-800 shadow-sm rounded-3xl overflow-hidden border border-gray-100 dark:border-gray-700">
+            <div class="bg-white dark:bg-gray-800 shadow-sm rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700">
                 <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
                     <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Device Identity</h3>
                 </div>
@@ -878,7 +862,7 @@
 
 
             <!-- Command History -->
-            <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                 <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
                     <h3 class="text-sm font-black uppercase tracking-widest text-gray-500">Command Audit Trail</h3>
                 </div>
@@ -897,8 +881,13 @@
                             <tr>
                                 <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500 font-mono">{{ command.requested_at|date:"H:i:s" }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-xs">
-                                    <span class="font-bold text-indigo-600 dark:text-indigo-400">{{ command.command_key }}</span>
+                                    <span class="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-black uppercase tracking-widest {% if command.command_type == 'read' %}bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300{% else %}bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300{% endif %}">
+                                        {{ command.command_type }}
+                                    </span>
+                                    <span class="font-bold text-indigo-600 dark:text-indigo-400 ml-2">{{ command.command_key }}</span>
+                                    {% if command.command_type == 'write' %}
                                     <span class="text-gray-400 ml-1">→ {{ command.value }}</span>
+                                    {% endif %}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500">{{ command.created_by.get_display_name }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap">
@@ -919,7 +908,7 @@
 
     <!-- ── Device Control JS ── -->
     <script>
-    const RPC_URL = "{{ rpc_url }}";
+    const COMMAND_URL = "{{ command_url }}";
     const CSRF = "{{ csrf_token }}";
 
     function getCookie(name) {
@@ -927,33 +916,48 @@
         return v ? v.pop() : '';
     }
 
-    async function rpcCall(method, params) {
-        const res = await fetch(RPC_URL, {
+    async function commandCall(commandType, key, value, params = null) {
+        const body = new URLSearchParams({command_type: commandType, key});
+        if (value !== null && value !== undefined) body.set('value', value);
+        if (params) body.set('params', JSON.stringify({...params, command_key: key}));
+        const res = await fetch(COMMAND_URL, {
             method: 'POST',
             headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': getCookie('csrftoken')},
-            body: new URLSearchParams({method, params: JSON.stringify(params)})
+            body
         });
         return res.json();
     }
 
-    async function pollRpcResult(requestId, maxAttempts = 15) {
-        const statusUrl = RPC_URL.replace(/command\/?$/, 'rpc-status/' + requestId + '/');
+    async function pollCommandResult(transactionId, maxAttempts = 15) {
+        const statusUrl = COMMAND_URL.replace(/command\/?$/, 'command/status/' + transactionId + '/?format=json');
         for (let i = 0; i < maxAttempts; i++) {
             await new Promise(r => setTimeout(r, 1000));
             try {
                 const res = await fetch(statusUrl);
                 const data = await res.json();
-                if (data.status !== 'pending') return data;
+                if (data.status !== 'pending' && data.status !== 'sent') return data;
             } catch (e) { /* retry */ }
         }
-        return {status: 'timeout', result: null, error: 'Timed out waiting for response'};
+        return {status: 'timed_out', result: null, error: 'Timed out waiting for response'};
     }
 
     function setStatus(elId, status, text) {
         const el = document.getElementById(elId);
         if (!el) return;
-        const colors = {pending: 'text-yellow-500', success: 'text-green-500', error: 'text-red-500', timeout: 'text-gray-400'};
-        const icons = {pending: 'fa-spinner fa-spin', success: 'fa-check-circle', error: 'fa-times-circle', timeout: 'fa-clock'};
+        const colors = {
+            pending: 'text-yellow-500',
+            sent: 'text-blue-500',
+            executed: 'text-green-500',
+            failed: 'text-red-500',
+            timed_out: 'text-gray-400'
+        };
+        const icons = {
+            pending: 'fa-spinner fa-spin',
+            sent: 'fa-paper-plane',
+            executed: 'fa-check-circle',
+            failed: 'fa-times-circle',
+            timed_out: 'fa-clock'
+        };
         el.innerHTML = `<span class="${colors[status] || 'text-gray-400'} font-bold text-xs"><i class="fa ${icons[status] || 'fa-circle'} mr-1"></i>${text || status}</span>`;
     }
 
@@ -963,10 +967,11 @@
         try {
             const params = {functionCode: fc, address: address, value: value};
             if (dataType && dataType !== 'bool') params.type = dataType;
-            const data = await rpcCall('write_device', params);
+            const data = await commandCall('write', key, value, params);
+            if (data.error) throw new Error(data.error);
             setStatus(statusEl, 'pending', 'Waiting...');
-            const result = await pollRpcResult(data.request_id);
-            setStatus(statusEl, result.status, result.status === 'success' ? (label || 'Done') : (result.error || 'Failed'));
+            const result = await pollCommandResult(data.transaction_id);
+            setStatus(statusEl, result.status, result.status === 'executed' ? (label || 'Done') : (result.error || 'Failed'));
         } catch (e) {
             setStatus(statusEl, 'error', 'Send failed');
         }
@@ -978,11 +983,13 @@
         try {
             const params = {functionCode: fc, address: address, objectsCount: count};
             if (dataType) params.type = dataType;
-            const data = await rpcCall('read_device', params);
-            const result = await pollRpcResult(data.request_id);
+            const data = await commandCall('read', key, null, params);
+            if (data.error) throw new Error(data.error);
+            const result = await pollCommandResult(data.transaction_id);
             if (valEl) {
-                if (result.status === 'success' && result.result) {
-                    const val = result.result.value !== undefined ? result.result.value : JSON.stringify(result.result);
+                if (result.status === 'executed' && result.result) {
+                    const response = result.result.response || result.result;
+                    const val = response.value !== undefined ? response.value : JSON.stringify(response);
                     valEl.textContent = val;
                 } else {
                     valEl.innerHTML = '<span class="text-red-400 text-[10px]">Error</span>';
@@ -1047,7 +1054,6 @@
                 resultData.textContent = 'Sending...';
                 resultTime.textContent = '';
 
-                const method = this.operation === 'write' ? 'write_device' : 'read_device';
                 const params = {
                     functionCode: parseInt(this.fc),
                     address: parseInt(this.address),
@@ -1059,9 +1065,12 @@
                     params.value = parseFloat(this.value);
                 }
                 try {
-                    const data = await rpcCall(method, params);
+                    const key = this.operation === 'write' ? 'advanced_write' : 'advanced_read';
+                    const value = this.operation === 'write' ? params.value : null;
+                    const data = await commandCall(this.operation, key, value, params);
+                    if (data.error) throw new Error(data.error);
                     resultData.textContent = 'Waiting for response...';
-                    const result = await pollRpcResult(data.request_id);
+                    const result = await pollCommandResult(data.transaction_id);
                     resultTime.textContent = new Date().toLocaleTimeString();
                     resultData.textContent = JSON.stringify(result.result || {error: result.error}, null, 2);
                 } catch (e) {
@@ -1073,5 +1082,3 @@
     </script>
 </div>
 {% endblock %}
-
-

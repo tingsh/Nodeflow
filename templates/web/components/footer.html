@@ -38,7 +38,9 @@
         <h4 class="text-xs font-black uppercase tracking-widest text-base-content/40 mb-6">Resources</h4>
         <ul class="space-y-4">
           {% slugurl 'blog' as blog_url %}
+          {% if blog_url %}
           <li><a href="{{ blog_url }}" class="text-sm font-bold text-base-content/60 hover:text-indigo-500 transition-colors">Blog</a></li>
+          {% endif %}
           <li><a href="/content/docs/" class="text-sm font-bold text-base-content/60 hover:text-indigo-500 transition-colors">Documentation</a></li>
           <li><a href="/content/faq/" class="text-sm font-bold text-base-content/60 hover:text-indigo-500 transition-colors">FAQ</a></li>
           <li><a href="/api-docs/" class="text-sm font-bold text-base-content/60 hover:text-indigo-500 transition-colors">API Reference</a></li>

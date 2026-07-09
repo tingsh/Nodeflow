@@ -2,8 +2,9 @@ import json
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.utils import timezone
 
-from apps.devices.models import Device, DeviceCommand, Gateway, Site
+from apps.devices.models import Device, DeviceCommand, Gateway, RpcCommand, Site
 from apps.devices.services import process_command_response, send_device_command
 from apps.teams.models import Team
 from apps.users.models import CustomUser
@@ -28,8 +29,13 @@ class DeviceCommandTest(TestCase):
 
     @patch("apps.telemetry.mqtt_publisher.publish_rpc_command")
     def test_send_command_creates_record_and_publishes(self, mock_publish_rpc):
-        from apps.devices.models import RpcCommand
-        mock_rpc = RpcCommand(request_id="12345678-1234-1234-1234-123456789012")
+        mock_rpc = RpcCommand.objects.create(
+            team=self.team,
+            gateway=self.gateway,
+            request_id="12345678-1234-1234-1234-123456789012",
+            method="write_device",
+            params={},
+        )
         mock_publish_rpc.return_value = mock_rpc
 
         command = send_device_command(self.device, self.user, "toggle_switch", True)
@@ -38,6 +44,8 @@ class DeviceCommandTest(TestCase):
         self.assertEqual(command.status, "sent")
         self.assertEqual(command.command_key, "toggle_switch")
         self.assertEqual(command.value, True)
+        self.assertEqual(command.command_type, "write")
+        self.assertEqual(command.rpc_command, mock_rpc)
 
         # Verify MQTT call
         self.assertTrue(mock_publish_rpc.called)
@@ -51,6 +59,34 @@ class DeviceCommandTest(TestCase):
         params = kwargs.get("params") if "params" in kwargs else args[2]
         self.assertEqual(params["device_name"], self.device.name)
         self.assertEqual(params["value"], True)
+
+    @patch("apps.telemetry.mqtt_publisher.publish_rpc_command")
+    def test_send_read_command_creates_audited_record(self, mock_publish_rpc):
+        mock_rpc = RpcCommand.objects.create(
+            team=self.team,
+            gateway=self.gateway,
+            request_id="12345678-1234-1234-1234-123456789013",
+            method="read_device",
+            params={},
+        )
+        mock_publish_rpc.return_value = mock_rpc
+
+        command = send_device_command(
+            self.device,
+            self.user,
+            "manual_read",
+            command_type="read",
+            params={"functionCode": 3, "address": 100, "objectsCount": 2, "type": "32float"},
+        )
+
+        self.assertEqual(command.status, "sent")
+        self.assertEqual(command.command_type, "read")
+        self.assertIsNone(command.value)
+        self.assertEqual(command.rpc_command, mock_rpc)
+        params = mock_publish_rpc.call_args.kwargs["params"]
+        self.assertEqual(params["device_name"], self.device.name)
+        self.assertEqual(params["functionCode"], 3)
+        self.assertEqual(params["objectsCount"], 2)
 
     def test_process_command_response_success(self):
         # Setup a pending command
@@ -71,6 +107,40 @@ class DeviceCommandTest(TestCase):
         self.assertEqual(command.status, "executed")
         self.assertIsNotNone(command.executed_at)
 
+    def test_process_current_rpc_response_updates_linked_device_command(self):
+        rpc = RpcCommand.objects.create(
+            team=self.team,
+            gateway=self.gateway,
+            request_id="12345678-1234-1234-1234-123456789014",
+            method="write_device",
+            params={"device_name": self.device.name},
+        )
+        command = DeviceCommand.objects.create(
+            team=self.team,
+            device=self.device,
+            command_type="write",
+            command_key="set_speed",
+            value=50,
+            transaction_id="test-tx-current",
+            rpc_command=rpc,
+            status="sent",
+        )
+
+        response_payload = json.dumps({
+            "request_id": str(rpc.request_id),
+            "method": "write_device",
+            "status": "success",
+            "result": {"operation": "write", "response": {"success": True}},
+        })
+
+        process_command_response(response_payload)
+
+        rpc.refresh_from_db()
+        command.refresh_from_db()
+        self.assertEqual(rpc.status, "success")
+        self.assertEqual(command.status, "executed")
+        self.assertEqual(command.response_payload["result"]["operation"], "write")
+
     def test_process_command_response_failure(self):
         command = DeviceCommand.objects.create(
             team=self.team,
@@ -90,3 +160,33 @@ class DeviceCommandTest(TestCase):
         command.refresh_from_db()
         self.assertEqual(command.status, "failed")
         self.assertEqual(command.error_message, "Hardware failure")
+
+    def test_rpc_timeout_updates_linked_device_command(self):
+        from datetime import timedelta
+
+        from apps.devices.tasks import check_rpc_timeouts
+
+        rpc = RpcCommand.objects.create(
+            team=self.team,
+            gateway=self.gateway,
+            request_id="12345678-1234-1234-1234-123456789015",
+            method="read_device",
+            params={"device_name": self.device.name},
+        )
+        RpcCommand.objects.filter(pk=rpc.pk).update(sent_at=timezone.now() - timedelta(seconds=90))
+        command = DeviceCommand.objects.create(
+            team=self.team,
+            device=self.device,
+            command_type="read",
+            command_key="manual_read",
+            transaction_id="test-tx-timeout",
+            rpc_command=rpc,
+            status="sent",
+        )
+
+        self.assertEqual(check_rpc_timeouts(), 1)
+
+        rpc.refresh_from_db()
+        command.refresh_from_db()
+        self.assertEqual(rpc.status, "timeout")
+        self.assertEqual(command.status, "timed_out")

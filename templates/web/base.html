@@ -59,8 +59,9 @@
     {% block page_head %}
     {% endblock %}
 </head>
-<body class="bg-base-100 font-sans antialiased text-base-content selection:bg-indigo-500/30" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}' hx-boost="true">
+<body class="bg-base-100 font-sans antialiased text-base-content selection:bg-indigo-500/30" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}' hx-boost="true" hx-target="#app-shell" hx-select="#app-shell" hx-swap="outerHTML show:window:top">
 <div id="loading-bar" class="htmx-indicator"><div class="bar"></div></div>
+<div id="app-shell">
 {% block body_wrapper %}
 {% block top_nav %}
   {% include 'web/components/top_nav.html' %}
@@ -74,6 +75,7 @@
   {% include 'web/components/footer.html' %}
 {% endblock footer %}
 {% endblock body_wrapper %}
+</div>
   {% include 'web/components/messages-js.html' %}
   <script>
     function syncDarkMode() {

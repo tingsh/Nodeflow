@@ -1,8 +1,8 @@
-import contextlib
 import json
 import logging
 
 from django.db import transaction
+from django.contrib.auth.hashers import make_password
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse_lazy
@@ -248,19 +248,12 @@ class GatewayDeleteView(PermissionRequiredMixin, DeleteView):
 
         success_url = self.get_success_url()
 
-        with transaction.atomic():
-            inventory = GatewayInventory.objects.select_for_update().filter(gateway=self.object).first()
-            if inventory:
-                inventory.status = "unclaimed"
-                inventory.gateway = None
-                inventory.claimed_by_team = None
-                inventory.claimed_at = None
-                inventory.save(update_fields=["status", "gateway", "claimed_by_team", "claimed_at"])
+        # Release for self-serve onboarding redo. The Gateway row is preserved so
+        # the same serial number + printed claim code can be used again.
+        self._deprovision_mqtt_credentials()
+        from .services import release_gateway_for_redo
 
-            # Deprovision MQTT credentials from Mosquitto before deleting the gateway.
-            # The gateway is still released if broker cleanup fails, matching the prior delete behavior.
-            self._deprovision_mqtt_credentials()
-            self.object.delete()
+        release_gateway_for_redo(self.object)
 
         return HttpResponseRedirect(success_url)
 
@@ -304,8 +297,9 @@ def gateway_rotate_password(request, team_slug, pk):
     publish_credential_rotation(gateway, new_password)
 
     # 3. Update Cloud DB
-    gateway.mqtt_password = new_password
-    gateway.save(update_fields=["mqtt_password"])
+    gateway.mqtt_password = make_password(new_password)
+    gateway.credential_rotation_status = "pending"
+    gateway.save(update_fields=["mqtt_password", "credential_rotation_status"])
 
     logger.info("Password rotated for gateway %s", gateway.serial_number)
 
@@ -392,21 +386,30 @@ def gateway_rpc_history(request, team_slug, pk):
 @require_permission("manage_devices")
 @require_POST
 def device_rpc_command(request, team_slug, gateway_pk, device_pk):
-    """Send a write/read command to a device via its gateway using RPC."""
-    from apps.telemetry.mqtt_publisher import publish_rpc_command
+    """Compatibility endpoint: routes customer device RPC through DeviceCommand audit."""
+    from .services import send_device_command
 
     gateway = Gateway.objects.get(pk=gateway_pk, team=request.team)
     device = Device.objects.get(pk=device_pk, gateway=gateway)
 
     method = request.POST.get("method")  # 'write_device' or 'read_device'
     params = json.loads(request.POST.get("params", "{}"))
-    params["device_name"] = device.name  # Inject the device name
-
-    rpc = publish_rpc_command(gateway, method, params)
+    command_type = "read" if method == "read_device" else "write"
+    key = params.pop("command_key", f"manual_{command_type}")
+    value = params.get("value")
+    command = send_device_command(
+        device,
+        request.user,
+        key,
+        value,
+        command_type=command_type,
+        params=params,
+    )
 
     return JsonResponse(
         {
-            "request_id": str(rpc.request_id),
+            "request_id": str(command.rpc_command.request_id) if command.rpc_command else None,
+            "transaction_id": str(command.transaction_id),
             "method": method,
             "device": device.name,
             "status": "sent",
@@ -477,73 +480,35 @@ class DeviceDetailView(PermissionRequiredMixin, DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        from apps.dashboard.services import build_device_dashboard_context
+        from apps.subscriptions.enforcement import get_latency_limit_for_team
         from apps.telemetry.anomaly import get_ai_insights
 
+        dashboard_context = build_device_dashboard_context(self.object)
+        context.update(dashboard_context)
         context["ai_insights"] = get_ai_insights(self.object)
         context["recent_commands"] = self.object.commands.all().order_by("-requested_at")[:10]
-
-        from apps.subscriptions.enforcement import get_latency_limit_for_team
 
         latency_limit_seconds = get_latency_limit_for_team(self.object.team)
         context["telemetry_fallback_interval_ms"] = int(max(5.0, latency_limit_seconds) * 1000)
 
-        # Build structured register data from template
-        readable_registers = []
-        writable_registers = []
-        writable_keys = []  # backward compat for old toggle/slider controls
-        has_template = bool(self.object.template and self.object.template.register_map)
+        # Backward compatibility for existing control JavaScript/template code.
+        context["writable_keys"] = [
+            {"key": reg["key"], "label": reg["label"], "type": reg["config"].get("control", "toggle")}
+            for reg in context["writable_registers"]
+        ]
 
-        if has_template:
-            for key, config in self.object.template.register_map.items():
-                if not isinstance(config, dict):
-                    continue
-                reg = {
-                    "key": key,
-                    "label": config.get("label", key.replace("_", " ").title()),
-                    "address": config.get("address", 0),
-                    "functionCode": config.get("functionCode", 3),
-                    "type": config.get("type", "uint16"),
-                    "unit": config.get("unit", ""),
-                    "objectsCount": config.get("objectsCount", 1),
-                }
-                if config.get("writable"):
-                    reg.update({
-                        "control": config.get("control", "input"),
-                        "min": config.get("min", 0),
-                        "max": config.get("max", 65535),
-                        "labels": config.get("labels", ["OFF", "ON"]),
-                    })
-                    writable_registers.append(reg)
-                    # backward compat
-                    writable_keys.append({
-                        "key": key,
-                        "label": reg["label"],
-                        "type": config.get("control", "toggle"),
-                    })
-                else:
-                    readable_registers.append(reg)
-
-        context["readable_registers"] = readable_registers
-        context["writable_registers"] = writable_registers
-        context["writable_keys"] = writable_keys
-        context["has_template"] = has_template
-
-        # Get auto-generated dashboard and widgets
-        from apps.dashboard.models import Dashboard
-        dashboard = Dashboard.objects.filter(device=self.object, is_default=True).first()
-        context["dashboard"] = dashboard
-        if dashboard:
-            context["widgets"] = dashboard.widgets.all()
-        else:
-            context["widgets"] = []
-
-        # RPC endpoint URL (needs gateway_pk and device_pk)
         if self.object.gateway_id:
+            context["command_url"] = reverse_lazy(
+                "web_team:devices:device_send_command",
+                args=[self.request.team.slug, self.object.pk],
+            )
             context["rpc_url"] = reverse_lazy(
                 "web_team:devices:device_rpc_command",
                 args=[self.request.team.slug, self.object.gateway_id, self.object.pk],
             )
         else:
+            context["command_url"] = ""
             context["rpc_url"] = ""
 
         return context
@@ -557,25 +522,45 @@ def device_send_command(request, team_slug, pk):
     from django.shortcuts import get_object_or_404
 
     device = get_object_or_404(Device, pk=pk, team=request.team)
-    key = request.POST.get("key")
-    value = request.POST.get("value")
-
-    # Handle value types
-    if value.lower() == "true":
-        value = True
-    elif value.lower() == "false":
-        value = False
-    else:
-        with contextlib.suppress(ValueError):
-            value = float(value)
+    command_type = request.POST.get("command_type") or request.POST.get("type") or "write"
+    method = request.POST.get("method", "")
+    if method == "read_device":
+        command_type = "read"
+    elif method == "write_device":
+        command_type = "write"
+    key = request.POST.get("key") or request.POST.get("command_key") or f"manual_{command_type}"
+    raw_value = request.POST.get("value")
+    params = None
+    if request.POST.get("params"):
+        params = json.loads(request.POST.get("params", "{}"))
+        key = params.pop("command_key", key)
 
     try:
         from .services import send_device_command
 
-        command = send_device_command(device, request.user, key, value)
-        return render(request, "devices/partials/command_status_badge.html", {"command": command})
+        command = send_device_command(
+            device,
+            request.user,
+            key,
+            raw_value,
+            command_type=command_type,
+            params=params,
+        )
+        if request.headers.get("HX-Request"):
+            return render(request, "devices/partials/command_status_badge.html", {"command": command})
+        return JsonResponse(
+            {
+                "transaction_id": str(command.transaction_id),
+                "status": command.status,
+                "command_type": command.command_type,
+                "command_key": command.command_key,
+                "rpc_request_id": str(command.rpc_command.request_id) if command.rpc_command else None,
+            }
+        )
     except Exception as e:
-        return HttpResponse(f'<span class="text-error text-xs font-bold">{str(e)}</span>', status=400)
+        if request.headers.get("HX-Request"):
+            return HttpResponse(f'<span class="text-error text-xs font-bold">{str(e)}</span>', status=400)
+        return JsonResponse({"error": str(e)}, status=400)
 
 
 @require_permission("view_devices")
@@ -585,6 +570,19 @@ def device_command_status(request, team_slug, pk, tx_id):
     from .models import DeviceCommand
 
     command = get_object_or_404(DeviceCommand, transaction_id=tx_id, team=request.team)
+    if request.GET.get("format") == "json" or "application/json" in request.headers.get("Accept", ""):
+        result = command.response_payload.get("result") if isinstance(command.response_payload, dict) else None
+        return JsonResponse(
+            {
+                "transaction_id": str(command.transaction_id),
+                "status": command.status,
+                "command_type": command.command_type,
+                "command_key": command.command_key,
+                "result": result,
+                "response_payload": command.response_payload,
+                "error": command.error_message or None,
+            }
+        )
     return render(request, "devices/partials/command_status_badge.html", {"command": command})
 
 
@@ -802,6 +800,9 @@ def gateway_discovery_api(request, team_slug):
         discovered = data.get("discovered_devices", [])
 
         gateway = Gateway.objects.get(serial_number=serial)
+        from .discovery_matching import enrich_discovered_device
+
+        discovered = [enrich_discovered_device(device) for device in discovered]
 
         # Store for the UI to display
         gateway.discovery_data = {"last_discovered_at": str(timezone.now()), "devices": discovered}
@@ -965,9 +966,26 @@ def gateway_ota_update(request, team_slug, pk):
         return HttpResponse("Firmware release not found.", status=404)
 
     url = request.build_absolute_uri(release.file.url)
+    sha256 = release.sha256
+    if not sha256 and release.file:
+        import hashlib
+
+        h = hashlib.sha256()
+        release.file.open("rb")
+        try:
+            for chunk in iter(lambda: release.file.read(1024 * 1024), b""):
+                h.update(chunk)
+        finally:
+            release.file.close()
+        sha256 = h.hexdigest()
+        release.sha256 = sha256
+        release.size_bytes = release.file.size
+        release.save(update_fields=["sha256", "size_bytes"])
+
     params = {
         "version": release.version,
         "url": url,
+        "sha256": sha256,
         "token": "novena_internal_token_mock",
     }
 
@@ -982,4 +1000,3 @@ def gateway_ota_update(request, team_slug, pk):
         f'</div>'
         f'</div>'
     )
-

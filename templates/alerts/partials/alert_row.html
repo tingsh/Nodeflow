@@ -1,8 +1,16 @@
 {% load team_permissions %}
 <tr id="alert-row-{{ alert.id }}" class="hover:bg-gray-50 dark:hover:bg-gray-900/50 transition">
-    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{{ alert.rule.name }}</td>
+    <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
+        <div>{{ alert.rule.name }}</div>
+        <div class="mt-1 text-xs font-normal text-gray-500 dark:text-gray-400">
+            Rule: {{ alert.metric_label }} {{ alert.threshold_display }}
+        </div>
+    </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ alert.device.name }}</td>
-    <td class="px-6 py-4 whitespace-nowrap text-sm font-mono font-bold text-red-600">{{ alert.trigger_value|floatformat:2 }}</td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm">
+        <div class="font-mono font-bold text-red-600">{{ alert.trigger_value_display }}</div>
+        <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ alert.metric_label }}</div>
+    </td>
     <td class="px-6 py-4 whitespace-nowrap">
         <span class="px-2 py-1 text-xs font-medium rounded-full
             {% if alert.rule.severity == 'critical' %}bg-red-100 text-red-800
@@ -20,7 +28,10 @@
             {{ alert.get_status_display }}
         </span>
     </td>
-    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+    <td class="px-6 py-4 text-right text-sm font-medium">
+        <div class="mb-2 text-xs text-gray-500 dark:text-gray-400 max-w-xs text-right">
+            {{ alert.next_action_display }}
+        </div>
         <div class="flex items-center justify-end space-x-3">
             <!-- Ticket linkage -->
             {% if alert.ticket %}

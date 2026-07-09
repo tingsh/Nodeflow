@@ -95,6 +95,47 @@ class Alert(BaseTeamModel):
         from apps.maintenance.models import MaintenanceTicket
         return MaintenanceTicket.objects.filter(alert_reference=str(self.id), team=self.team).first()
 
+    @property
+    def metric_config(self):
+        register_map = getattr(getattr(self.device, "template", None), "register_map", None) or {}
+        config = register_map.get(self.rule.telemetry_key, {})
+        return config if isinstance(config, dict) else {}
+
+    @property
+    def metric_label(self):
+        return self.metric_config.get("label") or self.rule.telemetry_key.replace("_", " ").title()
+
+    @property
+    def metric_unit(self):
+        return self.metric_config.get("unit", "")
+
+    @property
+    def threshold_display(self):
+        condition_labels = {
+            "gt": "above",
+            "gte": "at or above",
+            "lt": "below",
+            "lte": "at or below",
+            "eq": "equal to",
+            "neq": "not equal to",
+        }
+        unit = f" {self.metric_unit}" if self.metric_unit else ""
+        condition = condition_labels.get(self.rule.condition, self.rule.get_condition_display())
+        return f"{condition} {self.rule.threshold:g}{unit}"
+
+    @property
+    def trigger_value_display(self):
+        unit = f" {self.metric_unit}" if self.metric_unit else ""
+        return f"{self.trigger_value:g}{unit}"
+
+    @property
+    def next_action_display(self):
+        ticket = self.ticket
+        if ticket:
+            return f"Open TKT-{ticket.id}, confirm the device reading, then inspect or assign a contractor."
+        if self.status == "resolved":
+            return "Review the recovery and keep monitoring this device."
+        return "Acknowledge the alert, then create a maintenance ticket if work is needed."
+
     def __str__(self):
         return f"{self.rule.name} on {self.device.name} @ {self.triggered_at}"
-

@@ -54,16 +54,23 @@ def check_gateway_heartbeats():
 def check_rpc_timeouts():
     '''Marks pending RPC commands as timed out if no response received within 60 seconds.'''
     from .models import RpcCommand
+    from .services import sync_device_command_from_rpc
 
     timeout = timedelta(seconds=60)
     cutoff = timezone.now() - timeout
 
-    timed_out = RpcCommand.objects.filter(
+    timed_out = list(RpcCommand.objects.filter(
         status='pending',
         sent_at__lt=cutoff,
-    )
+    ))
 
-    count = timed_out.update(status='timeout')
+    count = 0
+    for rpc in timed_out:
+        rpc.status = 'timeout'
+        rpc.error_message = rpc.error_message or 'Timed out waiting for gateway response.'
+        rpc.save(update_fields=['status', 'error_message', 'updated_at'])
+        sync_device_command_from_rpc(rpc)
+        count += 1
     if count:
         logger.info('Marked %d RPC command(s) as timed out', count)
 

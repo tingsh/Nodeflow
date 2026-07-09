@@ -138,9 +138,10 @@ def add_ticket_comment(request, team_slug, pk):
 
         return HttpResponseForbidden()
 
-    form = TicketCommentForm(request.POST)
+    form = TicketCommentForm(request.POST, request.FILES)
     if form.is_valid():
         comment = form.save(commit=False)
+        comment.team = team
         comment.ticket = ticket
         comment.author = request.user
         comment.save()
@@ -420,4 +421,3 @@ def trigger_preventive_schedule(request, team_slug, pk):
 
     messages.success(request, f"Generated ticket TKT-{ticket.id} successfully.")
     return redirect("web_team:maintenance:ticket_detail", team_slug=request.team.slug, pk=ticket.id)
-

@@ -36,6 +36,7 @@ PERMISSIONS = {
     "manage_automations": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER],
     "view_automations": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER],
     "manage_team": [ROLE_OWNER, ROLE_ADMIN],
+    "delete_team": [ROLE_OWNER],
     "manage_billing": [ROLE_OWNER],
     "manage_shared_links": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER],
     "manage_maintenance": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER],

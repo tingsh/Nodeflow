@@ -183,23 +183,9 @@ def device_telemetry_samples_api(request, team_slug, device_id):
 
 
 def get_retention_limit_days(team) -> int:
-    if not team or not team.has_active_subscription():
-        return 7  # Default to Starter tier for unsubscribed teams
+    from apps.subscriptions.enforcement import get_retention_limit_days_for_team
 
-    try:
-        from apps.subscriptions.metadata import get_product_with_metadata
-        subscription = team.active_stripe_subscription
-        for item in subscription.items.select_related("price__product"):
-            product_metadata = get_product_with_metadata(item.price.product).metadata
-            if product_metadata.slug == "starter":
-                return 7
-            elif product_metadata.slug == "professional":
-                return 30
-            elif product_metadata.slug == "business":
-                return 90
-    except Exception:
-        pass
-    return 7
+    return get_retention_limit_days_for_team(team)
 
 
 @login_required
@@ -256,12 +242,21 @@ def export_telemetry_csv(request, team_slug, device_id):
     response["Content-Disposition"] = f'attachment; filename="{device.name}_telemetry.csv"'
 
     writer = csv.writer(response)
-    writer.writerow(["Timestamp", "Key", "Value"])
+    writer.writerow(["Timestamp", "Metric", "Key", "Value", "Unit"])
+    columns, _ = _device_telemetry_columns(device)
+    metric_meta = {
+        column["key"]: {
+            "label": column.get("label") or column["key"].replace("_", " ").title(),
+            "unit": column.get("unit", ""),
+        }
+        for column in columns
+    }
 
     cutoff = timezone.now() - timezone.timedelta(days=days)
     qs = TelemetryData.objects.filter(device=device, timestamp__gte=cutoff).order_by("-timestamp")
     for point in qs[:5000]:  # Limit export for safety
         val = point.value_numeric if point.value_numeric is not None else (point.value_string or point.value_bool)
-        writer.writerow([point.timestamp, point.key, val])
+        meta = metric_meta.get(point.key, {"label": point.key.replace("_", " ").title(), "unit": ""})
+        writer.writerow([point.timestamp, meta["label"], point.key, val, meta["unit"]])
 
     return response

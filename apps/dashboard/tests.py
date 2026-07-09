@@ -161,3 +161,158 @@ class AutoDashboardTests(TestCase):
         device.save()
         self.assertEqual(Widget.objects.filter(dashboard=dashboard).count(), 4)
 
+
+
+
+class AdaptiveOperationsDashboardTests(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        from apps.devices.models import Site
+
+        cache.clear()
+        self.team = Team.objects.create(name="Ops Team", slug="ops-team")
+        self.site = Site.objects.create(team=self.team, name="Factory")
+
+    def _template(self, name, device_type, register_map, category="energy"):
+        from apps.devices.models import DeviceTemplate
+
+        return DeviceTemplate.objects.create(
+            name=name,
+            device_type=device_type,
+            protocol="modbus_tcp",
+            category=category,
+            register_map=register_map,
+        )
+
+    def _device(self, name, template, device_type=None, gateway=None):
+        from apps.devices.models import Device
+
+        return Device.objects.create(
+            team=self.team,
+            site=self.site,
+            gateway=gateway,
+            name=name,
+            template=template,
+            device_type=device_type or template.device_type,
+            protocol=template.protocol,
+        )
+
+    def test_energy_device_produces_energy_widgets_and_trend(self):
+        from django.utils import timezone
+        from apps.dashboard.services import build_team_operations_dashboard
+        from apps.telemetry.models import TelemetryData
+
+        template = self._template(
+            "Power Meter",
+            "power_meter",
+            {"active_power": {"label": "Demand", "unit": "W", "dashboard_role": "trend"}},
+        )
+        device = self._device("Main Meter", template)
+        TelemetryData.objects.create(device=device, timestamp=timezone.now(), key="active_power", value_numeric=42.0)
+
+        dashboard = build_team_operations_dashboard(self.team)
+
+        self.assertTrue(dashboard["has_energy_widgets"])
+        self.assertEqual(dashboard["metric_groups"][0]["label"], "Energy")
+        self.assertEqual(dashboard["operations_trend"]["key"], "active_power")
+        self.assertEqual(dashboard["top_devices"][0]["latest_reading"]["display_value"], "42.0")
+
+    def test_vfd_with_default_energy_category_is_classified_as_motor(self):
+        from apps.dashboard.services import build_team_operations_dashboard
+
+        template = self._template(
+            "VFD",
+            "vfd",
+            {"output_frequency": {"label": "Output Frequency", "unit": "Hz"}, "current": {"unit": "A"}},
+        )
+        self._device("Pump Drive", template)
+
+        dashboard = build_team_operations_dashboard(self.team)
+
+        self.assertEqual(dashboard["metric_groups"][0]["label"], "Motor / VFD")
+        self.assertFalse(dashboard["has_energy_widgets"])
+
+    def test_pump_keys_classify_unknown_device_as_pump(self):
+        from apps.dashboard.services import build_team_operations_dashboard
+
+        template = self._template(
+            "Pump Controller",
+            "other",
+            {"pressure": {"label": "Pressure", "unit": "bar"}, "flow_rate": {"label": "Flow", "unit": "m3/h"}},
+            category="factory",
+        )
+        self._device("Booster Pump", template, device_type="other")
+
+        dashboard = build_team_operations_dashboard(self.team)
+
+        self.assertEqual(dashboard["metric_groups"][0]["label"], "Pump")
+
+    def test_unknown_device_falls_back_to_latest_telemetry(self):
+        from django.utils import timezone
+        from apps.dashboard.services import build_team_operations_dashboard
+        from apps.devices.models import Device
+        from apps.telemetry.models import TelemetryData
+
+        device = Device.objects.create(
+            team=self.team,
+            site=self.site,
+            name="Unknown Sensor",
+            device_type="other",
+            protocol="mqtt",
+        )
+        TelemetryData.objects.create(device=device, timestamp=timezone.now(), key="custom_metric", value_numeric=7.5)
+
+        dashboard = build_team_operations_dashboard(self.team)
+
+        self.assertEqual(dashboard["metric_groups"][0]["label"], "General")
+        self.assertEqual(dashboard["top_devices"][0]["latest_reading"]["label"], "Custom Metric")
+
+    def test_mixed_fleet_prioritizes_gateway_online_device_offline_attention(self):
+        from django.utils import timezone
+        from apps.dashboard.services import build_team_operations_dashboard
+        from apps.devices.models import Device, Gateway
+
+        gateway = Gateway.objects.create(
+            team=self.team,
+            site=self.site,
+            name="Online Gateway",
+            serial_number="GW-ATTN-001",
+            access_token="attn-token",
+            status="online",
+            last_seen=timezone.now(),
+        )
+        template = self._template("Meter", "power_meter", {"active_power": {"unit": "W"}})
+        Device.objects.create(
+            team=self.team,
+            site=self.site,
+            gateway=gateway,
+            template=template,
+            name="Offline Meter",
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            status="offline",
+            last_telemetry_at=timezone.now() - timezone.timedelta(minutes=5),
+        )
+
+        dashboard = build_team_operations_dashboard(self.team)
+
+        self.assertEqual(dashboard["attention_items"][0]["message"], "Gateway online - device offline")
+
+    def test_template_priority_and_dashboard_role_influence_widgets(self):
+        from apps.dashboard.models import Widget
+
+        template = self._template(
+            "Hinted Template",
+            "power_meter",
+            {
+                "raw_register": {"label": "Raw", "priority": 50},
+                "important_temp": {"label": "Important Temp", "unit": "°C", "priority": 1, "dashboard_role": "trend"},
+                "write_only": {"label": "Write Only", "writable": True},
+            },
+        )
+        device = self._device("Hinted Device", template)
+        widgets = list(Widget.objects.filter(device=device).order_by("row", "col"))
+
+        self.assertEqual(widgets[0].telemetry_key, "important_temp")
+        self.assertEqual(widgets[0].widget_type, "timeseries")
+        self.assertFalse(Widget.objects.filter(device=device, telemetry_key="write_only").exists())

@@ -20,13 +20,13 @@
                 <div class="mb-10">
                     <h3 class="text-lg font-bold text-base-content mb-1">{{ plan.name }}</h3>
                     <p class="text-xs text-base-content/40 uppercase font-black tracking-widest">
-                        {% if plan.slug == 'starter' %}SME Entry Level{% elif plan.slug == 'professional' %}Growth Phase{% else %}Enterprise Ready{% endif %}
+                        {% if plan.slug == 'starter' %}SME Entry Level{% elif plan.slug == 'business' %}Growth Phase{% else %}Enterprise Ready{% endif %}
                     </p>
                 </div>
                 
                 <div class="flex items-baseline mb-10">
                     <span class="text-5xl font-black font-mono text-base-content">
-                        {% if plan.slug == 'starter' %}$99{% elif plan.slug == 'professional' %}$299{% else %}$699{% endif %}
+                        {% if plan.slug == 'starter' %}$99{% elif plan.slug == 'business' %}$299{% else %}$699{% endif %}
                     </span>
                     <span class="text-xs font-bold text-base-content/30 ml-2 uppercase tracking-widest">/mo</span>
                 </div>
@@ -54,8 +54,8 @@
                     <tr class="bg-base-200/50">
                         <th class="py-6 px-8 rounded-tl-3xl text-xs font-black uppercase tracking-widest text-base-content/40">Feature</th>
                         <th class="py-6 px-8 text-center text-xs font-black uppercase tracking-widest text-base-content/40">Starter</th>
-                        <th class="py-6 px-8 text-center text-xs font-black uppercase tracking-widest text-base-content/40">Professional</th>
-                        <th class="py-6 px-8 rounded-tr-3xl text-center text-xs font-black uppercase tracking-widest text-base-content/40">Business</th>
+                        <th class="py-6 px-8 text-center text-xs font-black uppercase tracking-widest text-base-content/40">Business</th>
+                        <th class="py-6 px-8 rounded-tr-3xl text-center text-xs font-black uppercase tracking-widest text-base-content/40">Enterprise</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-base-content/5">

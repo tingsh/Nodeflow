@@ -73,33 +73,35 @@
 
 {% if test_register %}
 <script>
-    const RPC_URL = "{% url 'web_team:devices:device_rpc_command' request.team.slug device.gateway.pk device.pk %}";
+    const COMMAND_URL = "{% url 'web_team:devices:device_send_command' request.team.slug device.pk %}";
 
     function getCookie(name) {
         const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
         return v ? v.pop() : '';
     }
 
-    async function rpcCall(method, params) {
-        const res = await fetch(RPC_URL, {
+    async function commandCall(commandType, key, params = null) {
+        const body = new URLSearchParams({command_type: commandType, key});
+        if (params) body.set('params', JSON.stringify({...params, command_key: key}));
+        const res = await fetch(COMMAND_URL, {
             method: 'POST',
             headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': getCookie('csrftoken')},
-            body: new URLSearchParams({method, params: JSON.stringify(params)})
+            body
         });
         return res.json();
     }
 
-    async function pollRpcResult(requestId, maxAttempts = 15) {
-        const statusUrl = RPC_URL.replace(/command\/?$/, 'rpc-status/' + requestId + '/');
+    async function pollCommandResult(transactionId, maxAttempts = 15) {
+        const statusUrl = COMMAND_URL.replace(/command\/?$/, 'command/status/' + transactionId + '/?format=json');
         for (let i = 0; i < maxAttempts; i++) {
             await new Promise(r => setTimeout(r, 1000));
             try {
                 const res = await fetch(statusUrl);
                 const data = await res.json();
-                if (data.status !== 'pending') return data;
+                if (data.status !== 'pending' && data.status !== 'sent') return data;
             } catch (e) { /* retry */ }
         }
-        return {status: 'timeout', result: null, error: 'Timed out waiting for response'};
+        return {status: 'timed_out', result: null, error: 'Timed out waiting for response'};
     }
 
     async function runLiveConnectionTest() {
@@ -123,16 +125,17 @@
             const dataType = "{{ test_register.type }}";
             if (dataType) params.type = dataType;
 
-            const rpc = await rpcCall('read_device', params);
-            if (rpc.status === 'sent') {
+            const command = await commandCall('read', 'connection_test', params);
+            if (command.status === 'sent') {
                 badge.innerHTML = '<i class="fa fa-clock mr-1"></i> Waiting for Edge';
-                const result = await pollRpcResult(rpc.request_id);
+                const result = await pollCommandResult(command.transaction_id);
                 resultBox.classList.remove('hidden');
 
-                if (result.status === 'success') {
+                if (result.status === 'executed') {
                     badge.className = 'badge badge-success text-white text-[8px] uppercase font-bold py-1.5 px-2.5';
                     badge.innerHTML = '<i class="fa fa-check-circle mr-1"></i> Success';
-                    const val = result.result.value !== undefined ? result.result.value : JSON.stringify(result.result);
+                    const response = (result.result && result.result.response) ? result.result.response : result.result;
+                    const val = response && response.value !== undefined ? response.value : JSON.stringify(response);
                     resultData.className = 'text-xs font-mono text-success font-bold';
                     resultData.textContent = `Successfully read telemetry: ${val} {{ test_register.unit|default:"" }}`;
                 } else {

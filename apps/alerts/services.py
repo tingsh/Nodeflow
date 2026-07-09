@@ -20,7 +20,7 @@ def check_alerts_for_payload(device, key, value):
     # Find rules that apply to this device and key
     # or rules that apply to the site and key
     rules = AlertRule.objects.filter(is_active=True, telemetry_key=key).filter(
-        models.Q(device=device) | models.Q(site=device.site)
+        models.Q(device=device) | models.Q(device__isnull=True, site=device.site)
     )
 
     for rule in rules:

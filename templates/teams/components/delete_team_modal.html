@@ -1,22 +1,57 @@
 {% load i18n %}
 <input type="checkbox" id="delete-modal" class="modal-toggle" />
 <div class="modal">
-  <div class="modal-box w-11/12 max-w-5xl">
-    <h3 class="font-bold text-lg">{% translate "Really delete team?" %}</h3>
-    <p class="py-4">
-      {% blocktranslate trimmed with team_name=request.team.name  %}
-      This will permanently delete the <em><strong>{{ team_name }}</strong></em> team and all associated data.
-      <strong>This action cannot be undone.</strong>
-      {% endblocktranslate %}
-    </p>
-    <footer class="modal-card-foot">
+  <div class="modal-box w-11/12 max-w-2xl" x-data="{ confirmStep: false }">
+    <div x-show="!confirmStep">
+      <h3 class="font-bold text-lg">{% translate "Really delete team?" %}</h3>
+      <p class="py-4">
+        {% blocktranslate trimmed with team_name=request.team.name  %}
+        This will permanently delete the <em><strong>{{ team_name }}</strong></em> team and all associated data.
+        <strong>This action cannot be undone.</strong>
+        {% endblocktranslate %}
+      </p>
       <div class="modal-action">
-        <form action="{% url 'single_team:delete_team' request.team.slug %} " method="post">
-          {% csrf_token %}
-          <button class="btn btn-error" type="submit">{% translate "I understand, permanently delete this team" %}</button>
-        </form>
+        <button class="btn btn-error" type="button" x-on:click="confirmStep = true">
+          {% translate "I understand, permanently delete this team" %}
+        </button>
         <label for="delete-modal" class="btn">{% translate "Cancel" %}</label>
       </div>
-    </footer>
+    </div>
+
+    <div x-show="confirmStep" style="display: none;">
+      <h3 class="font-bold text-lg text-error">{% translate "Confirm team deletion" %}</h3>
+      <p class="py-4 text-sm text-base-content/70">
+        {% blocktranslate trimmed with team_name=request.team.name %}
+        To prevent accidental deletion, type <strong>{{ team_name }}</strong> exactly before deleting this team.
+        {% endblocktranslate %}
+      </p>
+      <form action="{% url 'single_team:delete_team' request.team.slug %}" method="post" class="space-y-4">
+        {% csrf_token %}
+        <div>
+          <label for="confirmation_team_name" class="label">
+            <span class="label-text font-semibold">{% translate "Team name" %}</span>
+          </label>
+          <input id="confirmation_team_name"
+                 name="confirmation_team_name"
+                 type="text"
+                 required
+                 autocomplete="off"
+                 class="input input-bordered w-full font-mono"
+                 aria-describedby="confirmation_team_name_help">
+          <p id="confirmation_team_name_help" class="mt-2 text-xs text-base-content/60">
+            {% translate "This extra step prevents accidental company deletion." %}
+          </p>
+        </div>
+        <div class="modal-action">
+          <button class="btn btn-error" type="submit">
+            <i class="fa fa-trash mr-2"></i> {% translate "Delete Team" %}
+          </button>
+          <button class="btn" type="button" x-on:click="confirmStep = false">
+            {% translate "Back" %}
+          </button>
+          <label for="delete-modal" class="btn">{% translate "Cancel" %}</label>
+        </div>
+      </form>
+    </div>
   </div>
 </div>

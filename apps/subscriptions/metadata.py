@@ -33,6 +33,8 @@ class ProductMetadata:
     is_default: bool = False
     gateway_limit: int = 0
     device_limit: int = 0
+    retention_days: int = 7
+    telemetry_interval_seconds: float = 10.0
 
     @classmethod
     def from_stripe_product(cls, stripe_product: Product, **kwargs) -> ProductMetadata:
@@ -60,6 +62,8 @@ class ProductMetadata:
                 "is_default": serializers.BooleanField(),
                 "gateway_limit": serializers.IntegerField(),
                 "device_limit": serializers.IntegerField(),
+                "retention_days": serializers.IntegerField(),
+                "telemetry_interval_seconds": serializers.FloatField(),
             },
         )
 
@@ -193,6 +197,8 @@ ACTIVE_PRODUCTS = [
         description=_("Ideal for submetering pilots"),
         gateway_limit=1,
         device_limit=5,
+        retention_days=7,
+        telemetry_interval_seconds=10.0,
         features=[
             _("1 Edge Gateway"),
             _("Up to 5 Devices"),
@@ -208,6 +214,8 @@ ACTIVE_PRODUCTS = [
         is_default=True,
         gateway_limit=3,
         device_limit=20,
+        retention_days=30,
+        telemetry_interval_seconds=5.0,
         features=[
             _("3 Edge Gateways"),
             _("Up to 20 Devices"),
@@ -223,6 +231,8 @@ ACTIVE_PRODUCTS = [
         description=_("For large industrial operations"),
         gateway_limit=9999,
         device_limit=100,
+        retention_days=90,
+        telemetry_interval_seconds=1.0,
         features=[
             _("Unlimited Gateways"),
             _("Up to 100 Devices"),
