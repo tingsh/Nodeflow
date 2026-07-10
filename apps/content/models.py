@@ -19,6 +19,13 @@ from apps.content.blocks import (
     FAQAccordionBlock,
     SolutionsSectionBlock,
     HeroBlock,
+    LeadCaptureBlock,
+    MetricBandBlock,
+    PlatformCapabilitiesBlock,
+    ProcessBlock,
+    ProductVisualBlock,
+    ProofStripBlock,
+    VerticalSolutionCardsBlock,
 )
 
 
@@ -143,19 +150,26 @@ class HomePage(BaseContentPage):
 
 
 class NovenaHomePage(BaseContentPage):
-    hero_tagline = models.CharField(max_length=255, default="Industrial Intelligence", blank=True)
-    hero_title = models.CharField(max_length=255, default="Your Factory, Perfectly Synchronized.", blank=True)
-    hero_subtitle = models.TextField(default="Connect industrial PLCs, meters, and sensors to a secure unified cloud plane. Harness AI-guided template registry, local edge network failover, and zero-downtime upgrades in 24 hours.", blank=True)
-    hero_cta_text = models.CharField(max_length=100, default="Activate Cloud Access", blank=True)
-    hero_cta_url = models.CharField(max_length=255, default="/accounts/signup/", blank=True)
+    hero_tagline = models.CharField(max_length=255, default="Industrial IoT for SME operations", blank=True)
+    hero_title = models.CharField(max_length=255, default="Connect equipment. See operations clearly. Act faster.", blank=True)
+    hero_subtitle = models.TextField(default="Novena Platform connects meters, PLCs, sensors, and industrial assets to live dashboards, alerts, AI insights, and operational workflows built for lean teams.", blank=True)
+    hero_cta_text = models.CharField(max_length=100, default="Book a demo", blank=True)
+    hero_cta_url = models.CharField(max_length=255, default="/about/#contact", blank=True)
     hero_secondary_cta_text = models.CharField(max_length=100, default="Explore Platform", blank=True)
     hero_secondary_cta_url = models.CharField(max_length=255, default="#features", blank=True)
     show_terminal_simulator = models.BooleanField(default=True, help_text="Show the interactive terminal simulator on the right side of the hero.")
 
     body = StreamField([
         ("trusted_by", TrustedByBlock()),
+        ("metric_band", MetricBandBlock()),
+        ("product_visual", ProductVisualBlock()),
+        ("process", ProcessBlock()),
+        ("platform_capabilities", PlatformCapabilitiesBlock()),
+        ("vertical_solution_cards", VerticalSolutionCardsBlock()),
+        ("proof_strip", ProofStripBlock()),
         ("feature_grid", FeatureGridBlock()),
         ("ai_spotlight", AISpotlightBlock()),
+        ("lead_capture", LeadCaptureBlock()),
         ("final_cta", FinalCTABlock()),
         ("html", blocks.RawHTMLBlock()),
     ], blank=True)
@@ -203,12 +217,19 @@ class MarketingStandardPage(BaseContentPage):
     body = StreamField([
         ("hero", HeroBlock()),
         ("trusted_by", TrustedByBlock()),
+        ("metric_band", MetricBandBlock()),
+        ("product_visual", ProductVisualBlock()),
+        ("process", ProcessBlock()),
+        ("platform_capabilities", PlatformCapabilitiesBlock()),
+        ("vertical_solution_cards", VerticalSolutionCardsBlock()),
+        ("proof_strip", ProofStripBlock()),
         ("feature_grid", FeatureGridBlock()),
         ("feature_section", FeatureSectionBlock()),
         ("pricing_tiers", PricingTiersBlock()),
         ("pricing_comparison", PricingComparisonBlock()),
         ("faq_accordion", FAQAccordionBlock()),
         ("solutions_section", SolutionsSectionBlock()),
+        ("lead_capture", LeadCaptureBlock()),
         ("final_cta", FinalCTABlock()),
         ("paragraph", blocks.RichTextBlock()),
         ("html", blocks.RawHTMLBlock()),
@@ -220,4 +241,3 @@ class MarketingStandardPage(BaseContentPage):
         FieldPanel("hero_subtitle"),
         FieldPanel("body", classname="full"),
     ]
-

@@ -140,10 +140,7 @@ DEVICE_DELAYED_MULTIPLIER = env.float("DEVICE_DELAYED_MULTIPLIER", default=2)
 GATEWAY_OFFLINE_SECONDS = env.int("GATEWAY_OFFLINE_SECONDS", default=120)
 
 # WhatsApp Settings
-WHATSAPP_PROVIDER = env("WHATSAPP_PROVIDER", default="mock")  # 'mock' or 'twilio'
-TWILIO_ACCOUNT_SID = env("TWILIO_ACCOUNT_SID", default="")
-TWILIO_AUTH_TOKEN = env("TWILIO_AUTH_TOKEN", default="")
-TWILIO_WHATSAPP_NUMBER = env("TWILIO_WHATSAPP_NUMBER", default="+14155238886")
+WHATSAPP_PROVIDER = env("WHATSAPP_PROVIDER", default="mock")  # 'mock' or 'meta'
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS + WAGTAIL_APPS
 
 if DEBUG:
@@ -469,18 +466,36 @@ SERVER_EMAIL = env("SERVER_EMAIL", default="noreply@localhost:8000")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="tingshouheng@gmail.com")
 
 # ANYMAIL Configuration for Amazon SES
+AWS_SES_REGION_NAME = env("AWS_SES_REGION_NAME", default="ap-southeast-1")
+AWS_SES_ACCESS_KEY_ID = env("AWS_SES_ACCESS_KEY_ID", default=None)
+AWS_SES_SECRET_ACCESS_KEY = env("AWS_SES_SECRET_ACCESS_KEY", default=None)
+AWS_SES_CONFIGURATION_SET_NAME = env("AWS_SES_CONFIGURATION_SET_NAME", default=None) or None
+ANYMAIL_WEBHOOK_SECRET = env("ANYMAIL_WEBHOOK_SECRET", default="")
+AWS_SES_CLIENT_PARAMS = {
+    "region_name": AWS_SES_REGION_NAME,
+}
+if AWS_SES_ACCESS_KEY_ID and AWS_SES_SECRET_ACCESS_KEY:
+    AWS_SES_CLIENT_PARAMS.update(
+        {
+            "aws_access_key_id": AWS_SES_ACCESS_KEY_ID,
+            "aws_secret_access_key": AWS_SES_SECRET_ACCESS_KEY,
+        }
+    )
+
 ANYMAIL = {
-    "AMAZON_SES_CLIENT_PARAMS": {
-        "aws_access_key_id": env("AWS_SES_ACCESS_KEY_ID", default=None),
-        "aws_secret_access_key": env("AWS_SES_SECRET_ACCESS_KEY", default=None),
-        "region_name": env("AWS_SES_REGION_NAME", default="us-east-1"),
-    },
+    "AMAZON_SES_CLIENT_PARAMS": AWS_SES_CLIENT_PARAMS,
+    "AMAZON_SES_CONFIGURATION_SET_NAME": AWS_SES_CONFIGURATION_SET_NAME,
+    "WEBHOOK_SECRET": ANYMAIL_WEBHOOK_SECRET,
 }
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="anymail.backends.amazon_ses.EmailBackend")
 
 # WhatsApp Meta API Configuration
+WHATSAPP_GRAPH_API_VERSION = env("WHATSAPP_GRAPH_API_VERSION", default="v21.0")
 WHATSAPP_PHONE_NUMBER_ID = env("WHATSAPP_PHONE_NUMBER_ID", default=None)
 WHATSAPP_ACCESS_TOKEN = env("WHATSAPP_ACCESS_TOKEN", default=None)
+WHATSAPP_VERIFY_TOKEN = env("WHATSAPP_VERIFY_TOKEN", default="")
+WHATSAPP_ALERT_TEMPLATE_NAME = env("WHATSAPP_ALERT_TEMPLATE_NAME", default="hello_world")
+WHATSAPP_ALERT_TEMPLATE_LANGUAGE = env("WHATSAPP_ALERT_TEMPLATE_LANGUAGE", default="en_US")
 
 EMAIL_SUBJECT_PREFIX = "[Novena] "
 

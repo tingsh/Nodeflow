@@ -1,15 +1,74 @@
-import pytest
 from unittest.mock import patch
+
+import pytest
 from django.core import mail
-from django.test import override_settings, Client
+from django.test import Client, override_settings
 from django.urls import reverse
-from apps.teams.models import Team, Membership
-from apps.teams.roles import ROLE_ADMIN
-from apps.devices.models import Site, Device
-from apps.alerts.models import AlertRule, Alert
+
+from apps.alerts.forms import AlertRuleForm
+from apps.alerts.models import Alert, AlertRule
 from apps.alerts.services import check_alerts_for_payload
-from apps.users.models import CustomUser
 from apps.alerts.tasks import dispatch_alert_whatsapp_task
+from apps.devices.models import Device, Site
+from apps.events.models import EmailDelivery
+from apps.teams.models import Membership, Team
+from apps.teams.roles import ROLE_ADMIN
+from apps.users.models import CustomUser
+
+
+@pytest.mark.django_db
+def test_alert_rule_form_requires_recipients_when_email_enabled():
+    team = Team.objects.create(name="Test Team", slug="test-team")
+    site = Site.objects.create(team=team, name="Test Site")
+    device = Device.objects.create(
+        team=team, site=site, name="Test Device", device_type="plc", protocol="modbus_tcp", status="online"
+    )
+
+    form = AlertRuleForm(
+        team=team,
+        data={
+            "name": "No recipient rule",
+            "device": device.id,
+            "site": site.id,
+            "telemetry_key": "temp",
+            "condition": "gt",
+            "threshold": "50",
+            "severity": "warning",
+            "is_active": "on",
+            "notify_email": "on",
+            "cooldown_minutes": "15",
+            "duration_seconds": "0",
+        },
+    )
+
+    assert not form.is_valid()
+    assert "recipients" in form.errors
+
+
+@pytest.mark.django_db
+def test_onboarding_alert_rule_adds_current_user_as_email_recipient():
+    client = Client()
+    team = Team.objects.create(name="Test Team", slug="test-team")
+    site = Site.objects.create(team=team, name="Test Site")
+    device = Device.objects.create(
+        team=team, site=site, name="Test Device", device_type="plc", protocol="modbus_tcp", status="online"
+    )
+    user = CustomUser.objects.create_user(username="admin", email="admin@example.com", password="pwd")
+    Membership.objects.create(team=team, user=user, role=ROLE_ADMIN)
+    client.force_login(user)
+    session = client.session
+    session["onboarding_device_id"] = device.id
+    session.save()
+
+    response = client.post(
+        reverse("web_team:onboarding:step_4_alert", args=[team.slug]),
+        {"key": "temp", "threshold": "45"},
+    )
+
+    assert response.status_code == 302
+    rule = AlertRule.objects.get(device=device, telemetry_key="temp")
+    assert rule.notify_email is True
+    assert rule.recipients.filter(id=user.id).exists()
 
 
 @pytest.mark.django_db
@@ -70,6 +129,10 @@ def test_check_alerts_for_payload_triggers_alert_and_email():
     email = mail.outbox[0]
     assert "High Active Power Alert" in email.subject
     assert "admin@test.com" in email.to
+    delivery = EmailDelivery.objects.get(alert=alert, recipient="admin@test.com")
+    assert delivery.notification_type == EmailDelivery.NotificationType.ALERT_TRIGGERED
+    assert delivery.status == EmailDelivery.Status.SENT
+    assert delivery.attempt_count == 1
 
 
 @pytest.mark.django_db
@@ -108,8 +171,15 @@ def test_targeted_recipients_email_dispatch():
 
 
 @pytest.mark.django_db
-@override_settings(WHATSAPP_PROVIDER="meta", WHATSAPP_PHONE_NUMBER_ID="12345", WHATSAPP_ACCESS_TOKEN="token_abc")
-@patch("apps.alerts.tasks.requests.post")
+@override_settings(
+    WHATSAPP_PROVIDER="meta",
+    WHATSAPP_GRAPH_API_VERSION="v21.0",
+    WHATSAPP_PHONE_NUMBER_ID="12345",
+    WHATSAPP_ACCESS_TOKEN="token_abc",
+    WHATSAPP_ALERT_TEMPLATE_NAME="novena_alert_notification",
+    WHATSAPP_ALERT_TEMPLATE_LANGUAGE="en_US",
+)
+@patch("apps.alerts.whatsapp.requests.post")
 def test_targeted_whatsapp_dispatch(mock_post):
     team = Team.objects.create(name="Test Team", slug="test-team")
     site = Site.objects.create(team=team, name="Test Site")
@@ -143,11 +213,18 @@ def test_targeted_whatsapp_dispatch(mock_post):
 
     assert mock_post.called
     args, kwargs = mock_post.call_args
-    assert args[0] == "https://graph.facebook.com/v19.0/12345/messages"
+    assert args[0] == "https://graph.facebook.com/v21.0/12345/messages"
     assert kwargs["headers"]["Authorization"] == "Bearer token_abc"
     payload = kwargs["json"]
     assert payload["to"] == "15551234567"
-    assert "Targeted WhatsApp Alert" in payload["text"]["body"]
+    assert payload["type"] == "template"
+    assert payload["template"]["name"] == "novena_alert_notification"
+    assert payload["template"]["language"]["code"] == "en_US"
+    parameters = payload["template"]["components"][0]["parameters"]
+    assert [param["type"] for param in parameters] == ["text"] * 7
+    assert parameters[0]["text"] == "WARNING"
+    assert parameters[1]["text"] == "Targeted WhatsApp Alert"
+    assert parameters[2]["text"] == "Test Device"
 
 
 @pytest.mark.django_db
@@ -301,8 +378,10 @@ def test_cooldown_hardening():
 @pytest.mark.django_db
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
 def test_duration_seconds_evaluation():
-    from django.utils import timezone
     from datetime import timedelta
+
+    from django.utils import timezone
+
     from apps.telemetry.models import TelemetryData
     
     team = Team.objects.create(name="Test Team", slug="test-team")
@@ -334,9 +413,13 @@ def test_duration_seconds_evaluation():
 
     # 2. Add points spanning the 30s window
     now = timezone.now()
-    TelemetryData.objects.create(device=device, key="current", value_numeric=11.5, timestamp=now - timedelta(seconds=20))
-    TelemetryData.objects.create(device=device, key="current", value_numeric=11.8, timestamp=now - timedelta(seconds=35))
-    
+    TelemetryData.objects.create(
+        device=device, key="current", value_numeric=11.5, timestamp=now - timedelta(seconds=20)
+    )
+    TelemetryData.objects.create(
+        device=device, key="current", value_numeric=11.8, timestamp=now - timedelta(seconds=35)
+    )
+
     check_alerts_for_payload(device, "current", 12.0)
     assert Alert.objects.filter(rule=rule, device=device).count() == 1
 

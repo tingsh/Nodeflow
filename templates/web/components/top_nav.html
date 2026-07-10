@@ -1,216 +1,97 @@
 {% load i18n %}
 {% load wagtailcore_tags %}
 {% load team_tags %}
-<div class="sticky top-0 z-[100] w-full" 
-     x-data="{ scrolled: false }" 
-     x-init="window.pageYOffset > 50 ? scrolled = true : scrolled = false"
-     @scroll.window="window.pageYOffset > 50 ? scrolled = true : scrolled = false"
-     :class="scrolled ? 'bg-base-100/90 backdrop-blur-lg border-b border-base-content/5 shadow-sm py-4' : 'bg-transparent py-4'">
-  
-  <div class="max-w-[1800px] mx-auto px-4 sm:px-8 lg:px-12">
-    <div class="flex justify-between items-center h-16">
-      
-      <!-- Logo -->
-      <div class="flex-shrink-0 flex items-center">
-        {% block sidebar_toggle %}{% endblock %}
-        <a href="/" class="flex items-center group" 
-           onclick="if (window.location.pathname === '/') { event.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }">
-          <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white mr-3 shadow-lg shadow-indigo-600/20 group-hover:scale-110 transition-transform">
-            <i class="fa fa-bolt text-lg"></i>
-          </div>
-          <span class="text-2xl font-black text-base-content tracking-tighter font-heading">Novena <span class="text-indigo-600">Cloud</span></span>
-        </a>
-      </div>
+<header class="sticky top-0 z-[100] border-b border-[#d9e2ec] bg-[#f3f6fa]/95 backdrop-blur"
+        x-data="{ mobileOpen: false, resourcesOpen: false }">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="flex h-16 items-center justify-between">
+      <a href="/" class="flex items-center gap-3" aria-label="Novena Platform home">
+        <span class="flex h-9 w-9 items-center justify-center rounded-md bg-[#243043] text-[#f4f7fb]">
+          <i class="fa fa-bolt text-sm"></i>
+        </span>
+        <span class="text-lg font-bold tracking-normal text-[#243043]">Novena Platform</span>
+      </a>
 
-      <!-- Desktop Nav -->
       {% block nav_links %}
-      <nav class="hidden md:flex items-center space-x-8">
-        <a href="/product/" class="text-sm font-bold text-base-content/70 hover:text-indigo-500 transition-colors">Product</a>
-        <a href="/solutions/" class="text-sm font-bold text-base-content/70 hover:text-indigo-500 transition-colors">Solutions</a>
-        <a href="/pricing/" class="text-sm font-bold text-base-content/70 hover:text-indigo-500 transition-colors">Pricing</a>
-        
-        <!-- Resources Dropdown -->
-        <div class="relative group" x-data="{ open: false }">
-          <button @mouseenter="open = true" @mouseleave="open = false" class="flex items-center text-sm font-bold text-base-content/70 hover:text-indigo-500 transition-colors">
-            Resources
-            <i class="fa fa-chevron-down text-[10px] ml-1.5 opacity-40 group-hover:rotate-180 transition-transform"></i>
+      <nav class="hidden items-center gap-7 md:flex" aria-label="Primary navigation">
+        <a href="/product/" class="text-sm font-semibold text-[#44536a] hover:text-sky-700">Platform</a>
+        <a href="/solutions/" class="text-sm font-semibold text-[#44536a] hover:text-sky-700">Solutions</a>
+        <a href="/pricing/" class="text-sm font-semibold text-[#44536a] hover:text-sky-700">Pricing</a>
+        <div class="relative">
+          <button type="button" class="flex items-center gap-1 text-sm font-semibold text-[#44536a] hover:text-sky-700"
+                  @click="resourcesOpen = !resourcesOpen" @click.outside="resourcesOpen = false">
+            Resources <i class="fa fa-chevron-down text-[10px]"></i>
           </button>
-          <div x-show="open" @mouseenter="open = true" @mouseleave="open = false" 
-               x-transition:enter="transition ease-out duration-200"
-               x-transition:enter-start="opacity-0 translate-y-2"
-               x-transition:enter-end="opacity-100 translate-y-0"
-               class="absolute left-0 mt-0 pt-4 w-48">
-            <div class="bg-base-100 rounded-2xl shadow-2xl border border-base-content/5 overflow-hidden p-2">
-              {% slugurl 'blog' as blog_url %}
-              {% if blog_url %}
-              <a href="{{ blog_url }}" class="flex items-center p-3 rounded-xl hover:bg-base-200 transition-colors">
-                <i class="fa fa-newspaper text-indigo-500 mr-3 w-4"></i>
-                <span class="text-xs font-bold">Blog</span>
-              </a>
-              {% endif %}
-              <a href="/content/docs/" class="flex items-center p-3 rounded-xl hover:bg-base-200 transition-colors">
-                <i class="fa fa-book text-indigo-500 mr-3 w-4"></i>
-                <span class="text-xs font-bold">Documentation</span>
-              </a>
-              <a href="/content/faq/" class="flex items-center p-3 rounded-xl hover:bg-base-200 transition-colors">
-                <i class="fa fa-question-circle text-indigo-500 mr-3 w-4"></i>
-                <span class="text-xs font-bold">FAQ</span>
-              </a>
-            </div>
+          <div x-cloak x-show="resourcesOpen" x-transition class="absolute left-0 mt-3 w-56 rounded-lg border border-[#d9e2ec] bg-[#f8fafc] p-2 shadow-xl">
+            {% slugurl 'blog' as blog_url %}
+            {% if blog_url %}
+              <a href="{{ blog_url }}" class="block rounded-md px-3 py-2 text-sm font-semibold text-[#44536a] hover:bg-[#eef3f8]">Blog</a>
+            {% endif %}
+            <a href="/api/schema/redoc/" class="block rounded-md px-3 py-2 text-sm font-semibold text-[#44536a] hover:bg-[#eef3f8]">API reference</a>
+            <a href="/about/#contact" class="block rounded-md px-3 py-2 text-sm font-semibold text-[#44536a] hover:bg-[#eef3f8]">Contact sales</a>
           </div>
         </div>
+        <a href="/about/" class="text-sm font-semibold text-[#44536a] hover:text-sky-700">Company</a>
       </nav>
       {% endblock %}
 
-      <!-- Right Side Actions -->
-      <div class="flex items-center space-x-4">
+      <div class="flex items-center gap-3">
         {% if user.is_authenticated %}
-          <!-- AI Assistant shortcut -->
-          <div class="tooltip tooltip-bottom hidden sm:block" data-tip="{% translate 'AI Assistant' %}">
-            <a href="{% url 'chat:chat_home' %}" class="btn btn-ghost btn-sm btn-circle text-indigo-500 hover:text-indigo-600 transition-colors">
-              <i class="fa-solid fa-robot text-lg"></i>
-            </a>
-          </div>
-          
-          {% include "web/components/notifications_dropdown.html" %}
-
-          <!-- Profile Dropdown -->
+          <a href="{% if team %}{% url 'web_team:home' team.slug %}{% else %}{% url 'teams:manage_teams' %}{% endif %}" class="btn btn-outline hidden rounded-md border-slate-300 text-sm font-bold text-slate-800 sm:inline-flex">Open app</a>
           <details class="dropdown dropdown-end">
-            <summary class="btn btn-ghost btn-sm btn-circle list-none cursor-pointer">
-              <i class="fa fa-user-circle text-lg text-base-content/70"></i>
+            <summary class="btn btn-ghost btn-sm btn-circle list-none">
+              <i class="fa fa-user-circle text-lg text-slate-600"></i>
             </summary>
-            <ul class="menu dropdown-content bg-base-100 rounded-2xl z-50 w-64 p-3 shadow-2xl border border-base-content/5 mt-4">
-              <!-- User Profile Identity Header -->
-              <div class="px-3 py-3 mb-2 bg-base-200/50 rounded-xl flex items-center gap-3">
-                <div class="avatar">
-                  <div class="w-10 h-10 rounded-full overflow-hidden ring-1 ring-base-content/10">
-                    <img src="{{ user.avatar_url }}" alt="{{ user.get_display_name }}" class="object-cover" />
-                  </div>
-                </div>
-                <div class="min-w-0 flex-1">
-                  <p class="text-sm font-bold text-base-content truncate leading-tight">{{ user.get_display_name }}</p>
-                  <p class="text-[10px] text-base-content/40 truncate mt-0.5">{{ user.email }}</p>
-                </div>
-              </div>
-
-              <li class="menu-title"><span class="text-[10px] font-black uppercase tracking-widest text-base-content/30">{% translate "Settings" %}</span></li>
-              <li>
-                <a href="{% url 'users:user_profile' %}" class="py-2.5 rounded-xl font-semibold text-xs">
-                  <i class="fa fa-user h-4 w-4 text-base-content/50"></i> Profile Details
-                </a>
-              </li>
-              
+            <ul class="menu dropdown-content z-50 mt-3 w-64 rounded-lg border border-slate-200 bg-white p-3 shadow-xl">
+              <li class="menu-title"><span class="text-xs text-slate-500">{{ user.email }}</span></li>
+              <li><a href="{% url 'users:user_profile' %}" class="rounded-md text-sm">Profile</a></li>
               {% if team and request.user|is_member_of:team %}
-              <div class="my-1.5 border-t border-base-content/10"></div>
-              <li class="menu-title flex flex-row items-center justify-between">
-                <span class="text-[10px] font-black uppercase tracking-widest text-base-content/30 truncate max-w-[150px]">{{ team.name }}</span>
-                {% if request.team_membership %}
-                  <span class="badge badge-sm badge-outline font-bold text-[8px] uppercase tracking-wider opacity-60">{{ request.team_membership.get_role_display }}</span>
-                {% endif %}
-              </li>
-              <li>
-                <a href="{% url 'single_team:manage_team' team.slug %}" class="py-2.5 rounded-xl font-semibold text-xs">
-                  <i class="fa fa-sliders h-4 w-4 text-base-content/50"></i>
-                  {% translate "Team Settings" %}
-                </a>
-              </li>
-              {% if request.user|is_admin_of:team %}
-              <li>
-                <a href="{% url 'subscriptions_team:subscription_details' team.slug %}" class="py-2.5 rounded-xl font-semibold text-xs">
-                  <i class="fa fa-credit-card h-4 w-4 text-base-content/50"></i>
-                  {% translate "Billing & Usage" %}
-                </a>
-              </li>
+                <li><a href="{% url 'single_team:manage_team' team.slug %}" class="rounded-md text-sm">Team settings</a></li>
               {% endif %}
-              {% endif %}
-
-              {% if other_teams %}
-              <div class="my-1.5 border-t border-base-content/10"></div>
-              <li class="menu-title"><span class="text-[10px] font-black uppercase tracking-widest text-base-content/30">{% translate "Switch Team" %}</span></li>
-              {% for name, url in other_teams.items %}
-              <li>
-                <a href="{{ url }}" class="py-2 rounded-xl text-xs font-medium"><i class="fa fa-angles-right h-4 w-4 opacity-50"></i> {{ name }}</a>
-              </li>
-              {% endfor %}
-              {% endif %}
-
-              {% if user_pending_invitations %}
-              <li>
-                <a href="{% url 'teams:manage_teams' %}" class="py-2 rounded-xl text-xs font-medium">
-                  <i class="fa fa-envelope h-4 w-4 text-warning"></i>
-                  {% translate "Pending Invites" %}
-                </a>
-              </li>
-              {% endif %}
-
-              <div class="my-1.5 border-t border-base-content/10"></div>
-              <li class="menu-title"><span class="text-[10px] font-black uppercase tracking-widest text-base-content/30">{% translate "Resources" %}</span></li>
-              <li>
-                <a href="/content/docs/" class="py-2 rounded-xl text-xs font-semibold">
-                  <i class="fa-solid fa-book h-4 w-4 text-base-content/50"></i> {% translate "Documentation" %}
-                </a>
-              </li>
-              <li>
-                <a href="/content/faq/" class="py-2 rounded-xl text-xs font-semibold">
-                  <i class="fa-solid fa-circle-question h-4 w-4 text-base-content/50"></i> {% translate "Help Center / FAQ" %}
-                </a>
-              </li>
-              <li>
-                <button type="button" onclick="document.getElementById('contact-support-modal').showModal()" class="py-2 rounded-xl text-xs font-semibold flex items-center gap-2 w-full text-left">
-                  <i class="fa-solid fa-headset h-4 w-4 text-base-content/50"></i> {% translate "Contact Support" %}
-                </button>
-              </li>
-
-              <div class="my-1.5 border-t border-base-content/10"></div>
-              <li><a href="{% url 'account_logout' %}" class="py-2.5 rounded-xl font-bold text-xs text-error/80 hover:text-error hover:bg-error/10"><i class="fa-solid fa-arrow-right-from-bracket h-4 w-4"></i> Sign out</a></li>
+              <li><a href="{% url 'account_logout' %}" class="rounded-md text-sm text-error">Sign out</a></li>
             </ul>
           </details>
         {% else %}
-          <a href="{{ login_url }}" class="hidden sm:inline-flex text-sm font-bold text-base-content/70 hover:text-indigo-500 transition-colors px-4">Sign In</a>
-          <a href="{{ signup_url }}" class="btn btn-primary btn-sm rounded-xl px-6 h-10 font-bold shadow-lg shadow-indigo-600/20">Get Started</a>
+          <a href="{{ login_url }}" class="hidden text-sm font-semibold text-[#44536a] hover:text-sky-700 sm:inline-flex">Sign in</a>
+          <a href="/about/#contact" class="btn btn-primary hidden rounded-md px-5 font-bold sm:inline-flex">Book demo</a>
         {% endif %}
-        
-        <!-- Mobile Menu Toggle -->
-        <button class="md:hidden btn btn-ghost btn-sm btn-circle" @click="$dispatch('open-mobile-menu')">
+        <button type="button" class="btn btn-ghost btn-sm btn-circle md:hidden" @click="mobileOpen = true" aria-label="Open menu">
           <i class="fa fa-bars text-lg"></i>
         </button>
       </div>
     </div>
   </div>
-</div>
 
-<!-- Mobile Menu Drawer (Implemented via Alpine) -->
-<div x-data="{ open: false }" 
-     @open-mobile-menu.window="open = true" 
-     x-show="open" 
-     class="fixed inset-0 z-[200] md:hidden" 
-     x-cloak>
-  <div class="fixed inset-0 bg-base-content/20 backdrop-blur-sm" @click="open = false"></div>
-  <div class="fixed inset-y-0 right-0 w-full max-w-sm bg-base-100 shadow-2xl p-6 transition-transform duration-300"
-       x-transition:enter="translate-x-full"
-       x-transition:enter-end="translate-x-0"
-       x-transition:leave="translate-x-0"
-       x-transition:leave-end="translate-x-full">
-    <div class="flex items-center justify-between mb-8">
-      <span class="text-xl font-black text-base-content tracking-tighter">Novena <span class="text-indigo-600">Cloud</span></span>
-      <button @click="open = false" class="btn btn-ghost btn-sm btn-circle"><i class="fa fa-times text-lg"></i></button>
-    </div>
-    <nav class="space-y-6">
-      {% block mobile_nav_links %}
-      <a href="/product/" class="block text-lg font-bold text-base-content/80 hover:text-indigo-500">Product</a>
-      <a href="/solutions/" class="block text-lg font-bold text-base-content/80 hover:text-indigo-500">Solutions</a>
-      <a href="/pricing/" class="block text-lg font-bold text-base-content/80 hover:text-indigo-500">Pricing</a>
-      {% slugurl 'blog' as blog_url %}
-      {% if blog_url %}
-      <a href="{{ blog_url }}" class="block text-lg font-bold text-base-content/80 hover:text-indigo-500">Blog</a>
-      {% endif %}
-      {% endblock %}
-      <div class="pt-6 border-t border-base-content/10">
-        {% if not user.is_authenticated %}
-        <a href="{{ login_url }}" class="btn btn-outline btn-block rounded-xl mb-3">Sign In</a>
-        <a href="{{ signup_url }}" class="btn btn-primary btn-block rounded-xl">Get Started</a>
+  <div x-cloak x-show="mobileOpen" class="fixed inset-0 z-[200] md:hidden">
+    <div class="fixed inset-0 bg-slate-950/30" @click="mobileOpen = false"></div>
+    <div class="fixed inset-y-0 right-0 w-full max-w-sm bg-[#f3f6fa] p-6 shadow-xl" x-transition>
+      <div class="flex items-center justify-between">
+        <span class="text-lg font-bold text-[#243043]">Novena Platform</span>
+        <button type="button" class="btn btn-ghost btn-sm btn-circle" @click="mobileOpen = false" aria-label="Close menu">
+          <i class="fa fa-times"></i>
+        </button>
+      </div>
+      <nav class="mt-8 space-y-5" aria-label="Mobile navigation">
+        {% block mobile_nav_links %}
+        <a href="/product/" class="block text-lg font-bold text-[#354255]">Platform</a>
+        <a href="/solutions/" class="block text-lg font-bold text-[#354255]">Solutions</a>
+        <a href="/pricing/" class="block text-lg font-bold text-[#354255]">Pricing</a>
+        {% slugurl 'blog' as mobile_blog_url %}
+        {% if mobile_blog_url %}
+          <a href="{{ mobile_blog_url }}" class="block text-lg font-bold text-[#354255]">Blog</a>
+        {% endif %}
+        <a href="/api/schema/redoc/" class="block text-lg font-bold text-[#354255]">API reference</a>
+        <a href="/about/" class="block text-lg font-bold text-[#354255]">Company</a>
+        {% endblock %}
+      </nav>
+      <div class="mt-8 border-t border-slate-200 pt-6">
+        {% if user.is_authenticated %}
+          <a href="{% if team %}{% url 'web_team:home' team.slug %}{% else %}{% url 'teams:manage_teams' %}{% endif %}" class="btn btn-primary w-full rounded-md font-bold">Open app</a>
+        {% else %}
+          <a href="/about/#contact" class="btn btn-primary w-full rounded-md font-bold">Book demo</a>
+          <a href="{{ login_url }}" class="btn btn-outline mt-3 w-full rounded-md border-slate-300 font-bold text-slate-800">Sign in</a>
         {% endif %}
       </div>
-    </nav>
+    </div>
   </div>
-</div>
+</header>

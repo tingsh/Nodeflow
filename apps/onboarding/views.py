@@ -302,8 +302,10 @@ def step_4_alert(request, team_slug):
                 existing_rule.threshold = float(threshold)
                 existing_rule.name = f"{device.name} High {key.replace('_', ' ').title()}"
                 existing_rule.save()
+                if existing_rule.notify_email and not existing_rule.recipients.exists():
+                    existing_rule.recipients.add(request.user)
             else:
-                AlertRule.objects.create(
+                rule = AlertRule.objects.create(
                     team=request.team,
                     device=device,
                     name=f"{device.name} High {key.replace('_', ' ').title()}",
@@ -312,6 +314,7 @@ def step_4_alert(request, team_slug):
                     threshold=float(threshold),
                     severity="critical",
                 )
+                rule.recipients.add(request.user)
             return redirect("web_team:onboarding:complete", team_slug=team_slug)
 
     context = {

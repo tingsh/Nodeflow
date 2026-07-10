@@ -1,5 +1,6 @@
 import json
 import logging
+
 from django.conf import settings
 from django.http import HttpResponse, HttpResponseForbidden
 from django.views.decorators.csrf import csrf_exempt
@@ -20,7 +21,7 @@ def whatsapp_webhook(request):
         token = request.GET.get("hub.verify_token")
         challenge = request.GET.get("hub.challenge")
 
-        verify_token = getattr(settings, "WHATSAPP_VERIFY_TOKEN", "novena_verify_token")
+        verify_token = getattr(settings, "WHATSAPP_VERIFY_TOKEN", "")
         if mode == "subscribe" and token == verify_token:
             logger.info("WhatsApp webhook verified successfully.")
             return HttpResponse(challenge)

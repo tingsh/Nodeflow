@@ -1558,7 +1558,7 @@ requires-dist = [
     { name = "dj-stripe", specifier = ">=2.9" },
     { name = "django", specifier = ">=5.2" },
     { name = "django-allauth", extras = ["socialaccount", "mfa"] },
-    { name = "django-anymail", extras = ["amazon-ses", "mailgun"] },
+    { name = "django-anymail", extras = ["amazon-ses"] },
     { name = "django-celery-beat" },
     { name = "django-cors-headers" },
     { name = "django-environ" },

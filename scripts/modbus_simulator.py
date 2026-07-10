@@ -1,126 +1,214 @@
-"""
-Novena Gateway — Modbus TCP Field Device Simulator
-=================================================
-Simulates a power meter with 3 registers:
-  - Holding Register 3000: Current       (32-bit float, Big Endian)
-  - Holding Register 3028: Voltage       (32-bit float, Big Endian)
-  - Holding Register 3060: Active Power  (32-bit float, Big Endian)
+"""Novena hardware replay Modbus TCP field-device simulator.
 
-These register addresses match the default config.json in Novena Gateway.
+Run this on Laptop 2. The Raspberry Pi CM4 gateway discovers this process on
+Modbus TCP port 502, then polls the template-backed registers after Novena Hub
+pushes connector config.
 
-SETUP:
-  1. Set this laptop's Ethernet adapter to static IP: 10.0.0.1
-  2. Install dependency: pip install pymodbus
-  3. Run as Administrator (required for port 502):
-       python modbus_simulator.py
-  4. Connect an Ethernet cable from this laptop to the Pi CM4.
+Default setup:
+  python -m pip install "pymodbus==3.8.0"
+  python scripts/modbus_simulator.py --host 10.0.0.20 --port 502 --scenario factory
 
-The Pi will poll these registers every 5 seconds and stream the values
-to Novena Hub via MQTT.
+Use an elevated/admin shell for port 502 on Windows, macOS, or Linux.
 """
 
+import argparse
 import random
 import struct
 import threading
 import time
 
-from pymodbus.datastore import ModbusSequentialDataBlock, ModbusServerContext, ModbusSlaveContext
-from pymodbus.device import ModbusDeviceIdentification
+try:
+    from pymodbus.datastore import ModbusSlaveContext
+except ImportError:  # pymodbus >= 3.10 renamed this class.
+    from pymodbus.datastore import ModbusDeviceContext as ModbusSlaveContext
+
+from pymodbus.datastore import ModbusSequentialDataBlock, ModbusServerContext
 from pymodbus.server import StartTcpServer
 
-# ── Register addresses (must match Novena Gateway config.json) ──────────────
-REG_CURRENT     = 3000   # FC3 read, 2 registers (32-bit float)
-REG_VOLTAGE     = 3028   # FC3 read, 2 registers (32-bit float)
-REG_ACTIVE_PWR  = 3060   # FC3 read, 2 registers (32-bit float)
+try:
+    from pymodbus.device import ModbusDeviceIdentification
+except ImportError:
+    try:
+        from pymodbus.pdu.device import ModbusDeviceIdentification
+    except ImportError:
+        ModbusDeviceIdentification = None
 
-# ── Total holding register block (0 to 4000) ───────────────────────────────
-store = ModbusSequentialDataBlock(0, [0] * 4000)
-slave_context = ModbusSlaveContext(hr=store, zero_mode=True)
-context = ModbusServerContext(slaves=slave_context, single=True)
 
-# ── Device identity ────────────────────────────────────────────────────────
-identity = ModbusDeviceIdentification()
-identity.VendorName  = "Novena"
-identity.ProductCode = "NF-PM-SIM-001"
-identity.ProductName = "Novena Simulated Power Meter"
-identity.ModelName   = "Sim Power Meter v1.0"
-identity.VendorUrl   = "https://${NOVENA_DOMAIN}"
+POWER_METER_REGISTERS = {
+    "current": 3000,
+    "voltage": 3028,
+    "active_power": 3060,
+    "frequency": 3100,
+    "energy": 3200,
+}
+
+COLD_ROOM_REGISTERS = {
+    "temperature": 3000,
+    "humidity": 3002,
+}
+
+COLD_ROOM_COILS = {
+    "door_open": 10,
+    "compressor_status": 11,
+}
+
+CHILLER_REGISTERS = {
+    "temperature": 100,
+    "active_power": 102,
+    "run_hours": 103,
+}
+
+CHILLER_COILS = {
+    "compressor_status": 101,
+}
 
 
 def float_to_registers(value: float):
-    """
-    Pack a 32-bit float into two 16-bit Modbus holding registers.
-    Uses Big Endian byte order and Big Word order (most common in industrial devices).
-    """
-    packed = struct.pack(">f", value)          # Big-endian 32-bit float -> 4 bytes
-    high_word = struct.unpack(">H", packed[0:2])[0]  # First 2 bytes -> high word
-    low_word  = struct.unpack(">H", packed[2:4])[0]  # Last 2 bytes  -> low word
+    """Pack a 32-bit float into two big-endian 16-bit Modbus registers."""
+    packed = struct.pack(">f", float(value))
+    high_word = struct.unpack(">H", packed[0:2])[0]
+    low_word = struct.unpack(">H", packed[2:4])[0]
     return [high_word, low_word]
 
 
-def update_values():
-    """
-    Continuously updates the simulated register values with realistic power meter readings.
-    Runs in a background thread every 5 seconds.
-    """
-    print("\n[Simulator] Data update thread started.", flush=True)
+def make_identity(scenario):
+    if ModbusDeviceIdentification is None:
+        return None
+    products = {
+        "factory": ("NPM-100", "Novena PM-100 power meter"),
+        "cold": ("NCS-100", "Novena cold room sensor"),
+        "facilities": ("NPM-100", "Novena PM-100 power meter"),
+    }
+    product_code, product_name = products[scenario]
+    identity = ModbusDeviceIdentification()
+    identity.VendorName = "Novena"
+    identity.ProductCode = product_code
+    identity.ProductName = product_name
+    identity.ModelName = product_code
+    identity.MajorMinorRevision = "2026.07"
+    return identity
+
+
+def set_float(store, address, value):
+    store.setValues(address, float_to_registers(value))
+
+
+def set_coil(store, address, value):
+    store.setValues(address, [bool(value)])
+
+
+def update_values(hr_store, coil_store, scenario, interval_seconds):
+    energy = 43012.0
+    run_hours = 1192.0
+    mode = "normal"
+    last_mode_change = time.time()
+
     while True:
-        # Generate realistic simulated readings
-        current      = round(random.uniform(10.0, 15.0), 2)  # Amps
-        voltage      = round(random.uniform(220.0, 240.0), 2)  # Volts
-        active_power = round((current * voltage) / 1000.0, 3)  # kW
+        if time.time() - last_mode_change > 90:
+            mode = "incident" if mode == "normal" else "recovery"
+            if scenario == "cold":
+                mode = "incident" if mode == "recovery" else mode
+            last_mode_change = time.time()
 
-        # Convert floats to pairs of 16-bit Modbus registers
-        store.setValues(REG_CURRENT,    float_to_registers(current))
-        store.setValues(REG_VOLTAGE,    float_to_registers(voltage))
-        store.setValues(REG_ACTIVE_PWR, float_to_registers(active_power))
+        voltage = round(random.uniform(228.0, 235.0), 2)
+        current = round(random.uniform(2.8, 4.2), 2)
+        active_power = round(voltage * current, 1)
+        if mode == "incident":
+            current = round(random.uniform(7.2, 8.8), 2)
+            active_power = round(voltage * current, 1)
+        energy += active_power / 1000.0 * (interval_seconds / 3600.0)
 
-        print(
-            f"[Simulator] ⚡ Current: {current:.2f} A  |  "
-            f"Voltage: {voltage:.2f} V  |  "
-            f"Power: {active_power:.3f} kW",
-            flush=True
-        )
-        time.sleep(5)
+        if scenario in ("factory", "facilities"):
+            set_float(hr_store, POWER_METER_REGISTERS["current"], current)
+            set_float(hr_store, POWER_METER_REGISTERS["voltage"], voltage)
+            set_float(hr_store, POWER_METER_REGISTERS["active_power"], active_power)
+            set_float(hr_store, POWER_METER_REGISTERS["frequency"], round(random.uniform(49.9, 50.1), 2))
+            set_float(hr_store, POWER_METER_REGISTERS["energy"], round(energy, 2))
+
+        cold_temp = round(random.uniform(2.2, 3.4), 2)
+        door_open = False
+        if mode == "incident":
+            cold_temp = round(random.uniform(7.5, 9.2), 2)
+            door_open = True
+        if scenario == "cold":
+            set_float(hr_store, COLD_ROOM_REGISTERS["temperature"], cold_temp)
+            set_float(hr_store, COLD_ROOM_REGISTERS["humidity"], round(random.uniform(66.0, 73.0), 2))
+            set_coil(coil_store, COLD_ROOM_COILS["door_open"], door_open)
+            set_coil(coil_store, COLD_ROOM_COILS["compressor_status"], True)
+
+        chiller_temp = round(random.uniform(6.4, 7.4), 2)
+        if mode == "incident":
+            chiller_temp = round(random.uniform(10.5, 12.0), 2)
+        run_hours += interval_seconds / 3600.0
+        if scenario == "facilities":
+            set_float(hr_store, CHILLER_REGISTERS["temperature"], chiller_temp)
+            set_coil(coil_store, CHILLER_COILS["compressor_status"], True)
+            set_float(hr_store, CHILLER_REGISTERS["active_power"], round(active_power + 210, 1))
+            set_float(hr_store, CHILLER_REGISTERS["run_hours"], round(run_hours, 2))
+
+        shown = {
+            "factory": f"power={active_power:.1f} W current={current:.2f} A voltage={voltage:.1f} V mode={mode}",
+            "cold": f"temperature={cold_temp:.1f} degC door_open={door_open} mode={mode}",
+            "facilities": f"chiller_temp={chiller_temp:.1f} degC power={active_power + 210:.1f} W mode={mode}",
+        }
+        print(f"[modbus-sim] {shown[scenario]}", flush=True)
+        time.sleep(interval_seconds)
+
+
+def build_context():
+    hr_store = ModbusSequentialDataBlock(0, [0] * 10000)
+    coil_store = ModbusSequentialDataBlock(0, [False] * 1000)
+
+    try:
+        slave_context = ModbusSlaveContext(co=coil_store, di=coil_store, hr=hr_store, ir=hr_store, zero_mode=True)
+        context = ModbusServerContext(slaves=slave_context, single=True)
+    except TypeError:
+        slave_context = ModbusSlaveContext(co=coil_store, di=coil_store, hr=hr_store, ir=hr_store)
+        context = ModbusServerContext(devices=slave_context, single=True)
+    return context, hr_store, coil_store
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run the Novena Modbus TCP field-device simulator.")
+    parser.add_argument("--host", default="10.0.0.20", help="IP address to bind on Laptop 2.")
+    parser.add_argument("--port", type=int, default=502, help="Modbus TCP port. Use 502 for gateway discovery.")
+    parser.add_argument(
+        "--scenario",
+        choices=("factory", "cold", "facilities"),
+        default="factory",
+        help="Which pilot scenario register map to serve.",
+    )
+    parser.add_argument("--interval-seconds", type=float, default=5.0, help="Seconds between value updates.")
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    print("==========================================", flush=True)
-    print("  Novena Modbus TCP Simulator (V2.0)  ", flush=True)
-    print("==========================================", flush=True)
-    print("  Simulating a Power Meter at 10.0.0.1  ", flush=True)
-    print("  Registers:                            ", flush=True)
-    print("    3000 -> Current      (A)            ", flush=True)
-    print("    3028 -> Voltage      (V)            ", flush=True)
-    print("    3060 -> Active Power (kW)           ", flush=True)
-    print("==========================================", flush=True)
-    print("  ⚠ Make sure this laptop's Ethernet   ", flush=True)
-    print("    adapter is set to: 10.0.0.1        ", flush=True)
-    print("==========================================", flush=True)
-    print("  Starting server on 10.0.0.1:502...   ", flush=True)
-    print("  Press Ctrl+C to stop.                ", flush=True)
-    print("==========================================\n", flush=True)
+    args = parse_args()
+    context, hr_store, coil_store = build_context()
 
-    # Start background thread to update register values
-    updater = threading.Thread(target=update_values, daemon=True)
+    print("Novena Modbus TCP hardware replay simulator")
+    print(f"Listening on {args.host}:{args.port}")
+    print("Power meter registers: current=3000, voltage=3028, active_power=3060, frequency=3100, energy=3200")
+    print("Cold-room registers/coils: temperature=3000, humidity=3002, door_open coil=10, compressor coil=11")
+    print("Chiller registers/coils: temperature=100, compressor coil=101, active_power=102, run_hours=103")
+    print("Press Ctrl+C to stop.\n")
+
+    updater = threading.Thread(
+        target=update_values,
+        args=(hr_store, coil_store, args.scenario, args.interval_seconds),
+        daemon=True,
+    )
     updater.start()
-
-    # Give the updater a moment to write initial values
     time.sleep(1)
 
     try:
-        # Bind to this laptop's static IP on the standard Modbus port
-        StartTcpServer(
-            context=context,
-            identity=identity,
-            address=("10.0.0.1", 502)
-        )
+        kwargs = {"context": context, "address": (args.host, args.port)}
+        identity = make_identity(args.scenario)
+        if identity is not None:
+            kwargs["identity"] = identity
+        StartTcpServer(**kwargs)
     except PermissionError:
-        print("\n[ERROR] Binding to port 502 requires Administrator privileges!", flush=True)
-        print("[INFO]  Please close this window and re-run as Administrator:", flush=True)
-        print("        Right-click on CMD -> 'Run as administrator'", flush=True)
-        print("        Then run: python modbus_simulator.py\n", flush=True)
+        print(f"\n[error] Binding to port {args.port} requires an elevated/admin shell.")
     except OSError as e:
-        print(f"\n[ERROR] Could not bind to 10.0.0.1:502 — {e}", flush=True)
-        print("[INFO]  Make sure your Ethernet adapter is configured with static IP 10.0.0.1", flush=True)
-        print("[INFO]  Check: Control Panel -> Network Adapters -> Ethernet -> IPv4 Properties\n", flush=True)
+        print(f"\n[error] Could not bind to {args.host}:{args.port}: {e}")
+        print("[hint] Confirm Laptop 2 Ethernet uses the requested static IP and no other Modbus server is running.")

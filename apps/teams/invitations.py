@@ -1,27 +1,13 @@
-from django.conf import settings
-from django.core.mail import send_mail
-from django.template.loader import render_to_string
-from django.utils.translation import gettext_lazy as _
+from django.db import transaction
 
 from apps.users.models import CustomUser
 
 from .models import Invitation
+from .tasks import send_invitation_email_task
 
 
 def send_invitation(invitation):
-    project_name = settings.PROJECT_METADATA["NAME"]
-    email_context = {
-        "invitation": invitation,
-        "project_name": project_name,
-    }
-    send_mail(
-        subject=_("You're invited to {}!").format(project_name),
-        message=render_to_string("teams/email/invitation.txt", context=email_context),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[invitation.email],
-        fail_silently=False,
-        html_message=render_to_string("teams/email/invitation.html", context=email_context),
-    )
+    transaction.on_commit(lambda: send_invitation_email_task.delay(str(invitation.id)))
 
 
 def process_invitation(invitation: Invitation, user: CustomUser):

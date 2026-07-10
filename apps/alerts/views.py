@@ -58,10 +58,6 @@ class AlertRuleCreateView(PermissionRequiredMixin, CreateView):
         return kwargs
 
     def form_valid(self, form):
-        if (form.cleaned_data.get("notify_email") or form.cleaned_data.get("notify_whatsapp")) \
-           and not form.cleaned_data.get("recipients"):
-            form.add_error("recipients", "You must select at least one recipient if notifications are enabled.")
-            return self.form_invalid(form)
         form.instance.team = self.request.team
         return super().form_valid(form)
 
@@ -79,13 +75,6 @@ class AlertRuleUpdateView(PermissionRequiredMixin, UpdateView):
         kwargs = super().get_form_kwargs()
         kwargs["team"] = self.request.team
         return kwargs
-
-    def form_valid(self, form):
-        if (form.cleaned_data.get("notify_email") or form.cleaned_data.get("notify_whatsapp")) \
-           and not form.cleaned_data.get("recipients"):
-            form.add_error("recipients", "You must select at least one recipient if notifications are enabled.")
-            return self.form_invalid(form)
-        return super().form_valid(form)
 
     def get_success_url(self):
         return reverse_lazy("web_team:alerts:alert_list", args=[self.request.team.slug])
@@ -148,4 +137,3 @@ def escalate_alert_to_ticket(request, team_slug, alert_id):
         auto_create_ticket(alert, force=True)
 
     return render(request, "alerts/partials/alert_row.html", {"alert": alert})
-
