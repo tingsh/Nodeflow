@@ -150,41 +150,48 @@ For end-to-end alert testing beyond Meta's `hello_world` sandbox template, creat
 ```text
 Template name: novena_alert_notification
 Category: Utility
-Language: English (US) / en_US
+Language: English / en
 ```
 
-Suggested body:
+Approved test body:
 
 ```text
-Novena Alert {{1}}
+Novena Alert Summary: {{1}}
+Novena Platform has detected an equipment alert from your connected monitoring system.
 
-Rule: {{2}}
-Device: {{3}}
-Value: {{4}}
-Severity: {{5}}
-Time: {{6}}
+Rule Triggered: {{1}}
+Device: {{2}}
+Value: {{3}}
+Time: {{4}}
 
-Open alerts: {{7}}
+Please open Novena Hub to review the full telemetry history, acknowledge the alert, and decide whether maintenance action is required.
+
+This automated message is intended for the assigned operations or maintenance contact.
 ```
 
-Novena maps the template variables as:
+Novena maps the header variable as:
 
 ```text
-{{1}} = alert status, for example CRITICAL or RESOLVED
-{{2}} = alert rule name
-{{3}} = device name
-{{4}} = trigger value
-{{5}} = severity
-{{6}} = trigger timestamp
-{{7}} = alert dashboard URL
+{{1}} = severity title, for example Critical
+```
+
+Novena maps the body variables as:
+
+```text
+{{1}} = alert rule name
+{{2}} = device name
+{{3}} = trigger value
+{{4}} = trigger timestamp
 ```
 
 After Meta approves the template, set:
 
 ```env
 WHATSAPP_ALERT_TEMPLATE_NAME="novena_alert_notification"
-WHATSAPP_ALERT_TEMPLATE_LANGUAGE="en_US"
+WHATSAPP_ALERT_TEMPLATE_LANGUAGE="en"
 ```
+
+This template is trigger-only. Create a separate approved template before enabling WhatsApp resolution messages.
 
 ## Official References
 

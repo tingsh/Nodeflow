@@ -15,6 +15,34 @@ from .whatsapp import send_whatsapp_template_message, send_whatsapp_text_message
 logger = logging.getLogger("novena_hub")
 
 
+def _get_whatsapp_alert_template_parameters(alert, is_resolved, template_name):
+    if template_name == "hello_world":
+        return [], []
+
+    if template_name == "novena_alert_notification":
+        if is_resolved:
+            return None
+        return [
+            alert.rule.severity.title(),
+        ], [
+            alert.rule.name,
+            alert.device.name,
+            str(alert.trigger_value),
+            alert.triggered_at.strftime("%Y-%m-%d %H:%M:%S"),
+        ]
+
+    status_text = "RESOLVED" if is_resolved else alert.rule.severity.upper()
+    return [], [
+        status_text,
+        alert.rule.name,
+        alert.device.name,
+        str(alert.trigger_value),
+        alert.rule.severity.upper(),
+        alert.triggered_at.strftime("%Y-%m-%d %H:%M:%S"),
+        f"{settings.PROJECT_METADATA['URL']}/a/{alert.team.slug}/alerts/",
+    ]
+
+
 def _retry_countdown(retries):
     return min(300, 30 * (2**retries))
 
@@ -115,20 +143,24 @@ def dispatch_alert_whatsapp_task(alert_id, is_resolved=False):
 
     template_name = getattr(settings, "WHATSAPP_ALERT_TEMPLATE_NAME", "hello_world")
     template_language = getattr(settings, "WHATSAPP_ALERT_TEMPLATE_LANGUAGE", "en_US")
-    template_parameters = []
-    if template_name != "hello_world":
-        template_parameters = [
-            status_text,
-            alert.rule.name,
-            alert.device.name,
-            str(alert.trigger_value),
-            alert.rule.severity.upper(),
-            alert.triggered_at.strftime("%Y-%m-%d %H:%M:%S"),
-            f"{settings.PROJECT_METADATA['URL']}/a/{alert.team.slug}/alerts/",
-        ]
+    template_parameters = _get_whatsapp_alert_template_parameters(alert, is_resolved, template_name)
+    if template_parameters is None:
+        logger.info(
+            "WhatsApp resolved notification skipped for alert %s because template %s is trigger-only.",
+            alert.id,
+            template_name,
+        )
+        return
+    header_parameters, body_parameters = template_parameters
 
     for number in phone_numbers:
-        sent = send_whatsapp_template_message(number, template_name, template_language, template_parameters)
+        sent = send_whatsapp_template_message(
+            number,
+            template_name,
+            template_language,
+            body_parameters=body_parameters,
+            header_parameters=header_parameters,
+        )
         if sent:
             logger.info(
                 "WhatsApp alert template dispatched for alert %s (is_resolved=%s, template=%s). "

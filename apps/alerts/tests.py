@@ -177,7 +177,7 @@ def test_targeted_recipients_email_dispatch():
     WHATSAPP_PHONE_NUMBER_ID="12345",
     WHATSAPP_ACCESS_TOKEN="token_abc",
     WHATSAPP_ALERT_TEMPLATE_NAME="novena_alert_notification",
-    WHATSAPP_ALERT_TEMPLATE_LANGUAGE="en_US",
+    WHATSAPP_ALERT_TEMPLATE_LANGUAGE="en",
 )
 @patch("apps.alerts.whatsapp.requests.post")
 def test_targeted_whatsapp_dispatch(mock_post):
@@ -219,12 +219,17 @@ def test_targeted_whatsapp_dispatch(mock_post):
     assert payload["to"] == "15551234567"
     assert payload["type"] == "template"
     assert payload["template"]["name"] == "novena_alert_notification"
-    assert payload["template"]["language"]["code"] == "en_US"
-    parameters = payload["template"]["components"][0]["parameters"]
-    assert [param["type"] for param in parameters] == ["text"] * 7
-    assert parameters[0]["text"] == "WARNING"
-    assert parameters[1]["text"] == "Targeted WhatsApp Alert"
-    assert parameters[2]["text"] == "Test Device"
+    assert payload["template"]["language"]["code"] == "en"
+    header_parameters = payload["template"]["components"][0]["parameters"]
+    body_parameters = payload["template"]["components"][1]["parameters"]
+    assert payload["template"]["components"][0]["type"] == "header"
+    assert payload["template"]["components"][1]["type"] == "body"
+    assert [param["type"] for param in header_parameters] == ["text"]
+    assert [param["type"] for param in body_parameters] == ["text"] * 4
+    assert header_parameters[0]["text"] == "Warning"
+    assert body_parameters[0]["text"] == "Targeted WhatsApp Alert"
+    assert body_parameters[1]["text"] == "Test Device"
+    assert body_parameters[2]["text"] == "55.0"
 
 
 @pytest.mark.django_db

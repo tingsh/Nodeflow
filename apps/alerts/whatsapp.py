@@ -80,7 +80,13 @@ def text_parameter(value):
     }
 
 
-def send_whatsapp_template_message(phone_number, template_name, language_code="en_US", body_parameters=None):
+def send_whatsapp_template_message(
+    phone_number,
+    template_name,
+    language_code="en_US",
+    body_parameters=None,
+    header_parameters=None,
+):
     """
     Send a WhatsApp template message.
     Template messages are required when Novena starts a business-initiated conversation.
@@ -89,13 +95,23 @@ def send_whatsapp_template_message(phone_number, template_name, language_code="e
         "name": template_name,
         "language": {"code": language_code},
     }
+    components = []
+    if header_parameters:
+        components.append(
+            {
+                "type": "header",
+                "parameters": [text_parameter(value) for value in header_parameters],
+            }
+        )
     if body_parameters:
-        template["components"] = [
+        components.append(
             {
                 "type": "body",
                 "parameters": [text_parameter(value) for value in body_parameters],
             }
-        ]
+        )
+    if components:
+        template["components"] = components
 
     return send_whatsapp_meta_payload(
         phone_number,
