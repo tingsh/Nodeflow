@@ -91,6 +91,7 @@ class Command(BaseCommand):
 
             from apps.devices.models import Device, Gateway
             from apps.telemetry.mqtt_parser import parse_mqtt_payload
+            from apps.utils.timezones import format_site_datetime, site_timezone_metadata
 
             events = parse_mqtt_payload('v1/gateway/telemetry', payload)
             channel_layer = get_channel_layer()
@@ -148,11 +149,14 @@ class Command(BaseCommand):
                         )
 
                 if target_device:
+                    timezone_data = site_timezone_metadata(target_device.site)
                     async_to_sync(channel_layer.group_send)(
                         f'device_{target_device.id}',
                         {
                             'type': 'telemetry_message',
                             'timestamp': timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp),
+                            'timestamp_local': format_site_datetime(timestamp, target_device.site),
+                            **timezone_data,
                             'values': values,
                         },
                     )

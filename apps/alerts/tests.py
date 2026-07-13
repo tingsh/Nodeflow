@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
@@ -182,7 +183,7 @@ def test_targeted_recipients_email_dispatch():
 @patch("apps.alerts.whatsapp.requests.post")
 def test_targeted_whatsapp_dispatch(mock_post):
     team = Team.objects.create(name="Test Team", slug="test-team")
-    site = Site.objects.create(team=team, name="Test Site")
+    site = Site.objects.create(team=team, name="Test Site", timezone="Australia/Sydney")
     device = Device.objects.create(
         team=team, site=site, name="Test Device", device_type="plc", protocol="modbus_tcp", status="online"
     )
@@ -208,6 +209,7 @@ def test_targeted_whatsapp_dispatch(mock_post):
     alert = Alert.objects.create(
         team=team, rule=rule, device=device, trigger_value=55.0, status="active"
     )
+    Alert.objects.filter(id=alert.id).update(triggered_at=datetime(2026, 7, 13, 2, 42, 25, tzinfo=UTC))
 
     dispatch_alert_whatsapp_task(alert.id)
 
@@ -230,6 +232,7 @@ def test_targeted_whatsapp_dispatch(mock_post):
     assert body_parameters[0]["text"] == "Targeted WhatsApp Alert"
     assert body_parameters[1]["text"] == "Test Device"
     assert body_parameters[2]["text"] == "55.0"
+    assert body_parameters[3]["text"] == "2026-07-13 12:42:25 AEST"
 
 
 @pytest.mark.django_db

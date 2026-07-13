@@ -1,5 +1,6 @@
 {% extends "web/app/app_base.html" %}
 {% load static %}
+{% load utils_tags %}
 {% block app %}
 <div class="px-4 sm:px-6 lg:px-8 py-8">
     <nav class="flex mb-8" aria-label="Breadcrumb">
@@ -299,7 +300,7 @@
             telemetrySampleRows.slice(0, telemetrySampleLimit).forEach((sample, index) => {
                 const row = document.createElement('tr');
                 if (index === 0) row.className = 'transition-colors duration-500';
-                row.appendChild(buildValueCell(formatSampleTime(sample.timestamp), true));
+                row.appendChild(buildValueCell(sample.timestamp_local || formatSampleTime(sample.timestamp), true));
                 telemetrySampleColumns.forEach(column => {
                     row.appendChild(buildValueCell(formatTelemetryValue(sample.values[column.key])));
                 });
@@ -357,7 +358,7 @@
             if (existing) {
                 existing.values = {...existing.values, ...nextValues};
             } else {
-                telemetrySampleRows.unshift({timestamp, values: nextValues});
+                telemetrySampleRows.unshift({timestamp, timestamp_local: values.timestamp_local, values: nextValues});
             }
             telemetrySampleRows = telemetrySampleRows.slice(0, telemetrySampleLimit);
             renderTelemetrySamples();
@@ -374,7 +375,7 @@
 
                     if (charts[key]) {
                         const chart = charts[key];
-                        chart.data.labels = data.labels.map(l => new Date(l).toLocaleTimeString());
+                        chart.data.labels = data.labels_local || data.labels.map(l => new Date(l).toLocaleTimeString());
                         chart.data.datasets[0].data = data.values;
                         chart.update('none');
                     }
@@ -508,14 +509,14 @@
                     scheduleTelemetryStaleWatch();
                 } else if (msg.type === "telemetry") {
                     stopTelemetryPolling();
-                    const timestamp = new Date(msg.timestamp).toLocaleTimeString();
+                    const timestamp = msg.timestamp_local || new Date(msg.timestamp).toLocaleTimeString();
                     Object.keys(msg.values).forEach(key => {
                         if (key === 'device_name') return;
                         const val = msg.values[key];
                         updateMetricValue(key, val);
                         updateChartPoint(key, timestamp, val);
                     });
-                    prependTelemetrySample(msg.timestamp, msg.values);
+                    prependTelemetrySample(msg.timestamp, {...msg.values, timestamp_local: msg.timestamp_local});
                     scheduleTelemetryStaleWatch();
                 }
             };
@@ -879,7 +880,7 @@
                         <tbody id="command-history-body" class="divide-y divide-gray-50 dark:divide-gray-700">
                             {% for command in recent_commands %}
                             <tr>
-                                <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500 font-mono">{{ command.requested_at|date:"H:i:s" }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500 font-mono">{{ command.requested_at|site_datetime:device.site }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-xs">
                                     <span class="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-black uppercase tracking-widest {% if command.command_type == 'read' %}bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300{% else %}bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300{% endif %}">
                                         {{ command.command_type }}

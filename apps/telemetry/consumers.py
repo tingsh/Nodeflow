@@ -1,7 +1,8 @@
-import json
-import time
 import logging
+import time
+
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+
 from apps.devices.models import Device
 from apps.subscriptions.enforcement import get_latency_limit_for_team
 
@@ -47,7 +48,12 @@ class TelemetryConsumer(AsyncJsonWebsocketConsumer):
             "type": "connection_established",
             "min_interval": self.min_interval
         })
-        logger.info(f"WebSocket connected: user={user.email}, device={self.device_id}, min_interval={self.min_interval}s")
+        logger.info(
+            "WebSocket connected: user=%s, device=%s, min_interval=%ss",
+            user.email,
+            self.device_id,
+            self.min_interval,
+        )
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
@@ -61,5 +67,8 @@ class TelemetryConsumer(AsyncJsonWebsocketConsumer):
             await self.send_json({
                 "type": "telemetry",
                 "timestamp": event["timestamp"],
+                "timestamp_local": event.get("timestamp_local"),
+                "timezone": event.get("timezone"),
+                "timezone_abbr": event.get("timezone_abbr"),
                 "values": event["values"]
             })

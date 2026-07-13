@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from apps.events.models import EmailDelivery
 from apps.events.services import TrackedEmailDeliveryError, record_no_email_recipients, send_tracked_email
+from apps.utils.timezones import format_site_datetime
 
 from .models import Alert
 from .whatsapp import send_whatsapp_template_message, send_whatsapp_text_message
@@ -28,7 +29,7 @@ def _get_whatsapp_alert_template_parameters(alert, is_resolved, template_name):
             alert.rule.name,
             alert.device.name,
             str(alert.trigger_value),
-            alert.triggered_at.strftime("%Y-%m-%d %H:%M:%S"),
+            format_site_datetime(alert.triggered_at, alert.device.site),
         ]
 
     status_text = "RESOLVED" if is_resolved else alert.rule.severity.upper()
@@ -38,7 +39,7 @@ def _get_whatsapp_alert_template_parameters(alert, is_resolved, template_name):
         alert.device.name,
         str(alert.trigger_value),
         alert.rule.severity.upper(),
-        alert.triggered_at.strftime("%Y-%m-%d %H:%M:%S"),
+        format_site_datetime(alert.triggered_at, alert.device.site),
         f"{settings.PROJECT_METADATA['URL']}/a/{alert.team.slug}/alerts/",
     ]
 
@@ -79,12 +80,14 @@ def dispatch_alert_email_task(self, alert_id, is_resolved=False):
         subject = f"[{alert.rule.severity.upper()}] Novena Alert: {alert.rule.name}"
         notification_type = EmailDelivery.NotificationType.ALERT_TRIGGERED
 
+    notification_timestamp = timezone.now() if is_resolved else alert.triggered_at
     context = {
         "alert": alert,
         "rule": alert.rule,
         "device": alert.device,
         "site": alert.device.site,
-        "timestamp": timezone.now() if is_resolved else alert.triggered_at,
+        "timestamp": notification_timestamp,
+        "timestamp_display": format_site_datetime(notification_timestamp, alert.device.site),
         "dashboard_url": f"{settings.PROJECT_METADATA['URL']}/a/{alert.team.slug}/alerts/",
         "is_resolved": is_resolved,
     }
@@ -120,7 +123,7 @@ def dispatch_alert_email_task(self, alert_id, is_resolved=False):
 @shared_task
 def dispatch_alert_whatsapp_task(alert_id, is_resolved=False):
     try:
-        alert = Alert.objects.get(id=alert_id)
+        alert = Alert.objects.select_related("team", "device", "device__site", "rule").get(id=alert_id)
     except Alert.DoesNotExist:
         logger.error(f"Alert {alert_id} not found for WhatsApp dispatch.")
         return
@@ -138,7 +141,7 @@ def dispatch_alert_whatsapp_task(alert_id, is_resolved=False):
         f"Device: {alert.device.name}\n"
         f"Value: {alert.trigger_value}\n"
         f"Severity: {alert.rule.severity.upper()}\n"
-        f"Time: {alert.triggered_at.strftime('%H:%M:%S')}"
+        f"Time: {format_site_datetime(alert.triggered_at, alert.device.site, '%H:%M:%S %Z')}"
     )
 
     template_name = getattr(settings, "WHATSAPP_ALERT_TEMPLATE_NAME", "hello_world")

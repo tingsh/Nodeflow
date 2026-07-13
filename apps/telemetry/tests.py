@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -225,6 +226,8 @@ def test_device_telemetry_samples_api_groups_template_columns():
     ]
     assert len(data["rows"]) == 2
     assert data["rows"][0]["timestamp"] == newer.isoformat()
+    assert data["rows"][0]["timestamp_local"]
+    assert data["timezone"] == "Asia/Singapore"
     assert data["rows"][0]["values"] == {"current": 2.2, "voltage": 235.0, "active_power": 295.0}
     assert "run_command" not in data["rows"][0]["values"]
 
@@ -288,6 +291,120 @@ def test_device_telemetry_samples_api_rejects_wrong_team_slug():
 
     with pytest.raises(Http404):
         device_telemetry_samples_api(_sample_request(user), other_team.slug, device.id)
+
+
+@pytest.mark.django_db
+def test_telemetry_history_api_returns_utc_and_site_local_labels():
+    from apps.telemetry.views import device_telemetry_history_api
+
+    user = CustomUser.objects.create_user(
+        username="history_tz_user",
+        email="history-tz@example.com",
+        password="password123",
+    )
+    team = Team.objects.create(name="History TZ Team", slug="history-tz-team")
+    site = Site.objects.create(team=team, name="Jakarta Site", timezone="Asia/Jakarta")
+    device = Device.objects.create(
+        team=team,
+        site=site,
+        name="Jakarta Meter",
+        device_type="power_meter",
+        protocol="modbus_tcp",
+        status="online",
+    )
+    timestamp = datetime(2026, 7, 13, 2, 42, 25, tzinfo=UTC)
+    TelemetryData.objects.create(device=device, timestamp=timestamp, key="temperature", value_numeric=28.0)
+
+    request = RequestFactory().get(f"/a/{team.slug}/telemetry/api/history/{device.id}/?key=temperature&hours=24")
+    request.user = user
+    request.team = team
+    response = device_telemetry_history_api(request, team.slug, device.id)
+    data = json.loads(response.content)
+
+    assert response.status_code == 200
+    assert data["labels"] == [timestamp.isoformat()]
+    assert data["labels_local"] == ["09:42:25"]
+    assert data["timezone"] == "Asia/Jakarta"
+
+
+@pytest.mark.django_db
+def test_telemetry_csv_export_uses_site_local_timestamp():
+    from apps.telemetry.views import export_telemetry_csv
+
+    user = CustomUser.objects.create_user(
+        username="csv_tz_user",
+        email="csv-tz@example.com",
+        password="password123",
+    )
+    team = Team.objects.create(name="CSV TZ Team", slug="csv-tz-team")
+    site = Site.objects.create(team=team, name="Tokyo Site", timezone="Asia/Tokyo")
+    device = Device.objects.create(
+        team=team,
+        site=site,
+        name="Tokyo Meter",
+        device_type="power_meter",
+        protocol="modbus_tcp",
+        status="online",
+    )
+    TelemetryData.objects.create(
+        device=device,
+        timestamp=datetime(2026, 7, 13, 2, 42, 25, tzinfo=UTC),
+        key="temperature",
+        value_numeric=28.0,
+    )
+
+    request = RequestFactory().get(f"/a/{team.slug}/telemetry/api/export/{device.id}/?days=7")
+    request.user = user
+    request.team = team
+    response = export_telemetry_csv(request, team.slug, device.id)
+
+    assert response.status_code == 200
+    assert "2026-07-13 11:42:25 JST" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_same_utc_telemetry_displays_different_site_local_times():
+    from apps.telemetry.views import device_telemetry_history_api
+
+    user = CustomUser.objects.create_user(
+        username="multi_site_tz_user",
+        email="multi-site-tz@example.com",
+        password="password123",
+    )
+    team = Team.objects.create(name="Multi Site TZ Team", slug="multi-site-tz-team")
+    singapore_site = Site.objects.create(team=team, name="Singapore Site", timezone="Asia/Singapore")
+    auckland_site = Site.objects.create(team=team, name="Auckland Site", timezone="Pacific/Auckland")
+    instant = datetime(2026, 7, 13, 2, 42, 25, tzinfo=UTC)
+    devices = [
+        Device.objects.create(
+            team=team,
+            site=singapore_site,
+            name="Singapore Meter",
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            status="online",
+        ),
+        Device.objects.create(
+            team=team,
+            site=auckland_site,
+            name="Auckland Meter",
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            status="online",
+        ),
+    ]
+    for device in devices:
+        TelemetryData.objects.create(device=device, timestamp=instant, key="temperature", value_numeric=28.0)
+
+    local_labels = []
+    for device in devices:
+        request = RequestFactory().get(f"/a/{team.slug}/telemetry/api/history/{device.id}/?key=temperature&hours=24")
+        request.user = user
+        request.team = team
+        response = device_telemetry_history_api(request, team.slug, device.id)
+        local_labels.append(json.loads(response.content)["labels_local"][0])
+
+    assert local_labels == ["10:42:25", "14:42:25"]
 
 
 @pytest.mark.django_db

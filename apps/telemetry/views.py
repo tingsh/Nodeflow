@@ -5,6 +5,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 
 from apps.devices.models import Device
+from apps.utils.timezones import format_site_datetime, site_timezone_metadata
 
 from .models import TelemetryData
 from .services import get_latest_telemetry_for_chart, get_latest_telemetry_value
@@ -164,6 +165,7 @@ def device_telemetry_samples_api(request, team_slug, device_id):
     rows_by_timestamp = {
         timestamp: {
             "timestamp": timestamp.isoformat(),
+            "timestamp_local": format_site_datetime(timestamp, device.site),
             "values": {},
         }
         for timestamp in timestamps
@@ -179,6 +181,7 @@ def device_telemetry_samples_api(request, team_slug, device_id):
         "rows": list(rows_by_timestamp.values()),
         "limit": limit,
         "limit_options": list(SAMPLE_LIMIT_OPTIONS),
+        **site_timezone_metadata(device.site),
     })
 
 
@@ -216,12 +219,20 @@ def device_telemetry_history_api(request, team_slug, device_id):
     points = list(reversed(list(qs)))
     
     labels = []
+    labels_local = []
     values = []
     for point in points:
         labels.append(point.timestamp.isoformat())
+        labels_local.append(format_site_datetime(point.timestamp, device.site, "%H:%M:%S"))
         values.append(point.value_numeric or 0.0)
 
-    return JsonResponse({"labels": labels, "values": values, "key": key})
+    return JsonResponse({
+        "labels": labels,
+        "labels_local": labels_local,
+        "values": values,
+        "key": key,
+        **site_timezone_metadata(device.site),
+    })
 
 
 @login_required
@@ -257,6 +268,12 @@ def export_telemetry_csv(request, team_slug, device_id):
     for point in qs[:5000]:  # Limit export for safety
         val = point.value_numeric if point.value_numeric is not None else (point.value_string or point.value_bool)
         meta = metric_meta.get(point.key, {"label": point.key.replace("_", " ").title(), "unit": ""})
-        writer.writerow([point.timestamp, meta["label"], point.key, val, meta["unit"]])
+        writer.writerow([
+            format_site_datetime(point.timestamp, device.site),
+            meta["label"],
+            point.key,
+            val,
+            meta["unit"],
+        ])
 
     return response

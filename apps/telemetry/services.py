@@ -3,6 +3,7 @@ import logging
 from django.utils import timezone
 
 from apps.devices.models import Device, Gateway
+from apps.utils.timezones import format_site_datetime
 
 from .models import TelemetryData
 
@@ -115,7 +116,7 @@ def get_latest_telemetry_for_chart(device, key, limit=20):
     values = []
 
     for point in data:
-        labels.append(point.timestamp.strftime("%H:%M:%S"))
+        labels.append(format_site_datetime(point.timestamp, device.site, "%H:%M:%S"))
         values.append(point.value_numeric or 0)
 
     return {"labels": labels, "values": values, "key": key}
