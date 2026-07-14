@@ -316,8 +316,8 @@ class HeroBlock(blocks.StructBlock):
     tagline = blocks.CharBlock(required=False, default="Industrial IoT for SME operations")
     title = blocks.CharBlock(required=True, default="Connect equipment. See operations clearly. Act faster.")
     subtitle = blocks.CharBlock(required=True)
-    primary_cta_text = blocks.CharBlock(required=True, default="Book a demo")
-    primary_cta_url = blocks.CharBlock(required=True, default="/about/#contact")
+    primary_cta_text = blocks.CharBlock(required=True, default="Sign up")
+    primary_cta_url = blocks.CharBlock(required=True, default="/accounts/signup/")
     secondary_cta_text = blocks.CharBlock(required=False, default="Explore Platform")
     secondary_cta_url = blocks.CharBlock(required=False, default="#features")
     bg_style = blocks.ChoiceBlock(choices=[

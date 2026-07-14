@@ -1,7 +1,9 @@
 from allauth.account.utils import send_email_confirmation
 from allauth.socialaccount.models import SocialAccount
 from django.contrib import messages
+from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -12,9 +14,10 @@ from django.views.decorators.http import require_POST
 from apps.api.models import UserAPIKey
 
 from .adapter import user_has_valid_totp_device
-from .forms import CustomUserChangeForm, UploadAvatarForm
+from .forms import CloseAccountForm, CustomUserChangeForm, UploadAvatarForm
 from .helpers import require_email_confirmation, user_has_confirmed_email_address
 from .models import CustomUser
+from .services import close_user_account, sole_owned_active_teams
 
 
 @login_required
@@ -62,6 +65,8 @@ def profile(request):
             "user_has_valid_totp_device": user_has_valid_totp_device(request.user),
             "now": timezone.now(),
             "current_tz": timezone.get_current_timezone(),
+            "close_account_form": CloseAccountForm(),
+            "account_closure_blocking_teams": sole_owned_active_teams(request.user),
         },
     )
 
@@ -78,6 +83,31 @@ def upload_profile_image(request):
     else:
         readable_errors = ", ".join(str(error) for key, errors in form.errors.items() for error in errors)
         return JsonResponse(status=403, data={"errors": readable_errors})
+
+
+@login_required
+@require_POST
+def close_account(request):
+    form = CloseAccountForm(request.POST)
+    if form.is_valid():
+        try:
+            close_user_account(
+                request.user,
+                form.cleaned_data["current_password"],
+                form.cleaned_data["confirmation_email"],
+            )
+        except ValidationError as e:
+            messages.error(request, e.messages[0])
+            return HttpResponseRedirect(reverse("users:user_profile"))
+
+        logout(request)
+        messages.success(request, _("Your Novena account has been closed."))
+        return HttpResponseRedirect(reverse("web:home"))
+
+    for errors in form.errors.values():
+        for error in errors:
+            messages.error(request, error)
+    return HttpResponseRedirect(reverse("users:user_profile"))
 
 
 @login_required

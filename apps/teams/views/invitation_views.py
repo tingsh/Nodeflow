@@ -10,12 +10,15 @@ from django.utils.translation import gettext_lazy as _
 from apps.users.models import CustomUser
 
 from ..invitations import clear_invite_from_session, process_invitation
-from ..models import Invitation
+from ..models import Invitation, Team
 from ..roles import is_member
 
 
 def accept_invitation(request, invitation_id):
     invitation = get_object_or_404(Invitation, id=invitation_id)
+    if not invitation.team.is_active:
+        clear_invite_from_session(request)
+        raise Http404
     if not invitation.is_accepted:
         # set invitation in the session in case needed later - e.g. to redirect after login
         request.session["invitation_id"] = invitation_id
@@ -54,7 +57,7 @@ def accept_invitation(request, invitation_id):
     user_team_count = 0
     if request.user.is_authenticated:
         owned_email_address = EmailAddress.objects.filter(email=invitation.email, user=request.user).first()
-        user_team_count = request.user.teams.count()
+        user_team_count = request.user.teams.filter(status=Team.Status.ACTIVE).count()
     return render(
         request,
         "teams/accept_invite.html",

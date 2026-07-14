@@ -42,18 +42,18 @@
             <summary class="btn btn-ghost btn-sm btn-circle list-none">
               <i class="fa fa-user-circle text-lg text-slate-600"></i>
             </summary>
-            <ul class="menu dropdown-content z-50 mt-3 w-64 rounded-lg border border-slate-200 bg-white p-3 shadow-xl">
-              <li class="menu-title"><span class="text-xs text-slate-500">{{ user.email }}</span></li>
-              <li><a href="{% url 'users:user_profile' %}" class="rounded-md text-sm">Profile</a></li>
+            <ul class="menu dropdown-content z-50 mt-3 w-64 rounded-lg border border-[#d4dde8] bg-[#f4f7fb] p-3 text-[#243043] shadow-xl">
+              <li class="menu-title"><span class="text-xs font-semibold text-[#66758a]">{{ user.email }}</span></li>
+              <li><a href="{% url 'users:user_profile' %}" class="rounded-md text-sm font-semibold text-[#243043] hover:bg-[#e6edf5] hover:text-[#0f4f78]">Profile</a></li>
               {% if team and request.user|is_member_of:team %}
-                <li><a href="{% url 'single_team:manage_team' team.slug %}" class="rounded-md text-sm">Team settings</a></li>
+                <li><a href="{% url 'single_team:manage_team' team.slug %}" class="rounded-md text-sm font-semibold text-[#243043] hover:bg-[#e6edf5] hover:text-[#0f4f78]">Team settings</a></li>
               {% endif %}
-              <li><a href="{% url 'account_logout' %}" class="rounded-md text-sm text-error">Sign out</a></li>
+              <li><a href="{% url 'account_logout' %}" hx-boost="false" class="rounded-md text-sm font-semibold text-[#9f1239] hover:bg-[#fee2e2] hover:text-[#7f1d1d]">Sign out</a></li>
             </ul>
           </details>
         {% else %}
           <a href="{{ login_url }}" class="hidden text-sm font-semibold text-[#44536a] hover:text-sky-700 sm:inline-flex">Sign in</a>
-          <a href="/about/#contact" class="btn btn-primary hidden rounded-md px-5 font-bold sm:inline-flex">Book demo</a>
+          <a href="{{ signup_url }}" class="btn btn-primary hidden rounded-md px-5 font-bold sm:inline-flex">Sign up</a>
         {% endif %}
         <button type="button" class="btn btn-ghost btn-sm btn-circle md:hidden" @click="mobileOpen = true" aria-label="Open menu">
           <i class="fa fa-bars text-lg"></i>
@@ -88,7 +88,7 @@
         {% if user.is_authenticated %}
           <a href="{% if team %}{% url 'web_team:home' team.slug %}{% else %}{% url 'teams:manage_teams' %}{% endif %}" class="btn btn-primary w-full rounded-md font-bold">Open app</a>
         {% else %}
-          <a href="/about/#contact" class="btn btn-primary w-full rounded-md font-bold">Book demo</a>
+          <a href="{{ signup_url }}" class="btn btn-primary w-full rounded-md font-bold">Sign up</a>
           <a href="{{ login_url }}" class="btn btn-outline mt-3 w-full rounded-md border-slate-300 font-bold text-slate-800">Sign in</a>
         {% endif %}
       </div>

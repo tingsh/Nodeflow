@@ -1,7 +1,6 @@
 from allauth.account.models import EmailAddress
 from django.db.models import F
 from django.http import HttpRequest
-from django.shortcuts import get_object_or_404
 from django.utils.translation import gettext as _
 
 from apps.users.models import CustomUser
@@ -28,7 +27,7 @@ def get_next_unique_team_slug(team_name: str) -> str:
 def get_team_for_request(request, view_kwargs):
     team_slug = view_kwargs.get("team_slug", None)
     if team_slug:
-        return get_object_or_404(Team, slug=team_slug)
+        return Team.objects.filter(slug=team_slug, status=Team.Status.ACTIVE).first()
 
     if not request.user.is_authenticated:
         return
@@ -39,7 +38,7 @@ def get_team_for_request(request, view_kwargs):
 def get_default_team_from_request(request: HttpRequest) -> Team:
     if "team" in request.session:
         try:
-            return request.user.teams.get(id=request.session["team"])
+            return request.user.teams.get(id=request.session["team"], status=Team.Status.ACTIVE)
         except Team.DoesNotExist:
             # user wasn't member of team from session, or it didn't exist.
             # fall back to default behavior
@@ -49,8 +48,9 @@ def get_default_team_from_request(request: HttpRequest) -> Team:
 
 
 def get_default_team_for_user(user: CustomUser):
-    if user.teams.exists():
-        return user.teams.first()
+    teams = user.teams.filter(status=Team.Status.ACTIVE)
+    if teams.exists():
+        return teams.first()
     else:
         return None
 
@@ -76,7 +76,7 @@ def get_open_invitations_for_user(user: CustomUser) -> list[dict]:
 
     emails = {e.email for e in user_emails}
     open_invitations = (
-        Invitation.objects.filter(email__in=list(emails), is_accepted=False)
+        Invitation.objects.filter(email__in=list(emails), is_accepted=False, team__status=Team.Status.ACTIVE)
         .exclude(
             # don't show invitations for teams user is already a member of
             team__membership__user=user

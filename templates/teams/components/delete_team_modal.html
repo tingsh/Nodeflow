@@ -3,26 +3,25 @@
 <div class="modal">
   <div class="modal-box w-11/12 max-w-2xl" x-data="{ confirmStep: false }">
     <div x-show="!confirmStep">
-      <h3 class="font-bold text-lg">{% translate "Really delete team?" %}</h3>
+      <h3 class="font-bold text-lg">{% translate "Close team?" %}</h3>
       <p class="py-4">
         {% blocktranslate trimmed with team_name=request.team.name  %}
-        This will permanently delete the <em><strong>{{ team_name }}</strong></em> team and all associated data.
-        <strong>This action cannot be undone.</strong>
+        This will close the <em><strong>{{ team_name }}</strong></em> team. The workspace will become inaccessible, alerts and automations will stop, and shared links will be revoked. Operational history is preserved for audit, billing, troubleshooting, and compliance.
         {% endblocktranslate %}
       </p>
       <div class="modal-action">
         <button class="btn btn-error" type="button" x-on:click="confirmStep = true">
-          {% translate "I understand, permanently delete this team" %}
+          {% translate "I understand, close this team" %}
         </button>
         <label for="delete-modal" class="btn">{% translate "Cancel" %}</label>
       </div>
     </div>
 
     <div x-show="confirmStep" style="display: none;">
-      <h3 class="font-bold text-lg text-error">{% translate "Confirm team deletion" %}</h3>
+      <h3 class="font-bold text-lg text-error">{% translate "Confirm team closure" %}</h3>
       <p class="py-4 text-sm text-base-content/70">
         {% blocktranslate trimmed with team_name=request.team.name %}
-        To prevent accidental deletion, type <strong>{{ team_name }}</strong> exactly before deleting this team.
+        To prevent accidental closure, type <strong>{{ team_name }}</strong> exactly before closing this team.
         {% endblocktranslate %}
       </p>
       <form action="{% url 'single_team:delete_team' request.team.slug %}" method="post" class="space-y-4">
@@ -39,12 +38,12 @@
                  class="input input-bordered w-full font-mono"
                  aria-describedby="confirmation_team_name_help">
           <p id="confirmation_team_name_help" class="mt-2 text-xs text-base-content/60">
-            {% translate "This extra step prevents accidental company deletion." %}
+            {% translate "This extra step prevents accidental company closure." %}
           </p>
         </div>
         <div class="modal-action">
           <button class="btn btn-error" type="submit">
-            <i class="fa fa-trash mr-2"></i> {% translate "Delete Team" %}
+            <i class="fa fa-lock mr-2"></i> {% translate "Close Team" %}
           </button>
           <button class="btn" type="button" x-on:click="confirmStep = false">
             {% translate "Back" %}

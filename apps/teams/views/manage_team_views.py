@@ -11,14 +11,15 @@ from apps.teams.decorators import login_and_team_required, require_permission, t
 from apps.teams.forms import InvitationForm, TeamChangeForm
 from apps.teams.helpers import get_open_invitations_for_user
 from apps.teams.invitations import send_invitation
-from apps.teams.models import Invitation
-from apps.teams.roles import ROLE_DESCRIPTIONS, ROLE_OWNER, has_permission
+from apps.teams.models import Invitation, Team
+from apps.teams.roles import ROLE_DESCRIPTIONS, has_permission
+from apps.teams.services import close_team
 from apps.web.forms import set_form_fields_disabled
 
 
 @login_required
 def manage_teams(request):
-    teams = request.user.teams.order_by("name")
+    teams = request.user.teams.filter(status=Team.Status.ACTIVE).order_by("name")
     return render(
         request,
         "teams/list_teams.html",
@@ -74,13 +75,14 @@ def delete_team(request, team_slug):
     team = request.team
     confirmation_team_name = request.POST.get("confirmation_team_name", "").strip()
 
-    if confirmation_team_name != team.name:
-        messages.error(request, _("Type the team name exactly to confirm deletion."))
+    try:
+        close_team(team, request.user, confirmation_team_name)
+    except ValidationError as e:
+        messages.error(request, e.messages[0])
         return HttpResponseRedirect(reverse("single_team:manage_team", args=[team.slug]))
 
     team_name = team.name
-    team.delete()
-    messages.success(request, _('The "{team}" team was successfully deleted').format(team=team_name))
+    messages.success(request, _('The "{team}" team was successfully closed').format(team=team_name))
     return HttpResponseRedirect(reverse("web:home"))
 
 

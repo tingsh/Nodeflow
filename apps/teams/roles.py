@@ -47,11 +47,15 @@ PERMISSIONS = {
 def is_member(user: CustomUser, team) -> bool:
     if not team:
         return False
+    if getattr(team, "status", None) == "closed":
+        return False
     return team.members.filter(id=user.id).exists()
 
 
 def is_admin(user: CustomUser, team) -> bool:
     if not team:
+        return False
+    if getattr(team, "status", None) == "closed":
         return False
 
     from .models import Membership
@@ -62,6 +66,8 @@ def is_admin(user: CustomUser, team) -> bool:
 def has_permission(user: CustomUser, team, permission: str) -> bool:
     """Check if a user has a specific permission within a team."""
     if not team or not user.is_authenticated:
+        return False
+    if getattr(team, "status", None) == "closed":
         return False
 
     from .models import Membership

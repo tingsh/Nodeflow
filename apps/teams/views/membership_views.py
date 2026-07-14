@@ -9,7 +9,6 @@ from apps.teams.decorators import login_and_team_required
 from apps.teams.forms import MembershipForm
 from apps.teams.models import Membership
 from apps.teams.roles import ROLE_ADMIN, ROLE_OWNER, has_permission
-from apps.web.forms import set_form_fields_disabled
 
 
 @login_and_team_required
@@ -23,18 +22,22 @@ def team_membership_details(request, team_slug, membership_id):
 
     if request.method == "POST":
         post_data = request.POST.copy()
+        role_change_rejected = False
         
         # If editing self, lock the role to its current value
         if editing_self:
             post_data["role"] = membership.role
             if "role" in request.POST and request.POST["role"] != membership.role:
-                messages.warning(request, _("You aren't allowed to change your own role."))
+                if not can_manage_team:
+                    return HttpResponseForbidden(_("You aren't allowed to change your own role."))
+                messages.error(request, _("You aren't allowed to change your own role."))
+                role_change_rejected = True
 
         if not editing_self and not can_manage_team:
             return HttpResponseForbidden(_("You don't have permission to edit team members in that team."))
 
         membership_form = MembershipForm(post_data, instance=membership)
-        if membership_form.is_valid():
+        if membership_form.is_valid() and not role_change_rejected:
             membership = membership_form.save()
             messages.success(
                 request, _("Details for {member} updated.").format(member=membership.user.get_display_name())

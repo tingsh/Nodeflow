@@ -89,7 +89,7 @@ class TeamsAuthTest(TestCase):
         self._login(self.sox_admin)
         response = self.client.get(reverse("single_team:manage_team", args=[self.sox.slug]))
         self.assertEqual(200, response.status_code)
-        self.assertContains(response, "Delete Team")
+        self.assertContains(response, "Close Team")
 
     def test_delete_team_requires_exact_team_name_confirmation(self):
         self._login(self.sox_admin)
@@ -115,7 +115,13 @@ class TeamsAuthTest(TestCase):
             {"confirmation_team_name": self.sox.name},
         )
         self.assertEqual(302, response.status_code)
-        self.assertFalse(Team.objects.filter(slug=self.sox.slug).exists())
+        self.sox.refresh_from_db()
+        self.assertEqual(Team.Status.CLOSED, self.sox.status)
+        self.assertIsNotNone(self.sox.closed_at)
+        self.assertEqual(self.sox_admin, self.sox.closed_by)
+
+        response = self.client.get(reverse("single_team:manage_team", args=[self.sox.slug]))
+        self.assertEqual(404, response.status_code)
 
     def _login(self, user):
         success = self.client.login(username=user.username, password="123")

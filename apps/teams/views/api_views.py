@@ -32,7 +32,7 @@ class TeamViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # filter queryset based on logged in user
-        return self.request.user.teams.order_by("name")
+        return self.request.user.teams.filter(status=Team.Status.ACTIVE).order_by("name")
 
     def perform_create(self, serializer):
         # ensure logged in user is set on the model during creation
@@ -56,7 +56,7 @@ class InvitationViewSet(viewsets.ModelViewSet):
 
     @property
     def team(self):
-        team = get_object_or_404(Team, slug=self.kwargs["team_slug"])
+        team = get_object_or_404(Team, slug=self.kwargs["team_slug"], status=Team.Status.ACTIVE)
         if is_member(self.request.user, team):
             return team
         else:
