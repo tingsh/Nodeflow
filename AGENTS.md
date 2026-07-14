@@ -23,3 +23,17 @@ Use the WSL-native Python virtual environment ~/.venvs/novena by default for Dja
 ## Session Wrap-up (CRITICAL)
 Whenever you complete a feature or are about to end a chat session, update docs/agent_context/skills/novena-project-status/references/project_status.md.
 Log the work you accomplished in the Recent Activity Log section so the next AI agent has the correct context.
+
+## Git Workflow
+
+When starting a new coding task:
+
+1. Check `git status -sb` and the current branch before editing.
+2. If on `main` or `master`, create a focused feature branch before making changes.
+3. Keep each task scoped to one feature, fix, or polish area.
+4. Do not stage unrelated local changes.
+5. Before committing, summarize the changed files and tests run.
+6. Commit only the relevant files for the task.
+7. Push the feature branch to GitHub.
+8. Prefer opening a Pull Request into `main`. If the GitHub CLI is unavailable, provide the branch name and instructions/link for opening the PR manually.
+9. Never push directly to `main` unless explicitly instructed.
