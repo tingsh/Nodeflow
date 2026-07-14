@@ -2,6 +2,7 @@
 .vscode
 *.code-workspace
 *.pyc
+*.swp
 *~
 .venv
 venv
