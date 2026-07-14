@@ -1,0 +1,66 @@
+{% extends "web/app/app_base.html" %}
+{% block app %}
+<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+            <p class="text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-300">{{ profile.name }}</p>
+            <h1 class="mt-2 text-3xl font-black text-base-content font-heading">{{ site.name }} Value Report</h1>
+            <p class="mt-2 text-sm text-base-content/60">A profile-aware snapshot of the metrics, exceptions, and maintenance work that matter most for this site.</p>
+        </div>
+        <a href="{% url 'web_team:telemetry:export_site_profile_report_csv' request.team.slug site.id %}?days={{ days }}" class="btn btn-primary rounded-md">
+            <i class="fa fa-file-export mr-2"></i>Export CSV
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="rounded-2xl border border-base-content/10 bg-base-100 p-5">
+            <p class="text-xs font-bold uppercase tracking-widest text-base-content/45">Devices</p>
+            <p class="mt-2 text-3xl font-black">{{ devices|length }}</p>
+        </div>
+        <div class="rounded-2xl border border-base-content/10 bg-base-100 p-5">
+            <p class="text-xs font-bold uppercase tracking-widest text-base-content/45">Profile Metrics</p>
+            <p class="mt-2 text-3xl font-black">{{ rows|length }}</p>
+        </div>
+        <div class="rounded-2xl border border-base-content/10 bg-base-100 p-5">
+            <p class="text-xs font-bold uppercase tracking-widest text-base-content/45">Active Alerts</p>
+            <p class="mt-2 text-3xl font-black">{{ active_alerts|length }}</p>
+        </div>
+        <div class="rounded-2xl border border-base-content/10 bg-base-100 p-5">
+            <p class="text-xs font-bold uppercase tracking-widest text-base-content/45">Open Work</p>
+            <p class="mt-2 text-3xl font-black">{{ open_tickets|length }}</p>
+        </div>
+    </div>
+
+    <div class="rounded-2xl border border-base-content/10 bg-base-100 overflow-hidden">
+        <div class="border-b border-base-content/10 px-5 py-4">
+            <h2 class="font-black text-base-content">Latest Profile Readings</h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Device</th>
+                        <th>Metric</th>
+                        <th>Value</th>
+                        <th>Last Seen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td class="font-bold">{{ row.device.name }}</td>
+                        <td>{{ row.metric }} <span class="text-base-content/40 font-mono text-xs">{{ row.key }}</span></td>
+                        <td class="font-mono">{{ row.value }} {{ row.unit }}</td>
+                        <td>{{ row.timestamp_display }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="py-10 text-center text-sm text-base-content/50">No profile readings yet. Once telemetry arrives, Novena will populate this report automatically.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

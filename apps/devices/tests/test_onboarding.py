@@ -4,6 +4,7 @@ from apps.teams.models import Team, Membership
 from apps.teams.roles import ROLE_ADMIN
 from apps.users.models import CustomUser
 from apps.devices.models import Device, DeviceTemplate, Gateway, Site
+from apps.devices.solution_profiles import apply_solution_profile_presets, rank_templates_for_profile
 
 class OnboardingConnectionTest(TestCase):
     def setUp(self):
@@ -84,3 +85,89 @@ class OnboardingConnectionTest(TestCase):
         self.assertEqual(response.status_code, 200)
         # Renders success page cleanly, saying no readable registers
         self.assertContains(response, "No readable registers found in this template to test")
+
+
+class SolutionProfileOnboardingTest(TestCase):
+    def setUp(self):
+        self.team = Team.objects.create(name="Profile Team", slug="profile-team")
+        self.user = CustomUser.objects.create(email="profile@example.com", username="profileuser")
+        Membership.objects.create(team=self.team, user=self.user, role=ROLE_ADMIN)
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def test_profile_selection_persists_to_created_site(self):
+        profile_url = reverse("web_team:onboarding:step_profile", args=[self.team.slug])
+        site_url = reverse("web_team:onboarding:step_1_site", args=[self.team.slug])
+
+        response = self.client.post(profile_url, {"solution_profile": "facilities_hvac"})
+        self.assertRedirects(response, site_url)
+
+        response = self.client.post(site_url, {
+            "name": "Boutique Hotel",
+            "address": "Orchard",
+            "timezone": "Asia/Singapore",
+            "site_type": "small_hotel",
+            "solution_profile": "facilities_hvac",
+        })
+
+        site = Site.objects.get(team=self.team, name="Boutique Hotel")
+        self.assertEqual(site.solution_profile, "facilities_hvac")
+        self.assertEqual(site.site_type, "small_hotel")
+        self.assertRedirects(response, reverse("web_team:onboarding:step_2_gateway", args=[self.team.slug]))
+
+    def test_template_ranking_prioritizes_selected_profile(self):
+        hvac = DeviceTemplate.objects.create(
+            name="Chiller Monitor",
+            device_type="chiller",
+            protocol="bacnet",
+            category="factory",
+            register_map={"temperature": {"address": 1}, "run_hours": {"address": 2}},
+            is_verified=True,
+        )
+        generic = DeviceTemplate.objects.create(
+            name="Generic PLC",
+            device_type="plc",
+            protocol="modbus_tcp",
+            category="factory",
+            register_map={"production_count": {"address": 1}},
+            is_verified=True,
+        )
+
+        ranked = rank_templates_for_profile(DeviceTemplate.objects.all(), "facilities_hvac")
+
+        self.assertEqual(ranked[0], hvac)
+        self.assertIn(generic, ranked)
+
+    def test_solution_profile_presets_are_idempotent(self):
+        site = Site.objects.create(
+            team=self.team,
+            name="Cold Room",
+            solution_profile="cold_chain",
+        )
+        template = DeviceTemplate.objects.create(
+            name="Cold Room Sensor",
+            device_type="temp_sensor",
+            protocol="modbus_rtu",
+            category="cold_chain",
+            register_map={
+                "temperature": {"address": 1},
+                "door_open": {"address": 2},
+                "compressor_status": {"address": 3},
+            },
+        )
+        Device.objects.create(
+            team=self.team,
+            site=site,
+            name="Room Sensor",
+            template=template,
+            device_type="temp_sensor",
+            protocol="modbus_rtu",
+        )
+
+        first = apply_solution_profile_presets(site, self.user)
+        second = apply_solution_profile_presets(site, self.user)
+
+        self.assertEqual(first["alerts"], 3)
+        self.assertGreaterEqual(first["automations"], 1)
+        self.assertEqual(second["alerts"], 0)
+        self.assertEqual(second["automations"], 0)

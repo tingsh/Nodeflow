@@ -2,7 +2,7 @@
 {% load i18n %}
 {% block app %}
 <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-    {% include "onboarding/partials/progress_bar.html" with current_step=3 steps=steps %}
+    {% include "onboarding/partials/progress_bar.html" with current_step=current_step steps=steps %}
 
     <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700">
         <div class="p-8 sm:p-12">

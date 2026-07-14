@@ -4,7 +4,8 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 
-from apps.devices.models import Device
+from apps.devices.models import Device, Site
+from apps.devices.solution_profiles import get_site_profile
 from apps.utils.timezones import format_site_datetime, site_timezone_metadata
 
 from .models import TelemetryData
@@ -276,4 +277,82 @@ def export_telemetry_csv(request, team_slug, device_id):
             meta["unit"],
         ])
 
+    return response
+
+
+def _site_profile_report_rows(site, days):
+    from django.utils import timezone
+    from apps.alerts.models import Alert
+    from apps.maintenance.models import MaintenanceTicket, PreventiveSchedule
+
+    cutoff = timezone.now() - timezone.timedelta(days=days)
+    profile = get_site_profile(site)
+    devices = list(site.devices.select_related("template", "gateway"))
+    rows = []
+
+    for device in devices:
+        register_map = device.template.register_map if device.template and isinstance(device.template.register_map, dict) else {}
+        for key in profile.key_priority:
+            if register_map and key not in register_map:
+                continue
+            latest = TelemetryData.objects.filter(device=device, key=key, timestamp__gte=cutoff).order_by("-timestamp").first()
+            if not latest:
+                continue
+            value = _telemetry_point_value(latest)
+            meta = register_map.get(key, {}) if isinstance(register_map, dict) else {}
+            rows.append({
+                "device": device,
+                "metric": meta.get("label", key.replace("_", " ").title()),
+                "key": key,
+                "value": value,
+                "unit": meta.get("unit", ""),
+                "timestamp": latest.timestamp,
+                "timestamp_display": format_site_datetime(latest.timestamp, site),
+            })
+
+    return {
+        "profile": profile,
+        "devices": devices,
+        "rows": rows,
+        "active_alerts": Alert.objects.filter(device__site=site, status="active").select_related("device", "rule"),
+        "open_tickets": MaintenanceTicket.objects.filter(device__site=site, status__in=["open", "in_progress", "waiting"]),
+        "overdue_pms": PreventiveSchedule.objects.filter(device__site=site, is_active=True, next_due_at__lt=timezone.now()),
+        "days": days,
+    }
+
+
+@login_required
+def site_profile_report(request, team_slug, site_id):
+    site = get_object_or_404(Site, id=site_id, team__slug=team_slug)
+    days = int(request.GET.get("days", 7))
+    context = {
+        "site": site,
+        "team": request.team,
+        "active_tab": "sites",
+        **_site_profile_report_rows(site, days),
+    }
+    return render(request, "telemetry/site_profile_report.html", context)
+
+
+@login_required
+def export_site_profile_report_csv(request, team_slug, site_id):
+    site = get_object_or_404(Site, id=site_id, team__slug=team_slug)
+    days = int(request.GET.get("days", 7))
+    report = _site_profile_report_rows(site, days)
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="{site.name}_{report["profile"].key}_report.csv"'
+    writer = csv.writer(response)
+    writer.writerow(["Site", "Profile", "Device", "Metric", "Key", "Value", "Unit", "Timestamp"])
+    for row in report["rows"]:
+        writer.writerow([
+            site.name,
+            report["profile"].name,
+            row["device"].name,
+            row["metric"],
+            row["key"],
+            row["value"],
+            row["unit"],
+            row["timestamp_display"],
+        ])
     return response

@@ -102,7 +102,7 @@ class SiteDetailView(PermissionRequiredMixin, DetailView):
 class SiteCreateView(PermissionRequiredMixin, CreateView):
     permission_required = "manage_devices"
     model = Site
-    fields = ["name", "address", "latitude", "longitude", "timezone"]
+    fields = ["name", "solution_profile", "site_type", "address", "latitude", "longitude", "timezone"]
     template_name = "devices/site_form.html"
 
     def form_valid(self, form):
@@ -116,7 +116,7 @@ class SiteCreateView(PermissionRequiredMixin, CreateView):
 class SiteUpdateView(PermissionRequiredMixin, UpdateView):
     permission_required = "manage_devices"
     model = Site
-    fields = ["name", "address", "latitude", "longitude", "timezone"]
+    fields = ["name", "solution_profile", "site_type", "address", "latitude", "longitude", "timezone"]
     template_name = "devices/site_form.html"
 
     def get_success_url(self):
@@ -922,10 +922,13 @@ class TemplateLibraryView(PermissionRequiredMixin, ListView):
     context_object_name = "templates"
 
     def get_queryset(self):
+        from apps.devices.solution_profiles import get_profile, rank_templates_for_profile
+
         qs = super().get_queryset()
         q = self.request.GET.get("q", "").strip()
         protocol = self.request.GET.get("protocol", "").strip()
         category = self.request.GET.get("category", "").strip()
+        profile_key = self.request.GET.get("profile", "").strip()
         verified_only = self.request.GET.get("verified_only", "") == "true"
 
         if q:
@@ -937,17 +940,23 @@ class TemplateLibraryView(PermissionRequiredMixin, ListView):
         if verified_only:
             qs = qs.filter(is_verified=True)
 
+        if profile_key:
+            return rank_templates_for_profile(qs, get_profile(profile_key))
         return qs.order_by("-is_verified", "-usage_count")
 
     def get_context_data(self, **kwargs):
+        from apps.devices.solution_profiles import PROFILES
+
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "templates"
         context["search_query"] = self.request.GET.get("q", "")
         context["selected_protocol"] = self.request.GET.get("protocol", "")
         context["selected_category"] = self.request.GET.get("category", "")
+        context["selected_profile"] = self.request.GET.get("profile", "")
         context["verified_only"] = self.request.GET.get("verified_only", "") == "true"
         context["protocols"] = DeviceTemplate.PROTOCOL_CHOICES
         context["categories"] = DeviceTemplate.VERTICAL_CHOICES
+        context["solution_profiles"] = PROFILES.values()
         return context
 
 

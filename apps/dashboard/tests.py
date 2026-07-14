@@ -316,3 +316,25 @@ class AdaptiveOperationsDashboardTests(TestCase):
         self.assertEqual(widgets[0].telemetry_key, "important_temp")
         self.assertEqual(widgets[0].widget_type, "timeseries")
         self.assertFalse(Widget.objects.filter(device=device, telemetry_key="write_only").exists())
+
+    def test_site_solution_profile_prioritizes_dashboard_widgets(self):
+        from apps.dashboard.models import Widget
+
+        self.site.solution_profile = "facilities_hvac"
+        self.site.save(update_fields=["solution_profile"])
+        template = self._template(
+            "Facilities Meter",
+            "chiller",
+            {
+                "active_power": {"label": "Power", "unit": "W", "priority": 1},
+                "temperature": {"label": "Supply Temperature", "unit": "degC", "priority": 50},
+                "run_hours": {"label": "Run Hours", "unit": "h", "priority": 50},
+            },
+            category="factory",
+        )
+        device = self._device("Level 3 HVAC", template, device_type="chiller")
+
+        widgets = list(Widget.objects.filter(device=device).order_by("row", "col"))
+
+        self.assertEqual(widgets[0].telemetry_key, "temperature")
+        self.assertEqual(widgets[1].telemetry_key, "active_power")

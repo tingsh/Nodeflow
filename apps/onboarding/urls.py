@@ -6,6 +6,7 @@ app_name = "onboarding"
 
 urlpatterns = [
     path("", views.onboarding_start, name="start"),
+    path("profile/", views.step_profile, name="step_profile"),
     path("site/", views.step_1_site, name="step_1_site"),
     path("gateway/", views.step_2_gateway, name="step_2_gateway"),
     path("gateway/wait/", views.step_2b_wait, name="step_2b_wait"),

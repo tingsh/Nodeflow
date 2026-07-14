@@ -12,11 +12,29 @@ from apps.teams.models import BaseTeamModel
 class Site(BaseTeamModel):
     """A physical location (factory, cold room, building, solar farm) belonging to a team."""
 
+    SOLUTION_PROFILE_CHOICES = (
+        ("general_iot", _("General IoT")),
+        ("cold_chain", _("Cold Chain Monitoring")),
+        ("factory_energy", _("Factory Energy Monitoring")),
+        ("facilities_hvac", _("Facilities / HVAC")),
+    )
+
     name = models.CharField(max_length=200)
     address = models.TextField(blank=True)
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     timezone = models.CharField(max_length=50, default="Asia/Singapore")
+    solution_profile = models.CharField(
+        max_length=30,
+        choices=SOLUTION_PROFILE_CHOICES,
+        default="general_iot",
+        help_text=_("UX preset for onboarding, dashboards, alerts, and reports."),
+    )
+    site_type = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text=_("Optional profile-specific site type, such as hotel, clinic, or warehouse."),
+    )
 
     def __str__(self):
         return self.name

@@ -50,6 +50,9 @@ def get_user_signups(start: datetime.date | None = None, end: datetime.date | No
 def _register_items(device, include_writable_display=False):
     if not device.template or not device.template.register_map:
         return []
+    from apps.devices.solution_profiles import profile_key_order
+
+    profile_priority = profile_key_order(device.site)
     items = []
     for key, config in device.template.register_map.items():
         if not isinstance(config, dict):
@@ -77,7 +80,7 @@ def _register_items(device, include_writable_display=False):
             "labels": config.get("labels", ["OFF", "ON"]),
             "config": config,
         })
-    return sorted(items, key=lambda item: (item["priority"], item["label"]))
+    return sorted(items, key=lambda item: (profile_priority.get(item["key"], 100), item["priority"], item["label"]))
 
 
 def _latest_point(device, key=None):
@@ -252,17 +255,20 @@ def _trend_candidates(devices):
     candidates = []
     for device in devices:
         classification = classify_device(device)
+        from apps.devices.solution_profiles import profile_key_order
+
+        profile_priority = profile_key_order(device.site)
         items = _register_items(device)
         if items:
             for item in items:
                 if item["key"] in PROCESS_TREND_KEYS or item["dashboard_role"] == "trend":
-                    candidates.append((device, item, classification))
+                    candidates.append((device, item, classification, profile_priority.get(item["key"], 100)))
         else:
             for key in _recent_keys(device):
                 if key in PROCESS_TREND_KEYS:
-                    candidates.append((device, {"key": key, "label": key.replace("_", " ").title(), "unit": ""}, classification))
+                    candidates.append((device, {"key": key, "label": key.replace("_", " ").title(), "unit": ""}, classification, profile_priority.get(key, 100)))
     priority = {key: idx for idx, key in enumerate(PROCESS_TREND_KEYS)}
-    candidates.sort(key=lambda row: priority.get(row[1]["key"], 99))
+    candidates.sort(key=lambda row: (row[3], priority.get(row[1]["key"], 99)))
     return candidates
 
 
@@ -277,7 +283,7 @@ def _build_operations_trend(team, devices):
     now = timezone.now()
     start = now - datetime.timedelta(hours=24)
     selected = None
-    for device, item, classification in _trend_candidates(devices):
+    for device, item, classification, _profile_priority in _trend_candidates(devices):
         if TelemetryData.objects.filter(device=device, key=item["key"], timestamp__gte=start).exists():
             selected = (device, item, classification)
             break
