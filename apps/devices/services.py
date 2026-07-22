@@ -9,9 +9,10 @@ import uuid
 from django.conf import settings
 from django.contrib.auth.hashers import make_password
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
-from .models import DeviceCommand, Gateway, GatewayInventory
+from .models import DeviceCommand, DeviceTemplate, Gateway, GatewayInventory, Site
 
 logger = logging.getLogger("novena_hub")
 
@@ -38,6 +39,21 @@ def validate_claim_code(serial_number: str, claim_code: str) -> bool:
 
 class GatewayClaimError(ValueError):
     """Raised when a gateway claim cannot be completed safely."""
+
+
+def sites_for_team(team):
+    """Sites a request may reference for tenant-scoped device/gateway mutations."""
+    return Site.objects.filter(team=team)
+
+
+def gateways_for_team(team):
+    """Gateways a request may reference for tenant-scoped device mutations."""
+    return Gateway.objects.filter(team=team)
+
+
+def visible_templates_for_team(team):
+    """Global templates plus private templates created by the current team."""
+    return DeviceTemplate.objects.filter(Q(created_by_team__isnull=True) | Q(created_by_team=team))
 
 
 def normalize_gateway_serial(serial_number: str) -> str:
