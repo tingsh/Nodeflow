@@ -8,8 +8,8 @@ import paho.mqtt.client as mqtt
 # Configuration
 BROKER = "localhost"
 PORT = 1883
-TOPIC = "v1/gateway/telemetry"
 GATEWAY_SN = "12345678"
+TOPIC = f"v1/gateway/{GATEWAY_SN}/telemetry"
 DEVICE_NAME = "Power meter 1"
 
 

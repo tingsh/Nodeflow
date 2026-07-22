@@ -664,9 +664,13 @@ class Command(BaseCommand):
             "values": {"device_name": device.name, **values},
         }
         if publish_mqtt:
-            self._publish_mqtt("v1/gateway/telemetry", payload)
+            self._publish_mqtt(f"v1/gateway/{gateway.serial_number}/telemetry", payload)
 
-        for event in parse_mqtt_payload("v1/gateway/telemetry", payload):
+        for event in parse_mqtt_payload(
+            f"v1/gateway/{gateway.serial_number}/telemetry",
+            payload,
+            trusted_gateway_sn=gateway.serial_number,
+        ):
             event_timestamp = event.get("timestamp") or timestamp
             event_values = dict(event.get("values") or {})
             event_values.pop("device_name", None)

@@ -7,7 +7,7 @@ from django.utils import timezone
 logger = logging.getLogger("novena_hub")
 
 
-def parse_mqtt_payload(topic, payload):
+def parse_mqtt_payload(topic, payload, trusted_gateway_sn=None):
     """
     Parses MQTT payloads from either our custom simulator or ThingsBoard Gateway format.
     Returns a list of normalized ingestion events.
@@ -29,8 +29,8 @@ def parse_mqtt_payload(topic, payload):
             return []
 
     # Detect Format A (Novena Simulator / Novena Gateway)
-    if "serial_number" in payload and "values" in payload:
-        gateway_sn = payload.get("serial_number")
+    if "values" in payload and ("serial_number" in payload or trusted_gateway_sn):
+        gateway_sn = trusted_gateway_sn or payload.get("serial_number")
         values = payload.get("values", {})
         # device_id is a top-level field (Cloud-assigned UUID, set by Edge when deviceId is in connector config)
         device_id = payload.get("device_id")
@@ -72,7 +72,7 @@ def parse_mqtt_payload(topic, payload):
 
                         events.append(
                             {
-                                "gateway_sn": None,  # In TB format, SN is usually tied to the connection/topic
+                                "gateway_sn": trusted_gateway_sn,
                                 "device_name": device_name,
                                 "values": point.get("values", {}),
                                 "timestamp": dt,

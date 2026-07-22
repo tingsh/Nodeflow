@@ -52,7 +52,12 @@ def flush_telemetry_buffer_task():
         try:
             payload_dict = json.loads(raw_payload.decode('utf-8'))
             cloud_received_at = _parse_cloud_received_at(payload_dict.pop('_cloud_received_at', None))
-            parsed_events = parse_mqtt_payload('v1/gateway/telemetry', payload_dict)
+            trusted_gateway_sn = payload_dict.pop('_topic_gateway_sn', None)
+            parsed_events = parse_mqtt_payload(
+                'v1/gateway/telemetry',
+                payload_dict,
+                trusted_gateway_sn=trusted_gateway_sn,
+            )
             for event in parsed_events:
                 event['_cloud_received_at'] = cloud_received_at
             events.extend(parsed_events)
@@ -210,7 +215,7 @@ def flush_logs_buffer_task():
     for raw_payload in payloads:
         try:
             payload = json.loads(raw_payload.decode('utf-8'))
-            gateway_sn = payload.get('serial_number')
+            gateway_sn = payload.pop('_topic_gateway_sn', None) or payload.get('serial_number')
             if not gateway_sn:
                 continue
             grouped_logs.setdefault(gateway_sn, []).extend(payload.get('logs', []))

@@ -3,10 +3,13 @@
 ## MQTT Topics
 Inbound Edge to Cloud:
 
-- v1/gateway/telemetry: telemetry payloads.
-- v1/gateway/attributes: heartbeat, firmware, network, and gateway attributes.
-- v1/gateway/logs: gateway log events.
-- v1/gateway/rpc/response: RPC responses.
+- v1/gateway/{serial}/telemetry: telemetry payloads.
+- v1/gateway/{serial}/attributes: heartbeat, firmware, network, and gateway attributes.
+- v1/gateway/{serial}/logs: gateway log events.
+- v1/gateway/{serial}/rpc/response: RPC responses.
+- v1/gateway/{serial}/bootstrap/hello: first-time activation retry hello.
+
+Hub must derive Gateway identity from the topic serial. Payload `serial_number` is diagnostic metadata only; if present and different from the topic serial, reject the message.
 
 Outbound Cloud to Edge:
 

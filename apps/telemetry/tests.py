@@ -1,5 +1,4 @@
 import json
-from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -7,12 +6,18 @@ from django.http import Http404
 from django.test import RequestFactory
 from django.utils import timezone
 
-from apps.devices.models import Device, DeviceTemplate, Gateway, GatewayConfig, Site
+from apps.devices.models import Device, DeviceTemplate, Gateway, GatewayConfig, RpcCommand, Site
 from apps.teams.models import Team
 from apps.telemetry.management.commands.mqtt_consumer import Command as MqttConsumerCommand
-from apps.telemetry.models import TelemetryData
-from apps.telemetry.tasks import flush_telemetry_buffer_task
+from apps.telemetry.models import GatewayLog, TelemetryData
+from apps.telemetry.tasks import flush_logs_buffer_task, flush_telemetry_buffer_task
 from apps.users.models import CustomUser
+
+
+class MqttMessage:
+    def __init__(self, topic, payload):
+        self.topic = topic
+        self.payload = json.dumps(payload).encode("utf-8")
 
 
 @pytest.mark.django_db
@@ -71,6 +76,214 @@ def test_gateway_attribute_ingest_persists_edge_diagnostics():
     assert config_record.status == "rolled_back"
     assert config_record.rollback_performed is True
     assert config_record.connector_results[0]["name"] == "Broken Modbus"
+
+
+@pytest.mark.django_db
+def test_scoped_mqtt_rejects_payload_topic_serial_mismatch(caplog):
+    team_a = Team.objects.create(name="Tenant A", slug="tenant-a")
+    team_b = Team.objects.create(name="Tenant B", slug="tenant-b")
+    site_a = Site.objects.create(team=team_a, name="Site A")
+    site_b = Site.objects.create(team=team_b, name="Site B")
+    gateway_a = Gateway.objects.create(team=team_a, site=site_a, name="GW-A", serial_number="GW-A", access_token="a")
+    gateway_b = Gateway.objects.create(team=team_b, site=site_b, name="GW-B", serial_number="GW-B", access_token="b")
+
+    command = MqttConsumerCommand()
+    command.redis_client = MagicMock()
+    message = MqttMessage(
+        f"v1/gateway/{gateway_a.serial_number}/telemetry",
+        {"serial_number": gateway_b.serial_number, "values": {"temperature": 99.0}},
+    )
+
+    with caplog.at_level("WARNING", logger="novena_hub"):
+        command.on_message(None, None, message)
+
+    command.redis_client.rpush.assert_not_called()
+    assert "Rejected MQTT telemetry" in caplog.text
+
+
+@pytest.mark.django_db
+def test_scoped_mqtt_queues_trusted_topic_gateway_identity():
+    team = Team.objects.create(name="Scoped Queue", slug="scoped-queue")
+    site = Site.objects.create(team=team, name="Factory")
+    gateway = Gateway.objects.create(team=team, site=site, name="GW", serial_number="GW-SCOPED", access_token="tok")
+
+    command = MqttConsumerCommand()
+    command.redis_client = MagicMock()
+    message = MqttMessage(
+        f"v1/gateway/{gateway.serial_number}/telemetry",
+        {"values": {"device_name": "Power Meter", "active_power": 55.0}},
+    )
+
+    command.on_message(None, None, message)
+
+    _, queued = command.redis_client.rpush.call_args.args
+    queued_payload = json.loads(queued)
+    assert queued_payload["_topic_gateway_sn"] == gateway.serial_number
+
+
+@pytest.mark.django_db
+def test_flush_telemetry_uses_trusted_topic_gateway_over_payload_serial():
+    team_a = Team.objects.create(name="Trusted A", slug="trusted-a")
+    team_b = Team.objects.create(name="Trusted B", slug="trusted-b")
+    site_a = Site.objects.create(team=team_a, name="Site A")
+    site_b = Site.objects.create(team=team_b, name="Site B")
+    gateway_a = Gateway.objects.create(team=team_a, site=site_a, name="GW-A", serial_number="GW-TRUST-A", access_token="a")
+    gateway_b = Gateway.objects.create(team=team_b, site=site_b, name="GW-B", serial_number="GW-TRUST-B", access_token="b")
+    device_a = Device.objects.create(
+        team=team_a,
+        site=site_a,
+        gateway=gateway_a,
+        name="Meter A",
+        device_type="power_meter",
+        protocol="modbus_tcp",
+    )
+    device_b = Device.objects.create(
+        team=team_b,
+        site=site_b,
+        gateway=gateway_b,
+        name="Meter B",
+        device_type="power_meter",
+        protocol="modbus_tcp",
+    )
+    payload = {
+        "_topic_gateway_sn": gateway_a.serial_number,
+        "serial_number": gateway_b.serial_number,
+        "device_id": device_a.id,
+        "values": {"active_power": 101.0},
+    }
+    raw_payload = json.dumps(payload).encode("utf-8")
+    mock_redis = MagicMock()
+    mock_pipeline = MagicMock()
+    mock_redis.pipeline.return_value.__enter__.return_value = mock_pipeline
+    mock_pipeline.execute.return_value = [[raw_payload], 1]
+
+    with patch("redis.Redis.from_url", return_value=mock_redis):
+        flush_telemetry_buffer_task()
+
+    assert TelemetryData.objects.filter(device=device_a, key="active_power").exists()
+    assert not TelemetryData.objects.filter(device=device_b, key="active_power").exists()
+
+
+@pytest.mark.django_db
+def test_flush_logs_uses_trusted_topic_gateway_over_payload_serial():
+    team_a = Team.objects.create(name="Logs A", slug="logs-a")
+    team_b = Team.objects.create(name="Logs B", slug="logs-b")
+    site_a = Site.objects.create(team=team_a, name="Site A")
+    site_b = Site.objects.create(team=team_b, name="Site B")
+    gateway_a = Gateway.objects.create(team=team_a, site=site_a, name="GW-A", serial_number="GW-LOG-A", access_token="a")
+    gateway_b = Gateway.objects.create(team=team_b, site=site_b, name="GW-B", serial_number="GW-LOG-B", access_token="b")
+    payload = {
+        "_topic_gateway_sn": gateway_a.serial_number,
+        "serial_number": gateway_b.serial_number,
+        "logs": [{"ts": 1714000000000, "level": "INFO", "logger": "test", "message": "hello"}],
+    }
+    raw_payload = json.dumps(payload).encode("utf-8")
+    mock_redis = MagicMock()
+    mock_pipeline = MagicMock()
+    mock_redis.pipeline.return_value.__enter__.return_value = mock_pipeline
+    mock_pipeline.execute.return_value = [[raw_payload], 1]
+
+    with patch("redis.Redis.from_url", return_value=mock_redis):
+        flush_logs_buffer_task()
+
+    assert GatewayLog.objects.filter(gateway=gateway_a, message="hello").exists()
+    assert not GatewayLog.objects.filter(gateway=gateway_b, message="hello").exists()
+
+
+@pytest.mark.django_db
+def test_scoped_attribute_mismatch_does_not_update_other_gateway():
+    team_a = Team.objects.create(name="Attr A", slug="attr-a")
+    team_b = Team.objects.create(name="Attr B", slug="attr-b")
+    site_a = Site.objects.create(team=team_a, name="Site A")
+    site_b = Site.objects.create(team=team_b, name="Site B")
+    gateway_a = Gateway.objects.create(team=team_a, site=site_a, name="GW-A", serial_number="GW-ATTR-A", access_token="a")
+    gateway_b = Gateway.objects.create(team=team_b, site=site_b, name="GW-B", serial_number="GW-ATTR-B", access_token="b")
+    command = MqttConsumerCommand()
+
+    command.on_message(
+        None,
+        None,
+        MqttMessage(
+            f"v1/gateway/{gateway_a.serial_number}/attributes",
+            {"serial_number": gateway_b.serial_number, "attributes": {"status": "online"}},
+        ),
+    )
+
+    gateway_a.refresh_from_db()
+    gateway_b.refresh_from_db()
+    assert gateway_a.status == "offline"
+    assert gateway_b.status == "offline"
+
+
+@pytest.mark.django_db
+def test_scoped_attribute_ack_cannot_update_another_gateway_config():
+    team_a = Team.objects.create(name="Config A", slug="config-a")
+    team_b = Team.objects.create(name="Config B", slug="config-b")
+    site_a = Site.objects.create(team=team_a, name="Site A")
+    site_b = Site.objects.create(team=team_b, name="Site B")
+    gateway_a = Gateway.objects.create(team=team_a, site=site_a, name="GW-A", serial_number="GW-CFG-A", access_token="a")
+    gateway_b = Gateway.objects.create(team=team_b, site=site_b, name="GW-B", serial_number="GW-CFG-B", access_token="b")
+    config_b = GatewayConfig.objects.create(
+        team=team_b,
+        gateway=gateway_b,
+        config_json={"connectors": []},
+        request_id="22222222-2222-2222-2222-222222222222",
+    )
+    command = MqttConsumerCommand()
+
+    command.on_message(
+        None,
+        None,
+        MqttMessage(
+            f"v1/gateway/{gateway_a.serial_number}/attributes",
+            {
+                "serial_number": gateway_a.serial_number,
+                "attributes": {
+                    "config_update_request_id": str(config_b.request_id),
+                    "config_update_status": "success",
+                },
+            },
+        ),
+    )
+
+    config_b.refresh_from_db()
+    assert config_b.status == "pending"
+
+
+@pytest.mark.django_db
+def test_scoped_rpc_response_cannot_complete_another_gateway_command():
+    team_a = Team.objects.create(name="RPC A", slug="rpc-a")
+    team_b = Team.objects.create(name="RPC B", slug="rpc-b")
+    site_a = Site.objects.create(team=team_a, name="Site A")
+    site_b = Site.objects.create(team=team_b, name="Site B")
+    gateway_a = Gateway.objects.create(team=team_a, site=site_a, name="GW-A", serial_number="GW-RPC-A", access_token="a")
+    gateway_b = Gateway.objects.create(team=team_b, site=site_b, name="GW-B", serial_number="GW-RPC-B", access_token="b")
+    rpc_b = RpcCommand.objects.create(
+        team=team_b,
+        gateway=gateway_b,
+        request_id="33333333-3333-3333-3333-333333333333",
+        method="ping",
+        params={},
+    )
+    command = MqttConsumerCommand()
+
+    command.on_message(
+        None,
+        None,
+        MqttMessage(
+            f"v1/gateway/{gateway_a.serial_number}/rpc/response",
+            {
+                "serial_number": gateway_a.serial_number,
+                "request_id": str(rpc_b.request_id),
+                "method": "ping",
+                "status": "success",
+                "result": {"pong": True},
+            },
+        ),
+    )
+
+    rpc_b.refresh_from_db()
+    assert rpc_b.status == "pending"
 
 
 @pytest.mark.django_db
@@ -296,6 +509,7 @@ def test_device_telemetry_samples_api_rejects_wrong_team_slug():
 @pytest.mark.django_db
 def test_telemetry_history_api_returns_utc_and_site_local_labels():
     from apps.telemetry.views import device_telemetry_history_api
+    from apps.utils.timezones import format_site_datetime
 
     user = CustomUser.objects.create_user(
         username="history_tz_user",
@@ -312,7 +526,7 @@ def test_telemetry_history_api_returns_utc_and_site_local_labels():
         protocol="modbus_tcp",
         status="online",
     )
-    timestamp = datetime(2026, 7, 13, 2, 42, 25, tzinfo=UTC)
+    timestamp = timezone.now().replace(microsecond=0)
     TelemetryData.objects.create(device=device, timestamp=timestamp, key="temperature", value_numeric=28.0)
 
     request = RequestFactory().get(f"/a/{team.slug}/telemetry/api/history/{device.id}/?key=temperature&hours=24")
@@ -323,13 +537,14 @@ def test_telemetry_history_api_returns_utc_and_site_local_labels():
 
     assert response.status_code == 200
     assert data["labels"] == [timestamp.isoformat()]
-    assert data["labels_local"] == ["09:42:25"]
+    assert data["labels_local"] == [format_site_datetime(timestamp, site, "%H:%M:%S")]
     assert data["timezone"] == "Asia/Jakarta"
 
 
 @pytest.mark.django_db
 def test_telemetry_csv_export_uses_site_local_timestamp():
     from apps.telemetry.views import export_telemetry_csv
+    from apps.utils.timezones import format_site_datetime
 
     user = CustomUser.objects.create_user(
         username="csv_tz_user",
@@ -346,9 +561,10 @@ def test_telemetry_csv_export_uses_site_local_timestamp():
         protocol="modbus_tcp",
         status="online",
     )
+    timestamp = timezone.now().replace(microsecond=0)
     TelemetryData.objects.create(
         device=device,
-        timestamp=datetime(2026, 7, 13, 2, 42, 25, tzinfo=UTC),
+        timestamp=timestamp,
         key="temperature",
         value_numeric=28.0,
     )
@@ -359,12 +575,13 @@ def test_telemetry_csv_export_uses_site_local_timestamp():
     response = export_telemetry_csv(request, team.slug, device.id)
 
     assert response.status_code == 200
-    assert "2026-07-13 11:42:25 JST" in response.content.decode()
+    assert format_site_datetime(timestamp, site, "%Y-%m-%d %H:%M:%S %Z") in response.content.decode()
 
 
 @pytest.mark.django_db
 def test_same_utc_telemetry_displays_different_site_local_times():
     from apps.telemetry.views import device_telemetry_history_api
+    from apps.utils.timezones import format_site_datetime
 
     user = CustomUser.objects.create_user(
         username="multi_site_tz_user",
@@ -374,7 +591,7 @@ def test_same_utc_telemetry_displays_different_site_local_times():
     team = Team.objects.create(name="Multi Site TZ Team", slug="multi-site-tz-team")
     singapore_site = Site.objects.create(team=team, name="Singapore Site", timezone="Asia/Singapore")
     auckland_site = Site.objects.create(team=team, name="Auckland Site", timezone="Pacific/Auckland")
-    instant = datetime(2026, 7, 13, 2, 42, 25, tzinfo=UTC)
+    instant = timezone.now().replace(microsecond=0)
     devices = [
         Device.objects.create(
             team=team,
@@ -404,7 +621,10 @@ def test_same_utc_telemetry_displays_different_site_local_times():
         response = device_telemetry_history_api(request, team.slug, device.id)
         local_labels.append(json.loads(response.content)["labels_local"][0])
 
-    assert local_labels == ["10:42:25", "14:42:25"]
+    assert local_labels == [
+        format_site_datetime(instant, singapore_site, "%H:%M:%S"),
+        format_site_datetime(instant, auckland_site, "%H:%M:%S"),
+    ]
 
 
 @pytest.mark.django_db
