@@ -26,9 +26,20 @@
                     <label class="block text-[10px] font-bold uppercase tracking-wide text-base-content/45 mb-1">Hardware Template</label>
                     <select name="template_{{ candidate.index }}" {% if disabled %}disabled{% endif %} class="select select-bordered select-sm w-full rounded-md">
                         <option value="">Select template</option>
+                        <optgroup label="{{ profile.short_name }} recommendations">
                         {% for tpl in templates %}
-                        <option value="{{ tpl.id }}" {% if candidate.matched_template and candidate.matched_template.id == tpl.id %}selected{% endif %}>{{ tpl.name }}{% if tpl.manufacturer %} ({{ tpl.manufacturer }}){% endif %}</option>
+                            {% if tpl.device_type in profile.recommended_device_types or tpl.category in profile.recommended_categories %}
+                            <option value="{{ tpl.id }}" {% if candidate.matched_template and candidate.matched_template.id == tpl.id %}selected{% endif %}>{{ tpl.name }}{% if tpl.manufacturer %} ({{ tpl.manufacturer }}){% endif %}</option>
+                            {% endif %}
                         {% endfor %}
+                        </optgroup>
+                        <optgroup label="All templates">
+                        {% for tpl in templates %}
+                        {% if tpl.device_type not in profile.recommended_device_types and tpl.category not in profile.recommended_categories %}
+                        <option value="{{ tpl.id }}" {% if candidate.matched_template and candidate.matched_template.id == tpl.id %}selected{% endif %}>{{ tpl.name }}{% if tpl.manufacturer %} ({{ tpl.manufacturer }}){% endif %}</option>
+                        {% endif %}
+                        {% endfor %}
+                        </optgroup>
                     </select>
                 </div>
             </div>

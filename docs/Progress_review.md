@@ -1,5 +1,7 @@
 # Novena Progress Review — Codebase Audit & Next Steps
 
+> **Historical review:** This document records the 10 April 2026 state. The current cross-repository assessment is [CTO Product Progress Review — 18 July 2026](cto_product_progress_review_2026-07-18.md).
+
 > **Date:** April 10, 2026  
 > **Goal:** "Shopify for IIoT" — the brand ASEAN SMEs think of for industrial monitoring  
 > **Current State:** Significant technical foundation built. Not yet a product someone would pay for.

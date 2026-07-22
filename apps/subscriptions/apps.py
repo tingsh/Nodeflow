@@ -16,7 +16,9 @@ class SubscriptionConfig(AppConfig):
         from django.db import models
         from djstripe.settings import djstripe_settings
 
-        def patched_post_save_hook(self, cls, data, api_key=djstripe_settings.STRIPE_SECRET_KEY, pending_relations=None):
+        def patched_post_save_hook(
+            self, cls, data, api_key=djstripe_settings.STRIPE_SECRET_KEY, pending_relations=None
+        ):
             unprocessed_pending_relations = []
             if pending_relations is not None:
                 for post_save_relation in pending_relations:

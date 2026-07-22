@@ -1,16 +1,12 @@
 import logging
-from datetime import timedelta
 
 from celery import shared_task
-from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 
-from .models import MaintenanceTicket, PreventiveSchedule
+from .models import PreventiveSchedule
+from .services import advance_schedule_due_date, create_pm_ticket
 
 logger = logging.getLogger("novena_hub")
-
-
-from .services import create_pm_ticket, advance_schedule_due_date
 
 
 @shared_task
@@ -21,9 +17,7 @@ def generate_preventive_tickets():
     now = timezone.now()
 
     # 1. Calendar-based schedules
-    calendar_schedules = PreventiveSchedule.objects.filter(
-        is_active=True, is_usage_based=False, next_due_at__lte=now
-    )
+    calendar_schedules = PreventiveSchedule.objects.filter(is_active=True, is_usage_based=False, next_due_at__lte=now)
 
     for schedule in calendar_schedules:
         create_pm_ticket(schedule)
@@ -47,5 +41,3 @@ def generate_preventive_tickets():
                     schedule.save(update_fields=["last_trigger_usage_value"])
             except (ValueError, TypeError):
                 pass
-
-

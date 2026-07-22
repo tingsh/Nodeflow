@@ -77,7 +77,7 @@ def provision_gateway_mqtt(gateway, password):
     Create an MQTT client in Mosquitto for a newly registered gateway.
 
     Creates the client with the given password and assigns:
-    - 'gateway' role (shared inbound topic ACLs)
+    - 'gateway' role (shared baseline role; no cross-gateway inbound publishes)
     - Per-gateway topic ACLs for its serial-number-scoped topics
 
     Args:
@@ -85,6 +85,7 @@ def provision_gateway_mqtt(gateway, password):
         password: str — plaintext password (Mosquitto hashes it internally)
     """
     sn = gateway.serial_number
+    bootstrap_username = f"bootstrap:{sn}"
 
     # Step 1: Create the client with password and assign the shared gateway role
     create_cmd = {
@@ -93,9 +94,7 @@ def provision_gateway_mqtt(gateway, password):
         "password": password,
         "textName": f"Edge Gateway {sn}",
         "textDescription": f"Auto-provisioned for gateway {gateway.name}",
-        "roles": [
-            {"roleName": "gateway", "priority": -1}
-        ],
+        "roles": [{"roleName": "gateway", "priority": -1}],
     }
     _publish_dynsec_command(create_cmd)
 
@@ -106,6 +105,11 @@ def provision_gateway_mqtt(gateway, password):
         "roleName": role_name,
         "textDescription": f"Per-gateway ACLs for {sn}",
         "acls": [
+            # Edge → cloud publishes for this gateway only.
+            {"acltype": "publishClientSend", "topic": f"v1/gateway/{sn}/telemetry", "allow": True},
+            {"acltype": "publishClientSend", "topic": f"v1/gateway/{sn}/logs", "allow": True},
+            {"acltype": "publishClientSend", "topic": f"v1/gateway/{sn}/attributes", "allow": True},
+            {"acltype": "publishClientSend", "topic": f"v1/gateway/{sn}/rpc/response", "allow": True},
             # Subscribe to per-gateway inbound topics (cloud → edge)
             {"acltype": "subscribePattern", "topic": f"v1/gateway/{sn}/#", "allow": True},
             # Receive messages on per-gateway topics
@@ -122,6 +126,33 @@ def provision_gateway_mqtt(gateway, password):
         "priority": -1,
     }
     _publish_dynsec_command(add_role_cmd)
+
+    # Step 4: Create a bootstrap client scoped to only first-time activation.
+    # The physical gateway uses this identity after operational auth failures.
+    bootstrap_role_name = f"bootstrap-gw-{sn}"
+    bootstrap_role_cmd = {
+        "command": "createRole",
+        "roleName": bootstrap_role_name,
+        "textDescription": f"Bootstrap activation ACLs for {sn}",
+        "acls": [
+            {"acltype": "publishClientSend", "topic": f"v1/gateway/{sn}/bootstrap/hello", "allow": True},
+            {"acltype": "subscribePattern", "topic": f"v1/gateway/{sn}/bootstrap/activate", "allow": True},
+            {"acltype": "publishClientReceive", "topic": f"v1/gateway/{sn}/bootstrap/activate", "allow": True},
+        ],
+    }
+    _publish_dynsec_command(bootstrap_role_cmd)
+
+    from .services import compute_claim_code
+
+    bootstrap_client_cmd = {
+        "command": "createClient",
+        "username": bootstrap_username,
+        "password": compute_claim_code(sn),
+        "textName": f"Bootstrap Gateway {sn}",
+        "textDescription": f"Claim-time activation client for gateway {gateway.name}",
+        "roles": [{"roleName": bootstrap_role_name, "priority": -1}],
+    }
+    _publish_dynsec_command(bootstrap_client_cmd)
 
     logger.info("Provisioned MQTT credentials for gateway %s on Mosquitto", sn)
 
@@ -169,5 +200,18 @@ def deprovision_gateway_mqtt(gateway):
         "roleName": role_name,
     }
     _publish_dynsec_command(delete_role_cmd)
+
+    # Delete the claim-time bootstrap identity and its scoped role.
+    delete_bootstrap_client_cmd = {
+        "command": "deleteClient",
+        "username": f"bootstrap:{sn}",
+    }
+    _publish_dynsec_command(delete_bootstrap_client_cmd)
+
+    delete_bootstrap_role_cmd = {
+        "command": "deleteRole",
+        "roleName": f"bootstrap-gw-{sn}",
+    }
+    _publish_dynsec_command(delete_bootstrap_role_cmd)
 
     logger.info("Deprovisioned MQTT credentials for gateway %s from Mosquitto", sn)

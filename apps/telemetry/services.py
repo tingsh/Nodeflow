@@ -3,6 +3,7 @@ import logging
 from django.utils import timezone
 
 from apps.devices.models import Device, Gateway
+from apps.utils.timezones import format_site_datetime
 
 from .models import TelemetryData
 
@@ -21,33 +22,33 @@ def ingest_telemetry_data(gateway_sn, values, timestamp=None, device_id=None):
     try:
         gateway = Gateway.objects.get(serial_number=gateway_sn)
     except Gateway.DoesNotExist:
-        logger.warning('Gateway with SN %s not found. Ingestion skipped.', gateway_sn)
+        logger.warning("Gateway with SN %s not found. Ingestion skipped.", gateway_sn)
         return
 
     gateway.last_seen = cloud_received_at
-    gateway.status = 'online'
-    gateway.save(update_fields=['last_seen', 'status'])
+    gateway.status = "online"
+    gateway.save(update_fields=["last_seen", "status"])
 
     target_device = None
     values = dict(values)
-    device_name = values.pop('device_name', None)
+    device_name = values.pop("device_name", None)
 
     if device_id:
         target_device = gateway.devices.filter(pk=device_id).first()
         if not target_device:
-            logger.debug('device_id %s not found on gateway %s, falling back to name match', device_id, gateway_sn)
+            logger.debug("device_id %s not found on gateway %s, falling back to name match", device_id, gateway_sn)
 
     if not target_device and device_name:
         try:
             target_device = gateway.devices.get(name=device_name)
         except Device.DoesNotExist:
-            logger.info('Device %s not found for gateway %s.', device_name, gateway_sn)
+            logger.info("Device %s not found for gateway %s.", device_name, gateway_sn)
 
     if not target_device and gateway.devices.exists():
         target_device = gateway.devices.first()
         logger.warning(
-            'Using legacy first-device telemetry fallback for gateway %s. '
-            'Payload device_id=%s device_name=%s resolved_device=%s.',
+            "Using legacy first-device telemetry fallback for gateway %s. "
+            "Payload device_id=%s device_name=%s resolved_device=%s.",
             gateway_sn,
             device_id,
             device_name,
@@ -55,7 +56,7 @@ def ingest_telemetry_data(gateway_sn, values, timestamp=None, device_id=None):
         )
 
     if not target_device:
-        logger.warning('No target device identified for telemetry from gateway %s', gateway_sn)
+        logger.warning("No target device identified for telemetry from gateway %s", gateway_sn)
         return
 
     db_flushed_at = timezone.now()
@@ -91,15 +92,16 @@ def ingest_telemetry_data(gateway_sn, values, timestamp=None, device_id=None):
         evaluate_automations(target_device, values)
 
         target_device.last_telemetry_at = timestamp
-        if target_device.status != 'alarm':
-            target_device.status = 'online'
-            target_device.save(update_fields=['last_telemetry_at', 'status'])
+        if target_device.status != "alarm":
+            target_device.status = "online"
+            target_device.save(update_fields=["last_telemetry_at", "status"])
         else:
-            target_device.save(update_fields=['last_telemetry_at'])
+            target_device.save(update_fields=["last_telemetry_at"])
 
-        logger.info('Ingested %d points for device %s', len(telemetry_objects), target_device.name)
+        logger.info("Ingested %d points for device %s", len(telemetry_objects), target_device.name)
 
     return target_device
+
 
 def get_latest_telemetry_for_chart(device, key, limit=20):
     """
@@ -115,7 +117,7 @@ def get_latest_telemetry_for_chart(device, key, limit=20):
     values = []
 
     for point in data:
-        labels.append(point.timestamp.strftime("%H:%M:%S"))
+        labels.append(format_site_datetime(point.timestamp, device.site, "%H:%M:%S"))
         values.append(point.value_numeric or 0)
 
     return {"labels": labels, "values": values, "key": key}

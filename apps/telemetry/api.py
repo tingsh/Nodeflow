@@ -8,6 +8,7 @@ from django.utils import timezone
 from apps.devices.models import Device
 from apps.teams.decorators import login_and_team_required
 from apps.telemetry.models import TelemetryData
+from apps.utils.timezones import format_site_datetime, site_timezone_metadata
 
 
 @login_and_team_required
@@ -78,12 +79,22 @@ def device_telemetry_history_api(request, team_slug, device_id):
 
     # Format for Chart.js
     labels = []
+    labels_local = []
     values = []
     for dp in data_points:
         labels.append(dp.timestamp.isoformat())
+        labels_local.append(format_site_datetime(dp.timestamp, device.site, "%H:%M:%S"))
         values.append(dp.value_numeric)
 
-    return JsonResponse({"key": key, "labels": labels, "values": values})
+    return JsonResponse(
+        {
+            "key": key,
+            "labels": labels,
+            "labels_local": labels_local,
+            "values": values,
+            **site_timezone_metadata(device.site),
+        }
+    )
 
 
 class Echo:
@@ -99,7 +110,7 @@ def export_telemetry_csv(request, team_slug, device_id):
     """
     device = get_object_or_404(Device, id=device_id, team__slug=team_slug)
     days = int(request.GET.get("days", 7))
-    
+
     plan_days = get_retention_limit_days(request.team)
     if days > plan_days:
         days = plan_days
@@ -127,7 +138,7 @@ def export_telemetry_csv(request, team_slug, device_id):
                 value = point.value_bool
             else:
                 value = point.value_string
-            yield [point.timestamp, meta["label"], point.key, value, meta["unit"]]
+            yield [format_site_datetime(point.timestamp, device.site), meta["label"], point.key, value, meta["unit"]]
 
     pseudo_buffer = Echo()
     writer = csv.writer(pseudo_buffer)

@@ -115,7 +115,7 @@ body.htmx-request {
 
 /* Typography Refinements */
 .font-heading {
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .text-balance {
@@ -138,6 +138,58 @@ body.htmx-request {
 .btn-primary:hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4);
+}
+
+/* Public marketing pages use softer surfaces than pure white/black. */
+.marketing-page {
+  background: #f3f6fa;
+  color: #243043;
+}
+
+.marketing-page .bg-white {
+  background-color: #f8fafc !important;
+}
+
+.marketing-page .bg-slate-50 {
+  background-color: #eef3f8 !important;
+}
+
+.marketing-page .bg-slate-950 {
+  background-color: #182334 !important;
+}
+
+.marketing-page .text-white {
+  color: #edf3f8 !important;
+}
+
+.marketing-page .text-slate-950 {
+  color: #243043 !important;
+}
+
+.marketing-page .text-slate-900 {
+  color: #2f3a4d !important;
+}
+
+.marketing-page .text-slate-800 {
+  color: #354255 !important;
+}
+
+.marketing-page .text-slate-700 {
+  color: #44536a !important;
+}
+
+.marketing-page .text-slate-600 {
+  color: #5b687a !important;
+}
+
+.marketing-page .border-slate-200 {
+  border-color: #d9e2ec !important;
+}
+
+.marketing-page .shadow-slate-200\/60,
+.marketing-page .shadow-slate-200\/70 {
+  --tw-shadow-color: rgb(149 164 184 / 0.32) !important;
+  --tw-shadow: var(--tw-shadow-colored) !important;
 }
 
 /* Glassmorphism Card Hover Polish */

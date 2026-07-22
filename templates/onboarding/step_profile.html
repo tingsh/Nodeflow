@@ -1,0 +1,45 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+{% block app %}
+<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    {% include "onboarding/partials/progress_bar.html" with current_step=current_step steps=steps %}
+
+    <div class="text-center mb-10">
+        <div class="inline-flex items-center rounded-full bg-indigo-50 dark:bg-indigo-500/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-300">
+            Novena Setup Assistant
+        </div>
+        <h1 class="mt-5 text-4xl font-black tracking-tight text-base-content font-heading">What are you setting up first?</h1>
+        <p class="mt-3 text-base text-base-content/60 max-w-2xl mx-auto">
+            This does not lock your account. It simply tunes the first dashboard, templates, alerts, and reports so Novena feels useful from day one.
+        </p>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+            {% for profile in profiles %}
+            <label class="group cursor-pointer">
+                <input type="radio" name="solution_profile" value="{{ profile.key }}" class="peer sr-only" {% if profile.key == selected_profile %}checked{% endif %}>
+                <div class="h-full rounded-3xl border border-base-content/10 bg-base-100 p-6 shadow-sm transition-all peer-checked:border-indigo-500 peer-checked:ring-4 peer-checked:ring-indigo-500/10 hover:-translate-y-1 hover:shadow-xl">
+                    <div class="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300">
+                        <i class="fa {{ profile.icon }} text-xl"></i>
+                    </div>
+                    <h2 class="text-lg font-black text-base-content font-heading">{{ profile.name }}</h2>
+                    <p class="mt-3 text-sm leading-relaxed text-base-content/60">{{ profile.promise }}</p>
+                    <p class="mt-5 text-xs font-bold text-indigo-600 dark:text-indigo-300 opacity-0 transition peer-checked:opacity-100">
+                        <i class="fa fa-check-circle mr-1"></i> Recommended starting experience
+                    </p>
+                </div>
+            </label>
+            {% endfor %}
+        </div>
+
+        <div class="mt-10 flex items-center justify-center">
+            <button type="submit" class="inline-flex items-center rounded-2xl bg-indigo-600 px-10 py-4 text-lg font-bold text-white shadow-lg shadow-indigo-600/25 transition hover:-translate-y-0.5 hover:bg-indigo-700">
+                Continue
+                <i class="fa fa-arrow-right ml-3"></i>
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

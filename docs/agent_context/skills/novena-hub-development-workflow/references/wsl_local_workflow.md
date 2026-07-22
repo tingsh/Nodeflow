@@ -6,6 +6,7 @@ cd /home/shouheng/projects/Novena-Hub
 source ~/.venvs/novena/bin/activate
 
 Use the WSL-native Python environment ~/.venvs/novena for Hub work.
+Docker remains useful for deployment validation, but it is not the default local test runner on this machine.
 
 ## Local Services
 Production-like local development should use native WSL2 services:
@@ -20,14 +21,25 @@ Production-like local development should use native WSL2 services:
 - Vite dev server.
 
 ## Common Checks
-- python manage.py check
-- python manage.py makemigrations --check --dry-run
-- python manage.py migrate --check --noinput
+- make local-check
+- make local-manage ARGS="makemigrations --check --dry-run"
+- make local-manage ARGS="migrate --check --noinput"
 - npm run type-check -- --pretty false
 
 Focused tests are preferred while developing:
 
-DJANGO_SETTINGS_MODULE=novena_hub.settings python -m pytest apps/devices/tests/test_infrastructure.py -q
+```bash
+make local-test ARGS="apps.devices.tests.test_onboarding --keepdb"
+make local-pytest ARGS="apps/devices/tests/test_infrastructure.py -q"
+```
+
+If Make is not convenient, use the venv interpreter directly instead of bare `python3`:
+
+```bash
+DJANGO_SETTINGS_MODULE=novena_hub.settings /home/shouheng/.venvs/novena/bin/python manage.py check
+DJANGO_SETTINGS_MODULE=novena_hub.settings /home/shouheng/.venvs/novena/bin/python manage.py test apps.devices.tests.test_onboarding --keepdb
+DJANGO_SETTINGS_MODULE=novena_hub.settings /home/shouheng/.venvs/novena/bin/python -m pytest apps/devices/tests/test_infrastructure.py -q
+```
 
 ## Service Smoke Tests
 - Django: check http://127.0.0.1:8000/admin/login/ returns a redirect or page.

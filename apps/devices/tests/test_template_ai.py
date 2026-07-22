@@ -1,17 +1,19 @@
-from unittest.mock import patch, MagicMock
-from django.test import TestCase, Client, override_settings
-from django.urls import reverse
-from django.core.cache import cache
+from unittest.mock import MagicMock, patch
 
-from apps.teams.models import Team
-from apps.users.models import CustomUser
+from django.core.cache import cache
+from django.test import Client, TestCase, override_settings
+from django.urls import reverse
+
 from apps.devices.models import DeviceTemplate
 from apps.devices.template_ai import (
-    _validate_register_map,
     _build_generation_prompt,
+    _validate_register_map,
+    generate_template_from_ai,
     save_approved_template,
-    generate_template_from_ai
 )
+from apps.teams.models import Team
+from apps.users.models import CustomUser
+
 
 class TemplateAITest(TestCase):
     def setUp(self):
@@ -19,13 +21,14 @@ class TemplateAITest(TestCase):
         self.user = CustomUser.objects.create(email="test@example.com", username="testuser")
         from apps.teams.models import Membership
         from apps.teams.roles import ROLE_ADMIN
+
         Membership.objects.create(team=self.team, user=self.user, role=ROLE_ADMIN)
 
     def test_validate_register_map_valid(self):
         valid_map = {
             "voltage": {"address": 3028, "type": "float32", "functionCode": 3, "unit": "V"},
             "frequency": {"address": 100, "type": "uint16", "functionCode": 4},
-            "control_speed": {"address": 10, "type": "uint16", "functionCode": 6, "writable": True, "control": "input"}
+            "control_speed": {"address": 10, "type": "uint16", "functionCode": 6, "writable": True, "control": "input"},
         }
         is_valid, errors = _validate_register_map(valid_map)
         self.assertTrue(is_valid)
@@ -33,17 +36,11 @@ class TemplateAITest(TestCase):
 
     def test_validate_register_map_invalid(self):
         # Missing address
-        invalid_map_1 = {
-            "voltage": {"type": "float32", "functionCode": 3}
-        }
+        invalid_map_1 = {"voltage": {"type": "float32", "functionCode": 3}}
         # Invalid function code
-        invalid_map_2 = {
-            "voltage": {"address": 3028, "type": "float32", "functionCode": 99}
-        }
+        invalid_map_2 = {"voltage": {"address": 3028, "type": "float32", "functionCode": 99}}
         # Writable but missing control field
-        invalid_map_3 = {
-            "control_speed": {"address": 10, "type": "uint16", "functionCode": 6, "writable": True}
-        }
+        invalid_map_3 = {"control_speed": {"address": 10, "type": "uint16", "functionCode": 6, "writable": True}}
 
         self.assertFalse(_validate_register_map(invalid_map_1)[0])
         self.assertFalse(_validate_register_map(invalid_map_2)[0])
@@ -66,15 +63,19 @@ class TemplateAITest(TestCase):
             "device_type": "power_meter",
             "protocol": "modbus_tcp",
             "category": "energy",
-            "register_map": {
-                "voltage": {"address": 3028, "type": "float32", "functionCode": 3, "unit": "V"}
-            },
+            "register_map": {"voltage": {"address": 3028, "type": "float32", "functionCode": 3, "unit": "V"}},
             "alert_presets": [
-                {"name": "Overvoltage Warning", "key": "voltage", "condition": "gt", "threshold": 250.0, "severity": "warning"}
+                {
+                    "name": "Overvoltage Warning",
+                    "key": "voltage",
+                    "condition": "gt",
+                    "threshold": 250.0,
+                    "severity": "warning",
+                }
             ],
             "default_polling_interval": 5,
             "source_url": "https://example.com/doc.pdf",
-            "ai_confidence": 0.95
+            "ai_confidence": 0.95,
         }
 
         template = save_approved_template(draft, team=self.team)
@@ -110,24 +111,27 @@ class TemplateAITest(TestCase):
 
         with self.settings(GEMINI_API_KEY="test-key"):
             result = generate_template_from_ai("Schneider Electric", "PM5350")
-            
+
         self.assertEqual(result["status"], "draft")
         self.assertEqual(result["name"], "Schneider PM5350")
         self.assertEqual(result["ai_confidence"], 0.9)
 
 
-@override_settings(CACHES={
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'unique-snowflake',
+@override_settings(
+    CACHES={
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "unique-snowflake",
+        }
     }
-})
+)
 class TemplateAIViewTest(TestCase):
     def setUp(self):
         self.team = Team.objects.create(name="Test Team", slug="test-team")
         self.user = CustomUser.objects.create(email="test@example.com", username="testuser")
         from apps.teams.models import Membership
         from apps.teams.roles import ROLE_ADMIN
+
         Membership.objects.create(team=self.team, user=self.user, role=ROLE_ADMIN)
         self.client = Client()
         self.client.force_login(self.user)
@@ -140,13 +144,10 @@ class TemplateAIViewTest(TestCase):
             model_number="PM5350",
             device_type="power_meter",
             protocol="modbus_tcp",
-            register_map={}
+            register_map={},
         )
         url = reverse("web_team:devices:ai_template_generate", args=[self.team.slug])
-        response = self.client.post(url, {
-            "manufacturer": "Schneider Electric",
-            "model_number": "PM5350"
-        })
+        response = self.client.post(url, {"manufacturer": "Schneider Electric", "model_number": "PM5350"})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Template Already Exists")
         self.assertFalse(mock_task.called)
@@ -154,10 +155,7 @@ class TemplateAIViewTest(TestCase):
     @patch("apps.devices.views.generate_template_ai_task.delay")
     def test_ai_template_generate_view_new(self, mock_task):
         url = reverse("web_team:devices:ai_template_generate", args=[self.team.slug])
-        response = self.client.post(url, {
-            "manufacturer": "Schneider Electric",
-            "model_number": "NewModel"
-        })
+        response = self.client.post(url, {"manufacturer": "Schneider Electric", "model_number": "NewModel"})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Compiling Register Map")
         self.assertTrue(mock_task.called)
@@ -179,12 +177,10 @@ class TemplateAIViewTest(TestCase):
             "device_type": "power_meter",
             "protocol": "modbus_tcp",
             "category": "energy",
-            "register_map": {
-                "voltage": {"address": 0, "type": "float32", "functionCode": 3, "unit": "V"}
-            },
+            "register_map": {"voltage": {"address": 0, "type": "float32", "functionCode": 3, "unit": "V"}},
             "alert_presets": [],
             "ai_confidence": 90.0,
-            "source_url": "https://example.com"
+            "source_url": "https://example.com",
         }
         cache.set(f"ai_template:{task_id}", {"status": "complete", "draft": draft}, timeout=300)
         url = reverse("web_team:devices:ai_template_status", args=[self.team.slug, task_id])
@@ -201,17 +197,15 @@ class TemplateAIViewTest(TestCase):
             "device_type": "power_meter",
             "protocol": "modbus_tcp",
             "category": "energy",
-            "register_map": {
-                "voltage": {"address": 0, "type": "float32", "functionCode": 3, "unit": "V"}
-            },
+            "register_map": {"voltage": {"address": 0, "type": "float32", "functionCode": 3, "unit": "V"}},
             "alert_presets": [],
             "ai_confidence": 0.90,
-            "source_url": "https://example.com"
+            "source_url": "https://example.com",
         }
         cache.set(f"ai_template:{task_id}", {"status": "complete", "draft": draft}, timeout=300)
         url = reverse("web_team:devices:ai_template_approve", args=[self.team.slug])
         response = self.client.post(url, {"task_id": task_id})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Template Saved Successfully!")
-        
+
         self.assertTrue(DeviceTemplate.objects.filter(name="Test Approved Template").exists())

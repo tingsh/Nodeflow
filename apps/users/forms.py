@@ -76,6 +76,11 @@ class UploadAvatarForm(forms.Form):
     avatar = forms.FileField(validators=[validate_profile_picture])
 
 
+class CloseAccountForm(forms.Form):
+    current_password = forms.CharField(label=_("Current Password"), widget=forms.PasswordInput)
+    confirmation_email = forms.EmailField(label=_("Account Email"))
+
+
 class CustomSocialSignupForm(SocialSignupForm):
     """Custom social signup form to work around this issue:
     https://github.com/pennersr/django-allauth/issues/3266."""

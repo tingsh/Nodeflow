@@ -1,13 +1,17 @@
+from contextlib import suppress
+
+from django.conf import settings
 from django.contrib import messages
-from django.http import HttpResponse, HttpResponseForbidden
-from django.shortcuts import get_object_or_404, redirect, render
+from django.http import HttpResponse
+from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
-from django.core.mail import send_mail
-from django.conf import settings
 
-from .models import MaintenanceTicket, SharedTicketLink, TicketComment
+from apps.events.models import EmailDelivery
+from apps.events.services import TrackedEmailDeliveryError, send_tracked_email
+
 from .forms import TicketCommentForm
+from .models import MaintenanceTicket, SharedTicketLink, TicketComment
 
 
 def get_active_shared_link_or_none(token):
@@ -66,7 +70,7 @@ def public_toggle_checklist_item(request, token, item_index):
                 ticket=ticket,
                 author=None,
                 content=f"Marked task '{item['task']}' as {state_label} (via Shareable Link).",
-                is_system_generated=True
+                is_system_generated=True,
             )
 
             # Return updated public checklist partial
@@ -118,8 +122,9 @@ def public_update_status(request, token):
             incomplete_required = [item["task"] for item in checklist if item.get("required") and not item.get("done")]
             if incomplete_required:
                 messages.error(
-                    request, 
-                    f"Cannot update status. The following required tasks must be completed first: {', '.join(incomplete_required)}"
+                    request,
+                    "Cannot update status. The following required tasks must be completed first: "
+                    f"{', '.join(incomplete_required)}",
                 )
                 return redirect("maintenance_public:public_ticket_view", token=token)
 
@@ -133,7 +138,7 @@ def public_update_status(request, token):
             ticket=ticket,
             author=None,
             content=f"Changed status from '{old_status}' to '{ticket.get_status_display()}' (via Shareable Link).",
-            is_system_generated=True
+            is_system_generated=True,
         )
 
         # Notify manager if resolved
@@ -143,7 +148,10 @@ def public_update_status(request, token):
         messages.success(request, f"Ticket status updated to {ticket.get_status_display()}.")
 
         # Handle auto-revocation
-        if link.auto_revoke_on_resolve and new_status in [MaintenanceTicket.StatusChoices.RESOLVED, MaintenanceTicket.StatusChoices.CLOSED]:
+        if link.auto_revoke_on_resolve and new_status in [
+            MaintenanceTicket.StatusChoices.RESOLVED,
+            MaintenanceTicket.StatusChoices.CLOSED,
+        ]:
             link.is_active = False
             link.save()
 
@@ -154,7 +162,7 @@ def send_manager_resolution_email(ticket):
     """Sends an email alert to the reporting manager when a ticket is resolved by a contractor."""
     if not ticket.reported_by or not ticket.reported_by.email:
         return
-        
+
     subject = f"[Novena] Compliance Ticket Resolved: TKT-{ticket.id}"
     body = (
         f"Hi {ticket.reported_by.get_display_name()},\n\n"
@@ -165,13 +173,15 @@ def send_manager_resolution_email(ticket):
         f"Best regards,\n"
         f"Novena Compliance Bot"
     )
-    try:
-        send_mail(
+    with suppress(TrackedEmailDeliveryError):
+        send_tracked_email(
+            team=ticket.team,
+            notification_type=EmailDelivery.NotificationType.MAINTENANCE_RESOLUTION,
             subject=subject,
-            message=body,
+            text_body=body,
             from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[ticket.reported_by.email],
-            fail_silently=True
+            recipients=[ticket.reported_by.email],
+            maintenance_ticket=ticket,
+            user_by_email={ticket.reported_by.email.lower(): ticket.reported_by},
+            metadata={"ticket_id": ticket.id},
         )
-    except Exception:
-        pass

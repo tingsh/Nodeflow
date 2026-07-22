@@ -20,10 +20,10 @@ MODBUS_PORT = 5020
 # Target: PC (Novena Hub / Mosquitto Broker)
 MQTT_BROKER_IP = "127.0.0.1"  # <--- Change this to the PC's LAN IP address
 MQTT_PORT = 1883
-MQTT_TOPIC = "v1/gateway/telemetry"
 
 # Identity
 GATEWAY_SN = "12345678"
+MQTT_TOPIC = f"v1/gateway/{GATEWAY_SN}/telemetry"
 DEVICE_NAME = "test device 1"
 
 

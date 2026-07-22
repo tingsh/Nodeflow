@@ -14,26 +14,35 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+import json
+
+import stripe
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.sitemaps.views import sitemap
+from django.http import HttpResponse, HttpResponseBadRequest
 from django.urls import include, path
+from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import RedirectView
 from django.views.i18n import JavaScriptCatalog
+from djstripe.models import Event
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from wagtail import urls as wagtail_urls
 from wagtail.admin import urls as wagtailadmin_urls
+from wagtail.api.v2.views import PagesAPIViewSet
+from wagtail.contrib.sitemaps import Sitemap
+from wagtail.documents import urls as wagtaildocs_urls
 
-from django.http import HttpResponse, HttpResponseBadRequest
-from django.views.decorators.csrf import csrf_exempt
 from apps.maintenance.webhooks import whatsapp_webhook
+from apps.subscriptions.urls import team_urlpatterns as subscriptions_team_urls
+from apps.teams.urls import team_urlpatterns as single_team_urls
+from apps.web.sitemaps import StaticViewSitemap
+from apps.web.urls import team_urlpatterns as web_team_urls
+
 
 @csrf_exempt
 def local_stripe_webhook(request):
-    import stripe, json
-    from django.conf import settings
-    from djstripe.models import Event
     payload = request.body
     sig_header = request.headers.get("stripe-signature")
     try:
@@ -48,14 +57,7 @@ def local_stripe_webhook(request):
     except Exception as e:
         print(f"Error processing {event_data.get('type')}: {e}")
     return HttpResponse(status=200)
-from wagtail.api.v2.views import PagesAPIViewSet
-from wagtail.contrib.sitemaps import Sitemap
-from wagtail.documents import urls as wagtaildocs_urls
 
-from apps.subscriptions.urls import team_urlpatterns as subscriptions_team_urls
-from apps.teams.urls import team_urlpatterns as single_team_urls
-from apps.web.sitemaps import StaticViewSitemap
-from apps.web.urls import team_urlpatterns as web_team_urls
 
 PagesAPIViewSet.schema = None  # hacky workaround for https://github.com/wagtail/wagtail/issues/8583
 
@@ -89,6 +91,7 @@ urlpatterns = [
     path("teams/", include("apps.teams.urls")),
     path("", include("apps.web.urls")),
     path("support/", include("apps.support.urls")),
+    path("anymail/", include("anymail.urls")),
     path("celery-progress/", include("celery_progress.urls")),
     # API docs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

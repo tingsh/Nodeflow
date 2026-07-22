@@ -31,9 +31,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # Resolve Team
         team_id = self.scope.get("session", {}).get("team")
         if team_id:
-            self.team = await Team.objects.aget(id=team_id)
+            self.team = await Team.objects.filter(id=team_id, status=Team.Status.ACTIVE).afirst()
         else:
-            self.team = await Team.objects.filter(members=self.user).afirst()
+            self.team = await Team.objects.filter(members=self.user, status=Team.Status.ACTIVE).afirst()
+
+        if not self.team:
+            await self.close()
+            return
 
         if chat_id:
             try:

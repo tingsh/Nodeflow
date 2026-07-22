@@ -45,6 +45,18 @@
                 </div>
             </div>
 
+            <div class="form-control w-full md:w-56">
+                <label class="label pb-1">
+                    <span class="label-text text-xs font-bold uppercase tracking-widest text-base-content/50">Solution Profile</span>
+                </label>
+                <select name="profile" class="select select-bordered w-full rounded-2xl bg-base-100 border-base-content/10 font-medium">
+                    <option value="">All Profiles</option>
+                    {% for profile in solution_profiles %}
+                    <option value="{{ profile.key }}" {% if selected_profile == profile.key %}selected{% endif %}>{{ profile.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
             <div class="form-control w-full md:w-48">
                 <label class="label pb-1">
                     <span class="label-text text-xs font-bold uppercase tracking-widest text-base-content/50">Protocol</span>

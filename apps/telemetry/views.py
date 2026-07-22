@@ -4,7 +4,9 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 
-from apps.devices.models import Device
+from apps.devices.models import Device, Site
+from apps.devices.solution_profiles import get_site_profile
+from apps.utils.timezones import format_site_datetime, site_timezone_metadata
 
 from .models import TelemetryData
 from .services import get_latest_telemetry_for_chart, get_latest_telemetry_value
@@ -42,26 +44,25 @@ def _device_telemetry_columns(device):
         for key, config in device.template.register_map.items():
             if not isinstance(config, dict) or config.get("writable"):
                 continue
-            columns.append({
-                "key": key,
-                "label": config.get("label", key.replace("_", " ").title()),
-                "unit": config.get("unit", ""),
-            })
+            columns.append(
+                {
+                    "key": key,
+                    "label": config.get("label", key.replace("_", " ").title()),
+                    "unit": config.get("unit", ""),
+                }
+            )
             seen.add(key)
 
     if not columns:
-        keys = (
-            TelemetryData.objects.filter(device=device)
-            .order_by("key")
-            .values_list("key", flat=True)
-            .distinct()
-        )
+        keys = TelemetryData.objects.filter(device=device).order_by("key").values_list("key", flat=True).distinct()
         for key in keys:
-            columns.append({
-                "key": key,
-                "label": key.replace("_", " ").title(),
-                "unit": "",
-            })
+            columns.append(
+                {
+                    "key": key,
+                    "label": key.replace("_", " ").title(),
+                    "unit": "",
+                }
+            )
             seen.add(key)
 
     return columns, seen
@@ -113,27 +114,21 @@ def device_metrics_api(request, team_slug, device_id):
     JSON endpoint returning available telemetry metrics (keys, labels, units) for a device.
     """
     device = get_object_or_404(Device, id=device_id, team__slug=team_slug)
-    
+
     metrics = []
     if device.template and device.template.register_map:
         for key, val in device.template.register_map.items():
             if isinstance(val, dict) and not val.get("writable"):
-                metrics.append({
-                    "key": key,
-                    "label": val.get("label", key.replace("_", " ").title()),
-                    "unit": val.get("unit", "")
-                })
-    
+                metrics.append(
+                    {"key": key, "label": val.get("label", key.replace("_", " ").title()), "unit": val.get("unit", "")}
+                )
+
     if not metrics:
         # Fallback to distinct keys recorded in TelemetryData
         keys = TelemetryData.objects.filter(device=device).order_by().values_list("key", flat=True).distinct()
         for key in keys:
-            metrics.append({
-                "key": key,
-                "label": key.replace("_", " ").title(),
-                "unit": ""
-            })
-            
+            metrics.append({"key": key, "label": key.replace("_", " ").title(), "unit": ""})
+
     return JsonResponse({"metrics": metrics})
 
 
@@ -153,17 +148,14 @@ def device_telemetry_samples_api(request, team_slug, device_id):
     if column_keys:
         sample_qs = sample_qs.filter(key__in=column_keys)
 
-    timestamps = list(
-        sample_qs.order_by("-timestamp")
-        .values_list("timestamp", flat=True)
-        .distinct()[:limit]
-    )
+    timestamps = list(sample_qs.order_by("-timestamp").values_list("timestamp", flat=True).distinct()[:limit])
 
     points = sample_qs.filter(timestamp__in=timestamps).order_by("-timestamp", "key")
 
     rows_by_timestamp = {
         timestamp: {
             "timestamp": timestamp.isoformat(),
+            "timestamp_local": format_site_datetime(timestamp, device.site),
             "values": {},
         }
         for timestamp in timestamps
@@ -174,12 +166,15 @@ def device_telemetry_samples_api(request, team_slug, device_id):
         if row is not None:
             row["values"][point.key] = _telemetry_point_value(point)
 
-    return JsonResponse({
-        "columns": columns,
-        "rows": list(rows_by_timestamp.values()),
-        "limit": limit,
-        "limit_options": list(SAMPLE_LIMIT_OPTIONS),
-    })
+    return JsonResponse(
+        {
+            "columns": columns,
+            "rows": list(rows_by_timestamp.values()),
+            "limit": limit,
+            "limit_options": list(SAMPLE_LIMIT_OPTIONS),
+            **site_timezone_metadata(device.site),
+        }
+    )
 
 
 def get_retention_limit_days(team) -> int:
@@ -194,7 +189,7 @@ def device_telemetry_history_api(request, team_slug, device_id):
     JSON endpoint for historical and real-time Chart.js updates.
     """
     from django.utils import timezone
-    
+
     device = get_object_or_404(Device, id=device_id, team__slug=team_slug)
     key = request.GET.get("key", "active_power")
     hours = int(request.GET.get("hours", 24))
@@ -208,20 +203,30 @@ def device_telemetry_history_api(request, team_slug, device_id):
     qs = TelemetryData.objects.filter(device=device)
     if key:
         qs = qs.filter(key=key)
-        
+
     cutoff = timezone.now() - timezone.timedelta(hours=hours)
     qs = qs.filter(timestamp__gte=cutoff).order_by("-timestamp")[:1000]
 
     # Reverse to keep chronological order
     points = list(reversed(list(qs)))
-    
+
     labels = []
+    labels_local = []
     values = []
     for point in points:
         labels.append(point.timestamp.isoformat())
+        labels_local.append(format_site_datetime(point.timestamp, device.site, "%H:%M:%S"))
         values.append(point.value_numeric or 0.0)
 
-    return JsonResponse({"labels": labels, "values": values, "key": key})
+    return JsonResponse(
+        {
+            "labels": labels,
+            "labels_local": labels_local,
+            "values": values,
+            "key": key,
+            **site_timezone_metadata(device.site),
+        }
+    )
 
 
 @login_required
@@ -257,6 +262,107 @@ def export_telemetry_csv(request, team_slug, device_id):
     for point in qs[:5000]:  # Limit export for safety
         val = point.value_numeric if point.value_numeric is not None else (point.value_string or point.value_bool)
         meta = metric_meta.get(point.key, {"label": point.key.replace("_", " ").title(), "unit": ""})
-        writer.writerow([point.timestamp, meta["label"], point.key, val, meta["unit"]])
+        writer.writerow(
+            [
+                format_site_datetime(point.timestamp, device.site),
+                meta["label"],
+                point.key,
+                val,
+                meta["unit"],
+            ]
+        )
 
+    return response
+
+
+def _site_profile_report_rows(site, days):
+    from django.utils import timezone
+
+    from apps.alerts.models import Alert
+    from apps.maintenance.models import MaintenanceTicket, PreventiveSchedule
+
+    cutoff = timezone.now() - timezone.timedelta(days=days)
+    profile = get_site_profile(site)
+    devices = list(site.devices.select_related("template", "gateway"))
+    rows = []
+
+    for device in devices:
+        register_map = (
+            device.template.register_map if device.template and isinstance(device.template.register_map, dict) else {}
+        )
+        for key in profile.key_priority:
+            if register_map and key not in register_map:
+                continue
+            latest = (
+                TelemetryData.objects.filter(device=device, key=key, timestamp__gte=cutoff)
+                .order_by("-timestamp")
+                .first()
+            )
+            if not latest:
+                continue
+            value = _telemetry_point_value(latest)
+            meta = register_map.get(key, {}) if isinstance(register_map, dict) else {}
+            rows.append(
+                {
+                    "device": device,
+                    "metric": meta.get("label", key.replace("_", " ").title()),
+                    "key": key,
+                    "value": value,
+                    "unit": meta.get("unit", ""),
+                    "timestamp": latest.timestamp,
+                    "timestamp_display": format_site_datetime(latest.timestamp, site),
+                }
+            )
+
+    return {
+        "profile": profile,
+        "devices": devices,
+        "rows": rows,
+        "active_alerts": Alert.objects.filter(device__site=site, status="active").select_related("device", "rule"),
+        "open_tickets": MaintenanceTicket.objects.filter(
+            device__site=site, status__in=["open", "in_progress", "waiting"]
+        ),
+        "overdue_pms": PreventiveSchedule.objects.filter(
+            device__site=site, is_active=True, next_due_at__lt=timezone.now()
+        ),
+        "days": days,
+    }
+
+
+@login_required
+def site_profile_report(request, team_slug, site_id):
+    site = get_object_or_404(Site, id=site_id, team__slug=team_slug)
+    days = int(request.GET.get("days", 7))
+    context = {
+        "site": site,
+        "team": request.team,
+        "active_tab": "sites",
+        **_site_profile_report_rows(site, days),
+    }
+    return render(request, "telemetry/site_profile_report.html", context)
+
+
+@login_required
+def export_site_profile_report_csv(request, team_slug, site_id):
+    site = get_object_or_404(Site, id=site_id, team__slug=team_slug)
+    days = int(request.GET.get("days", 7))
+    report = _site_profile_report_rows(site, days)
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="{site.name}_{report["profile"].key}_report.csv"'
+    writer = csv.writer(response)
+    writer.writerow(["Site", "Profile", "Device", "Metric", "Key", "Value", "Unit", "Timestamp"])
+    for row in report["rows"]:
+        writer.writerow(
+            [
+                site.name,
+                report["profile"].name,
+                row["device"].name,
+                row["metric"],
+                row["key"],
+                row["value"],
+                row["unit"],
+                row["timestamp_display"],
+            ]
+        )
     return response

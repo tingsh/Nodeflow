@@ -1,31 +1,37 @@
-import logging
 import json
+import logging
+from typing import Literal
+
 import google.generativeai as genai
 from django.conf import settings
-from django.utils.translation import gettext_lazy as _
 from pydantic import BaseModel, Field, ValidationError
-from typing import Dict, List, Optional, Literal
 
 from apps.devices.models import DeviceTemplate
 
 logger = logging.getLogger(__name__)
 
+
 # Pydantic Schemas for Gemini Structured Response
 class RegisterDefinition(BaseModel):
-    address: int = Field(description="The starting register address (0-based or offset, e.g. 3028). Must be an integer.")
+    address: int = Field(
+        description="The starting register address (0-based or offset, e.g. 3028). Must be an integer."
+    )
     type: Literal["float32", "float", "int64", "int32", "uint16", "int16", "uint32", "int32", "bool"] = Field(
         description="The data type of the register."
     )
     functionCode: Literal[3, 4, 5, 6, 15, 16] = Field(
         description="The Modbus function code (e.g. 3 for Read Holding Registers, 4 for Read Input Registers, etc.)."
     )
-    unit: Optional[str] = Field(None, description="The unit of measurement, e.g., 'V', 'A', 'W', 'Hz', 'kWh', 'Wh', 'rpm', 'C', 'F'.")
-    scale: Optional[float] = Field(None, description="The scaling multiplier (if any), e.g., 0.1 or 0.01.")
-    writable: Optional[bool] = Field(False, description="Whether the register is writable.")
-    control: Optional[Literal["input", "toggle", "button"]] = Field(None, description="Type of UI control if writable.")
-    min: Optional[float] = Field(None, description="Minimum allowed value for controls.")
-    max: Optional[float] = Field(None, description="Maximum allowed value for controls.")
-    labels: Optional[List[str]] = Field(None, description="Labels for toggle or boolean values, e.g. ['Stop', 'Start'].")
+    unit: str | None = Field(
+        None, description="The unit of measurement, e.g., 'V', 'A', 'W', 'Hz', 'kWh', 'Wh', 'rpm', 'C', 'F'."
+    )
+    scale: float | None = Field(None, description="The scaling multiplier (if any), e.g., 0.1 or 0.01.")
+    writable: bool | None = Field(False, description="Whether the register is writable.")
+    control: Literal["input", "toggle", "button"] | None = Field(None, description="Type of UI control if writable.")
+    min: float | None = Field(None, description="Minimum allowed value for controls.")
+    max: float | None = Field(None, description="Maximum allowed value for controls.")
+    labels: list[str] | None = Field(None, description="Labels for toggle or boolean values, e.g. ['Stop', 'Start'].")
+
 
 class AlertPresetDefinition(BaseModel):
     name: str = Field(description="Friendly name for the alert, e.g. 'Low Voltage Warning'.")
@@ -33,6 +39,7 @@ class AlertPresetDefinition(BaseModel):
     condition: Literal["gt", "lt", "eq", "neq"] = Field(description="Comparison condition: gt, lt, eq, neq.")
     threshold: float = Field(description="Threshold value to trigger the alert.")
     severity: Literal["warning", "critical", "info"] = Field(description="Severity of the alert.")
+
 
 class DeviceTemplateAIResult(BaseModel):
     name: str = Field(description="Standardized name of the device, e.g. 'Schneider PM5350'.")
@@ -45,14 +52,17 @@ class DeviceTemplateAIResult(BaseModel):
         description="The communication protocol (typically modbus_tcp or modbus_rtu)."
     )
     category: Literal["energy", "cold_chain", "factory"] = Field(
-        description="Industrial category: energy (Energy Monitoring), cold_chain (Cold Chain), factory (Smart Factory)."
+        description=(
+            "Industrial category: energy (Energy Monitoring), cold_chain (Cold Chain), factory (Smart Factory)."
+        )
     )
-    register_map: Dict[str, RegisterDefinition] = Field(
-        description="Key-value mapping of registers. Keys must be snake_case (e.g. voltage, active_power, output_frequency)."
+    register_map: dict[str, RegisterDefinition] = Field(
+        description=(
+            "Key-value mapping of registers. Keys must be snake_case (e.g. voltage, active_power, output_frequency)."
+        )
     )
-    alert_presets: List[AlertPresetDefinition] = Field(
-        default_factory=list,
-        description="Pre-configured list of alert presets based on register keys."
+    alert_presets: list[AlertPresetDefinition] = Field(
+        default_factory=list, description="Pre-configured list of alert presets based on register keys."
     )
     default_polling_interval: int = Field(5, description="Default polling interval in seconds.")
     source_url: str = Field(description="The exact URL where you found the register map documentation.")
@@ -62,23 +72,29 @@ class DeviceTemplateAIResult(BaseModel):
 def _build_generation_prompt(manufacturer: str, model_number: str, doc_url: str = None) -> str:
     """Build the Gemini prompt for Modbus register map extraction."""
     prompt = (
-        f"You are an expert industrial IoT engineering assistant. Your task is to find and extract the Modbus register map "
-        f"for the equipment: Manufacturer '{manufacturer}', Model '{model_number}'.\n\n"
+        "You are an expert industrial IoT engineering assistant. Your task is to find and extract the "
+        f"Modbus register map for the equipment: Manufacturer '{manufacturer}', Model '{model_number}'.\n\n"
     )
-    
+
     if doc_url:
         prompt += (
-            f"IMPORTANT: The user has provided a direct documentation URL. Please prioritize and ground your search/extraction "
-            f"on this specific page: {doc_url}\n\n"
+            "IMPORTANT: The user has provided a direct documentation URL. Please prioritize and ground "
+            f"your search/extraction on this specific page: {doc_url}\n\n"
         )
     else:
-        prompt += "Use Google Search to find the manufacturer's official datasheet, Modbus manual, or register map document.\n\n"
+        prompt += (
+            "Use Google Search to find the manufacturer's official datasheet, Modbus manual, "
+            "or register map document.\n\n"
+        )
 
     prompt += (
         "Extract the typical telemetry registers for this equipment. For example:\n"
-        "- If it is a power meter: voltage, current, active_power, frequency, energy, reactive_power, power_factor, etc.\n"
-        "- If it is a solar inverter: dc_voltage, dc_current, ac_active_power, status, total_yield, energy, temp, etc.\n"
-        "- If it is a VFD: frequency, output_current, output_power, motor_speed, speed_setpoint, run_command, status, etc.\n"
+        "- If it is a power meter: voltage, current, active_power, frequency, energy, "
+        "reactive_power, power_factor, etc.\n"
+        "- If it is a solar inverter: dc_voltage, dc_current, ac_active_power, status, "
+        "total_yield, energy, temp, etc.\n"
+        "- If it is a VFD: frequency, output_current, output_power, motor_speed, "
+        "speed_setpoint, run_command, status, etc.\n"
         "- If it is a temperature sensor: temperature, humidity, etc.\n\n"
         "Please follow these strict rules:\n"
         "1. Identify the Modbus protocol (usually modbus_tcp or modbus_rtu).\n"
@@ -86,7 +102,8 @@ def _build_generation_prompt(manufacturer: str, model_number: str, doc_url: str 
         "3. Identify writable registers (functionCode 6 or 16 for holding, 5 for coils) if applicable.\n"
         "4. Assign snake_case names as keys for `register_map` (e.g., 'active_power' or 'dc_voltage').\n"
         "5. Standardize units of measurement (e.g., 'V', 'A', 'W', 'kW', 'Hz', 'kWh', 'Wh', 'rpm', 'C').\n"
-        "6. Provide 1-2 standard alert presets in the `alert_presets` field (e.g., over-temperature, under-voltage) if reasonable.\n"
+        "6. Provide 1-2 standard alert presets in the `alert_presets` field "
+        "(e.g., over-temperature, under-voltage) if reasonable.\n"
         "7. Estimate your extraction confidence (0.0 to 1.0) and include the source URL where the map was found.\n\n"
         "Return the output strictly in the requested JSON structure."
     )
@@ -113,16 +130,16 @@ def _validate_register_map(register_map: dict) -> tuple[bool, list[str]]:
         else:
             errors.append(f"Register '{key}' must be a dictionary or model instance")
             continue
-        
+
         # Check required fields
         if "address" not in value:
             errors.append(f"Register '{key}' is missing 'address'")
         elif not isinstance(value["address"], int):
             errors.append(f"Register '{key}' address must be an integer")
-            
+
         if "type" not in value:
             errors.append(f"Register '{key}' is missing 'type'")
-            
+
         if "functionCode" not in value:
             errors.append(f"Register '{key}' is missing 'functionCode'")
         elif value.get("functionCode") not in [3, 4, 5, 6, 15, 16]:
@@ -148,7 +165,7 @@ def generate_template_from_ai(manufacturer: str, model_number: str, doc_url: str
         logger.error("GEMINI_API_KEY is not configured in settings.")
         return {
             "status": "error",
-            "error": "Gemini API key is not configured. Please add GEMINI_API_KEY to your settings/env variables."
+            "error": "Gemini API key is not configured. Please add GEMINI_API_KEY to your settings/env variables.",
         }
 
     # Initialize Gemini SDK
@@ -164,7 +181,7 @@ def generate_template_from_ai(manufacturer: str, model_number: str, doc_url: str
 
     try:
         logger.info("Calling Gemini for template generation: %s %s (URL: %s)", manufacturer, model_number, doc_url)
-        
+
         # Enforce structured output via Pydantic model response_schema
         # Enable search grounding if doc_url is NOT provided (or even if it is, to help find it)
         tools = ["google_search"]
@@ -176,25 +193,25 @@ def generate_template_from_ai(manufacturer: str, model_number: str, doc_url: str
                 response_mime_type="application/json",
                 response_schema=DeviceTemplateAIResult,
                 temperature=0.1,
-            )
+            ),
         )
-        
+
         # Parse the structured response
         response_text = response.text
         logger.debug("Gemini raw response: %s", response_text)
-        
+
         data = json.loads(response_text)
-        
+
         # Validate the dict schema using Pydantic model directly to be safe
         result = DeviceTemplateAIResult(**data)
-        
+
         # Perform custom DB schema validation on register_map
         is_valid, validation_errors = _validate_register_map(result.register_map)
         if not is_valid:
             logger.error("AI-generated register map failed validation: %s", validation_errors)
             return {
                 "status": "error",
-                "error": f"AI-generated register map failed validation: {', '.join(validation_errors)}"
+                "error": f"AI-generated register map failed validation: {', '.join(validation_errors)}",
             }
 
         return {

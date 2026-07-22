@@ -12,5 +12,9 @@ urlpatterns = [
     path("api/history/<int:device_id>/", views.device_telemetry_history_api, name="device_telemetry_history_api"),
     path("api/samples/<int:device_id>/", views.device_telemetry_samples_api, name="device_telemetry_samples_api"),
     path("api/export/<int:device_id>/", views.export_telemetry_csv, name="export_telemetry_csv"),
+    path("reports/site/<int:site_id>/", views.site_profile_report, name="site_profile_report"),
+    path(
+        "reports/site/<int:site_id>/csv/", views.export_site_profile_report_csv, name="export_site_profile_report_csv"
+    ),
     path("analyze/<int:device_id>/", views.telemetry_analyzer, name="telemetry_analyzer"),
 ]

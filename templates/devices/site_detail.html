@@ -33,6 +33,9 @@
             </div>
         </div>
         <div class="mt-6 flex lg:ml-4 lg:mt-0 space-x-3">
+            <a href="{% url 'web_team:telemetry:site_profile_report' request.team.slug site.pk %}" class="inline-flex items-center rounded-2xl bg-base-100 px-5 py-2.5 text-sm font-bold text-base-content shadow-sm ring-1 ring-inset ring-base-content/10 hover:bg-base-200 transition-all">
+                <i class="fa fa-file-lines mr-2 text-base-content/40"></i>Value Report
+            </a>
             <a href="{% url 'web_team:devices:site_edit' request.team.slug site.pk %}" class="inline-flex items-center rounded-2xl bg-base-100 px-5 py-2.5 text-sm font-bold text-base-content shadow-sm ring-1 ring-inset ring-base-content/10 hover:bg-base-200 transition-all">
                 <i class="fa fa-edit mr-2 text-base-content/40"></i>Edit Site
             </a>

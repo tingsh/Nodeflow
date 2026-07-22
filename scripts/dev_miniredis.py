@@ -10,7 +10,6 @@ import socketserver
 import threading
 from collections import defaultdict
 
-
 LISTS: dict[str, list[bytes]] = defaultdict(list)
 STRINGS: dict[str, bytes] = {}
 LOCK = threading.Lock()
@@ -142,10 +141,7 @@ class MiniRedisHandler(socketserver.StreamRequestHandler):
                 stop = int(command[3])
                 with LOCK:
                     items = list(LISTS.get(key, []))
-                if stop == -1:
-                    subset = items[start:]
-                else:
-                    subset = items[start : stop + 1]
+                subset = items[start:] if stop == -1 else items[start : stop + 1]
                 return array(subset)
 
             if name in {"DEL", "DELETE"}:

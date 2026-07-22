@@ -80,23 +80,23 @@ class NotificationTest(TestCase):
 
 class DeviceFreshnessTest(TestCase):
     def setUp(self):
-        self.team = Team.objects.create(name='Fresh Team', slug='fresh-team')
-        self.site = Site.objects.create(team=self.team, name='Fresh Site')
+        self.team = Team.objects.create(name="Fresh Team", slug="fresh-team")
+        self.site = Site.objects.create(team=self.team, name="Fresh Site")
         self.template = DeviceTemplate.objects.create(
-            name='Five Second Meter',
-            device_type='power_meter',
-            protocol='modbus_tcp',
+            name="Five Second Meter",
+            device_type="power_meter",
+            protocol="modbus_tcp",
             register_map={},
             default_polling_interval=5,
         )
         self.device = Device.objects.create(
             team=self.team,
             site=self.site,
-            name='Fresh Meter',
+            name="Fresh Meter",
             template=self.template,
-            device_type='power_meter',
-            protocol='modbus_tcp',
-            status='online',
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            status="online",
         )
 
     def test_fresh_device_resolves_to_live(self):
@@ -105,8 +105,8 @@ class DeviceFreshnessTest(TestCase):
         self.device.last_telemetry_at = timezone.now() - timezone.timedelta(seconds=4)
         state = self.device.freshness
 
-        self.assertEqual(state.status, 'live')
-        self.assertIn('Live', state.display)
+        self.assertEqual(state.status, "live")
+        self.assertIn("Live", state.display)
 
     def test_late_device_resolves_to_delayed(self):
         from django.utils import timezone
@@ -114,8 +114,8 @@ class DeviceFreshnessTest(TestCase):
         self.device.last_telemetry_at = timezone.now() - timezone.timedelta(seconds=16)
         state = self.device.freshness
 
-        self.assertEqual(state.status, 'delayed')
-        self.assertIn('Delayed', state.display)
+        self.assertEqual(state.status, "delayed")
+        self.assertIn("Delayed", state.display)
 
     def test_stale_device_resolves_to_offline(self):
         from django.utils import timezone
@@ -123,28 +123,28 @@ class DeviceFreshnessTest(TestCase):
         self.device.last_telemetry_at = timezone.now() - timezone.timedelta(seconds=31)
         state = self.device.freshness
 
-        self.assertEqual(state.status, 'offline')
-        self.assertIn('Offline', state.display)
+        self.assertEqual(state.status, "offline")
+        self.assertIn("Offline", state.display)
 
     def test_alarm_status_has_priority_over_freshness(self):
         from django.utils import timezone
 
-        self.device.status = 'alarm'
+        self.device.status = "alarm"
         self.device.last_telemetry_at = timezone.now() - timezone.timedelta(seconds=4)
         state = self.device.freshness
 
-        self.assertEqual(state.status, 'alarm')
-        self.assertIn('Alarm', state.display)
+        self.assertEqual(state.status, "alarm")
+        self.assertIn("Alarm", state.display)
 
     def test_slow_polling_interval_avoids_false_offline(self):
         from django.utils import timezone
 
         self.template.default_polling_interval = 60
-        self.template.save(update_fields=['default_polling_interval'])
+        self.template.save(update_fields=["default_polling_interval"])
         self.device.last_telemetry_at = timezone.now() - timezone.timedelta(seconds=120)
         state = self.device.freshness
 
-        self.assertEqual(state.status, 'delayed')
+        self.assertEqual(state.status, "delayed")
 
     def test_check_device_heartbeats_marks_stale_online_device_offline(self):
         from django.utils import timezone
@@ -152,30 +152,30 @@ class DeviceFreshnessTest(TestCase):
         from apps.devices.tasks import check_device_heartbeats
 
         self.device.last_telemetry_at = timezone.now() - timezone.timedelta(seconds=45)
-        self.device.save(update_fields=['last_telemetry_at'])
+        self.device.save(update_fields=["last_telemetry_at"])
 
         self.assertEqual(check_device_heartbeats(), 1)
         self.device.refresh_from_db()
-        self.assertEqual(self.device.status, 'offline')
+        self.assertEqual(self.device.status, "offline")
 
     def test_check_device_heartbeats_does_not_clear_alarm(self):
         from django.utils import timezone
 
         from apps.devices.tasks import check_device_heartbeats
 
-        self.device.status = 'alarm'
+        self.device.status = "alarm"
         self.device.last_telemetry_at = timezone.now() - timezone.timedelta(seconds=45)
-        self.device.save(update_fields=['status', 'last_telemetry_at'])
+        self.device.save(update_fields=["status", "last_telemetry_at"])
 
         self.assertEqual(check_device_heartbeats(), 0)
         self.device.refresh_from_db()
-        self.assertEqual(self.device.status, 'alarm')
+        self.assertEqual(self.device.status, "alarm")
 
 
 class GatewayFreshnessTest(TestCase):
     def setUp(self):
-        self.team = Team.objects.create(name='Gateway Fresh Team', slug='gateway-fresh-team')
-        self.site = Site.objects.create(team=self.team, name='Gateway Site')
+        self.team = Team.objects.create(name="Gateway Fresh Team", slug="gateway-fresh-team")
+        self.site = Site.objects.create(team=self.team, name="Gateway Site")
 
     def test_gateway_heartbeat_timeout_marks_gateway_offline(self):
         from django.test import override_settings
@@ -186,10 +186,10 @@ class GatewayFreshnessTest(TestCase):
         gateway = Gateway.objects.create(
             team=self.team,
             site=self.site,
-            name='Stale Gateway',
-            serial_number='GW-FRESH-001',
-            access_token='gw-fresh-token',
-            status='online',
+            name="Stale Gateway",
+            serial_number="GW-FRESH-001",
+            access_token="gw-fresh-token",
+            status="online",
             last_seen=timezone.now() - timezone.timedelta(seconds=121),
         )
 
@@ -197,8 +197,8 @@ class GatewayFreshnessTest(TestCase):
             self.assertEqual(check_gateway_heartbeats(), 1)
 
         gateway.refresh_from_db()
-        self.assertEqual(gateway.status, 'offline')
-        self.assertIn('Gateway offline', gateway.freshness.display)
+        self.assertEqual(gateway.status, "offline")
+        self.assertIn("Gateway offline", gateway.freshness.display)
 
     def test_gateway_online_device_offline_context_copy(self):
         from django.utils import timezone
@@ -206,16 +206,16 @@ class GatewayFreshnessTest(TestCase):
         gateway = Gateway.objects.create(
             team=self.team,
             site=self.site,
-            name='Reachable Gateway',
-            serial_number='GW-FRESH-002',
-            access_token='gw-fresh-token-002',
-            status='online',
+            name="Reachable Gateway",
+            serial_number="GW-FRESH-002",
+            access_token="gw-fresh-token-002",
+            status="online",
             last_seen=timezone.now() - timezone.timedelta(seconds=18),
         )
         template = DeviceTemplate.objects.create(
-            name='Fast Meter',
-            device_type='power_meter',
-            protocol='modbus_tcp',
+            name="Fast Meter",
+            device_type="power_meter",
+            protocol="modbus_tcp",
             register_map={},
             default_polling_interval=5,
         )
@@ -223,15 +223,15 @@ class GatewayFreshnessTest(TestCase):
             team=self.team,
             site=self.site,
             gateway=gateway,
-            name='Offline Field Meter',
+            name="Offline Field Meter",
             template=template,
-            device_type='power_meter',
-            protocol='modbus_tcp',
-            status='offline',
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            status="offline",
             last_telemetry_at=timezone.now() - timezone.timedelta(minutes=5),
         )
 
-        self.assertEqual(device.gateway_context_display, 'Gateway online - device offline')
+        self.assertEqual(device.gateway_context_display, "Gateway online - device offline")
 
     def test_gateway_recent_heartbeat_resolves_live(self):
         from django.test import override_settings
@@ -240,16 +240,16 @@ class GatewayFreshnessTest(TestCase):
         gateway = Gateway.objects.create(
             team=self.team,
             site=self.site,
-            name='Fresh Gateway',
-            serial_number='GW-FRESH-003',
-            access_token='gw-fresh-token-003',
-            status='online',
+            name="Fresh Gateway",
+            serial_number="GW-FRESH-003",
+            access_token="gw-fresh-token-003",
+            status="online",
             last_seen=timezone.now() - timezone.timedelta(seconds=30),
         )
 
         with override_settings(GATEWAY_OFFLINE_SECONDS=120):
-            self.assertEqual(gateway.freshness.status, 'live')
-            self.assertIn('Gateway online', gateway.freshness.display)
+            self.assertEqual(gateway.freshness.status, "live")
+            self.assertIn("Gateway online", gateway.freshness.display)
 
     def test_gateway_stale_heartbeat_resolves_offline_without_celery(self):
         from django.test import override_settings
@@ -258,16 +258,16 @@ class GatewayFreshnessTest(TestCase):
         gateway = Gateway.objects.create(
             team=self.team,
             site=self.site,
-            name='Computed Stale Gateway',
-            serial_number='GW-FRESH-004',
-            access_token='gw-fresh-token-004',
-            status='online',
+            name="Computed Stale Gateway",
+            serial_number="GW-FRESH-004",
+            access_token="gw-fresh-token-004",
+            status="online",
             last_seen=timezone.now() - timezone.timedelta(seconds=121),
         )
 
         with override_settings(GATEWAY_OFFLINE_SECONDS=120):
-            self.assertEqual(gateway.freshness.status, 'offline')
-            self.assertIn('Gateway offline', gateway.freshness.display)
+            self.assertEqual(gateway.freshness.status, "offline")
+            self.assertIn("Gateway offline", gateway.freshness.display)
 
     def test_gateway_context_uses_gateway_offline_when_gateway_is_stale(self):
         from django.test import override_settings
@@ -276,16 +276,16 @@ class GatewayFreshnessTest(TestCase):
         gateway = Gateway.objects.create(
             team=self.team,
             site=self.site,
-            name='Stale Context Gateway',
-            serial_number='GW-FRESH-005',
-            access_token='gw-fresh-token-005',
-            status='online',
+            name="Stale Context Gateway",
+            serial_number="GW-FRESH-005",
+            access_token="gw-fresh-token-005",
+            status="online",
             last_seen=timezone.now() - timezone.timedelta(seconds=121),
         )
         template = DeviceTemplate.objects.create(
-            name='Context Meter',
-            device_type='power_meter',
-            protocol='modbus_tcp',
+            name="Context Meter",
+            device_type="power_meter",
+            protocol="modbus_tcp",
             register_map={},
             default_polling_interval=5,
         )
@@ -293,16 +293,16 @@ class GatewayFreshnessTest(TestCase):
             team=self.team,
             site=self.site,
             gateway=gateway,
-            name='Offline Context Meter',
+            name="Offline Context Meter",
             template=template,
-            device_type='power_meter',
-            protocol='modbus_tcp',
-            status='offline',
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            status="offline",
             last_telemetry_at=timezone.now() - timezone.timedelta(minutes=5),
         )
 
         with override_settings(GATEWAY_OFFLINE_SECONDS=120):
-            self.assertIn('Gateway offline', device.gateway_context_display)
+            self.assertIn("Gateway offline", device.gateway_context_display)
 
     def test_device_detail_context_uses_plan_safe_fallback_polling_interval(self):
         from django.test import RequestFactory
@@ -312,12 +312,12 @@ class GatewayFreshnessTest(TestCase):
         device = Device.objects.create(
             team=self.team,
             site=self.site,
-            name='Fallback Interval Meter',
-            device_type='power_meter',
-            protocol='modbus_tcp',
-            status='online',
+            name="Fallback Interval Meter",
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            status="online",
         )
-        request = RequestFactory().get('/devices/1/')
+        request = RequestFactory().get("/devices/1/")
         request.team = self.team
         view = DeviceDetailView()
         view.request = request
@@ -325,7 +325,8 @@ class GatewayFreshnessTest(TestCase):
 
         context = view.get_context_data(object=device)
 
-        self.assertEqual(context['telemetry_fallback_interval_ms'], 10000)
+        self.assertEqual(context["telemetry_fallback_interval_ms"], 10000)
+
 
 class SiteDeleteFlowTest(TestCase):
     def setUp(self):
@@ -377,4 +378,3 @@ class SiteDeleteFlowTest(TestCase):
         self.assertRedirects(response, reverse("web_team:devices:site_list", args=[self.team.slug]))
         self.assertFalse(Site.objects.filter(pk=self.site.pk).exists())
         self.assertFalse(Device.objects.filter(pk=self.device.pk).exists())
-

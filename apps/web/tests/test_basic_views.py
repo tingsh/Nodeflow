@@ -15,6 +15,13 @@ class TestBasicViews(TestCase):
     def test_terms(self):
         self._assert_200(reverse("web:terms"))
 
+    def test_public_marketing_pages(self):
+        for url in ["/product/", "/solutions/", "/pricing/", "/about/"]:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "Novena")
+
     def test_robots(self):
         self._assert_200(reverse("web:robots.txt"))
 

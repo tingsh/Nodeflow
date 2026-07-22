@@ -1,13 +1,11 @@
 import json
 import logging
-from datetime import datetime, timezone as dt_timezone
-
-from django.utils import timezone
+from datetime import UTC, datetime
 
 logger = logging.getLogger("novena_hub")
 
 
-def parse_mqtt_payload(topic, payload):
+def parse_mqtt_payload(topic, payload, trusted_gateway_sn=None):
     """
     Parses MQTT payloads from either our custom simulator or ThingsBoard Gateway format.
     Returns a list of normalized ingestion events.
@@ -21,7 +19,7 @@ def parse_mqtt_payload(topic, payload):
     events = []
 
     # Ensure payload is a dict
-    if isinstance(payload, (bytes, str)):
+    if isinstance(payload, bytes | str):
         try:
             payload = json.loads(payload)
         except Exception as e:
@@ -29,8 +27,8 @@ def parse_mqtt_payload(topic, payload):
             return []
 
     # Detect Format A (Novena Simulator / Novena Gateway)
-    if "serial_number" in payload and "values" in payload:
-        gateway_sn = payload.get("serial_number")
+    if "values" in payload and ("serial_number" in payload or trusted_gateway_sn):
+        gateway_sn = trusted_gateway_sn or payload.get("serial_number")
         values = payload.get("values", {})
         # device_id is a top-level field (Cloud-assigned UUID, set by Edge when deviceId is in connector config)
         device_id = payload.get("device_id")
@@ -39,11 +37,7 @@ def parse_mqtt_payload(topic, payload):
 
         # Parse edge-provided timestamp (ms epoch); fall back to server time
         ts = payload.get("ts")
-        dt = (
-            datetime.fromtimestamp(ts / 1000.0, tz=dt_timezone.utc)
-            if ts
-            else None
-        )
+        dt = datetime.fromtimestamp(ts / 1000.0, tz=UTC) if ts else None
 
         events.append(
             {
@@ -68,11 +62,11 @@ def parse_mqtt_payload(topic, payload):
                         dt = None
                         if ts:
                             # TB timestamps are usually milliseconds
-                            dt = datetime.fromtimestamp(ts / 1000.0, tz=dt_timezone.utc)
+                            dt = datetime.fromtimestamp(ts / 1000.0, tz=UTC)
 
                         events.append(
                             {
-                                "gateway_sn": None,  # In TB format, SN is usually tied to the connection/topic
+                                "gateway_sn": trusted_gateway_sn,
                                 "device_name": device_name,
                                 "values": point.get("values", {}),
                                 "timestamp": dt,

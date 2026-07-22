@@ -4,7 +4,7 @@
 {% load i18n %}
 
 {% block app %}
-<div class="px-4 sm:px-6 lg:px-8 py-8 selection:bg-indigo-500/30 max-w-6xl mx-auto"
+<div id="profile-page" class="px-4 sm:px-6 lg:px-8 py-8 selection:bg-indigo-500/30 max-w-6xl mx-auto"
      x-data="{ activeTab: localStorage.getItem('profile_active_tab') || 'profile' }"
      x-effect="localStorage.setItem('profile_active_tab', activeTab)">
 
@@ -14,7 +14,7 @@
             <div class="relative group">
                 <div class="avatar">
                     <div class="w-24 h-24 rounded-full ring ring-indigo-500 ring-offset-base-100 ring-offset-2 overflow-hidden">
-                        <img class="avatar object-cover" src="{{ user.avatar_url }}" alt="{{ user.get_display_name }}" />
+                        <img class="avatar object-cover" src="{{ user.avatar_url }}" alt="{{ user.get_display_name }}" data-profile-avatar />
                     </div>
                 </div>
                 <!-- Upload overlay -->
@@ -103,18 +103,74 @@
             </div>
         </div>
     </div>
-</div>
-{% endblock %}
 
-{% block page_js %}
-{% vite_asset 'assets/javascript/app.js' %}
+    <section class="mt-10 rounded-3xl border border-error/20 bg-error/10 p-8 shadow-sm">
+        <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div class="max-w-2xl">
+                <h2 class="text-lg font-black text-error font-heading">
+                    <i class="fa fa-exclamation-triangle mr-2"></i>{% translate "Danger Zone" %}
+                </h2>
+                <h3 class="mt-4 text-base font-black text-base-content">{% translate "Close account" %}</h3>
+                <p class="mt-2 text-sm leading-relaxed text-base-content/70">
+                    {% translate "Closing your account removes login access but keeps operational records required for security, billing, and compliance." %}
+                </p>
+                {% if account_closure_blocking_teams %}
+                    <div class="mt-4 rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-base-content/80">
+                        <p class="font-bold">{% translate "Before closing your account, transfer ownership or close these teams:" %}</p>
+                        <ul class="mt-2 list-disc space-y-1 pl-5">
+                            {% for team in account_closure_blocking_teams %}
+                                <li>
+                                    <a class="link link-primary font-semibold" href="{% url 'single_team:manage_team' team.slug %}">{{ team.name }}</a>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endif %}
+            </div>
+            {% url 'users:close_account' as close_account_url %}
+            <form method="post" action="{{ close_account_url|default:'/users/profile/close-account/' }}" class="w-full max-w-md space-y-4 rounded-2xl border border-base-content/10 bg-base-100 p-5">
+                {% csrf_token %}
+                <div>
+                    <label class="label" for="id_close_current_password">
+                        <span class="label-text font-bold">{% translate "Current password" %}</span>
+                    </label>
+                    <input id="id_close_current_password" name="current_password" type="password" required autocomplete="current-password" class="input input-bordered w-full">
+                </div>
+                <div>
+                    <label class="label" for="id_close_confirmation_email">
+                        <span class="label-text font-bold">{% translate "Type your account email" %}</span>
+                    </label>
+                    <input id="id_close_confirmation_email" name="confirmation_email" type="email" required autocomplete="off" class="input input-bordered w-full" placeholder="{{ user.email }}">
+                </div>
+                <button type="submit" class="btn btn-error w-full text-white">
+                    <i class="fa fa-user-slash mr-2"></i>{% translate "Close account" %}
+                </button>
+            </form>
+        </div>
+    </section>
 <script>
-  document.addEventListener('DOMContentLoaded', () => {
-    const App = SiteJS.app;
+  (() => {
+    const root = document.getElementById("profile-page");
+    if (!root || root.dataset.profileUploadReady === "true") {
+      return;
+    }
+    root.dataset.profileUploadReady = "true";
+
     const uploadUrl = '{% url "users:upload_profile_image" %}';
-    document.getElementById("profile-upload").onchange = function() {
-      let files = document.getElementById("profile-upload").files;
-      let file = files[0];
+    const uploadInput = root.querySelector("#profile-upload");
+    const uploadLabel = root.querySelector("#profile-upload-label");
+
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) {
+        return parts.pop().split(";").shift();
+      }
+      return "";
+    }
+
+    uploadInput.onchange = function() {
+      const file = uploadInput.files[0];
       if (file) {
         updatePreview(file);
         uploadImage(file);
@@ -123,48 +179,46 @@
     function updatePreview(file) {
       let reader = new FileReader();
       reader.onload = function (e) {
-        let avatars = document.getElementsByClassName('avatar');
-        for (let i = 0; i < avatars.length; i++) {
-          avatars[i].setAttribute('src', e.target.result);
-        }
+        root.querySelectorAll('[data-profile-avatar]').forEach((avatar) => {
+          avatar.setAttribute('src', e.target.result);
+        });
       };
       reader.readAsDataURL(file);
     }
 
     function uploadImage(file) {
-      let uploadlabel = document.getElementById("profile-upload-label")
-      uploadlabel.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i><span>Uploading...</span>';
-      uploadlabel.classList.add('loading');
+      uploadLabel.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i><span>Uploading...</span>';
+      uploadLabel.classList.add('loading');
       
       let formData = new FormData();
       formData.append("avatar", file);
-      formData.append('csrfmiddlewaretoken', App.Cookies.get('csrftoken'));
+      formData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
       fetch(uploadUrl, {method: "POST", body: formData, credentials: 'same-origin'}).then(
         function (response) {
           if (response.ok) {
             response.text().then(function (text) {
-              uploadlabel.innerHTML = '<i class="fa fa-check mr-1"></i><span>' + text + '</span>';
-              uploadlabel.className = 'btn btn-success btn-sm rounded-xl text-white font-bold uppercase tracking-wider text-xs';
+              uploadLabel.innerHTML = '<i class="fa fa-check mr-1"></i><span>' + text + '</span>';
+              uploadLabel.className = 'btn btn-success btn-sm rounded-xl text-white font-bold uppercase tracking-wider text-xs';
               setTimeout(() => {
-                uploadlabel.innerHTML = '<i class="fa fa-upload mr-1"></i>{% translate "Change Picture" %}';
-                uploadlabel.className = 'btn btn-outline btn-sm rounded-xl font-bold uppercase tracking-wider text-xs';
+                uploadLabel.innerHTML = '<i class="fa fa-upload mr-1"></i>{% translate "Change Picture" %}';
+                uploadLabel.className = 'btn btn-outline btn-sm rounded-xl font-bold uppercase tracking-wider text-xs';
               }, 3000);
             });
           } else {
             response.json().then(function (errorResponse) {
               console.error(errorResponse);
-              const errorText = errorResponse.errors;
-              uploadlabel.innerHTML = '<i class="fa fa-times mr-1"></i><span>Failed</span>';
-              uploadlabel.className = 'btn btn-error btn-sm rounded-xl text-white font-bold uppercase tracking-wider text-xs';
+              uploadLabel.innerHTML = '<i class="fa fa-times mr-1"></i><span>Failed</span>';
+              uploadLabel.className = 'btn btn-error btn-sm rounded-xl text-white font-bold uppercase tracking-wider text-xs';
               setTimeout(() => {
-                uploadlabel.innerHTML = '<i class="fa fa-upload mr-1"></i>{% translate "Change Picture" %}';
-                uploadlabel.className = 'btn btn-outline btn-sm rounded-xl font-bold uppercase tracking-wider text-xs';
+                uploadLabel.innerHTML = '<i class="fa fa-upload mr-1"></i>{% translate "Change Picture" %}';
+                uploadLabel.className = 'btn btn-outline btn-sm rounded-xl font-bold uppercase tracking-wider text-xs';
               }, 3000);
             });
           }
         }
       );
     }
-  });
+  })();
 </script>
+</div>
 {% endblock %}

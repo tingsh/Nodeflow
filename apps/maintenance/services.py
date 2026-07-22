@@ -1,7 +1,10 @@
 import logging
+
 from django.conf import settings
-from django.core.mail import send_mail
-from apps.maintenance.models import MaintenanceTicket, PreventiveSchedule
+
+from apps.events.models import EmailDelivery
+from apps.events.services import TrackedEmailDeliveryError, send_tracked_email
+from apps.maintenance.models import MaintenanceTicket
 
 logger = logging.getLogger("novena_hub")
 
@@ -14,7 +17,6 @@ def auto_create_ticket(alert, force=False):
     rule = alert.rule
     if not rule.create_maintenance_ticket and not force:
         return None
-
 
     # Map alert severity to ticket priority
     priority = MaintenanceTicket.PriorityChoices.MEDIUM
@@ -44,11 +46,9 @@ def auto_create_ticket(alert, force=False):
     if rule.maintenance_template:
         description += f"\n\nTemplate Instructions:\n{rule.maintenance_template.description}"
         for item in rule.maintenance_template.checklist:
-            checklist_state.append({
-                "task": item.get("task", ""),
-                "required": item.get("required", False),
-                "done": False
-            })
+            checklist_state.append(
+                {"task": item.get("task", ""), "required": item.get("required", False), "done": False}
+            )
 
     ticket = MaintenanceTicket.objects.create(
         team=alert.team,
@@ -78,7 +78,7 @@ def send_ticket_assignment_email(ticket):
         return
 
     subject = f"[Novena] Job Assigned: TKT-{ticket.id} - {ticket.title}"
-    
+
     checklist_str = ""
     if ticket.checklist_state:
         for idx, item in enumerate(ticket.checklist_state, 1):
@@ -96,20 +96,25 @@ def send_ticket_assignment_email(ticket):
         f"Priority: {ticket.get_priority_display()}\n\n"
         f"Description:\n{ticket.description}\n\n"
         f"Checklist Tasks:\n{checklist_str}\n"
-        f"Manage this ticket on the dashboard: {settings.PROJECT_METADATA['URL']}/a/{ticket.team.slug}/maintenance/tickets/{ticket.id}/\n\n"
+        "Manage this ticket on the dashboard: "
+        f"{settings.PROJECT_METADATA['URL']}/a/{ticket.team.slug}/maintenance/tickets/{ticket.id}/\n\n"
         f"Novena Operations Team"
     )
 
     try:
-        send_mail(
+        send_tracked_email(
+            team=ticket.team,
+            notification_type=EmailDelivery.NotificationType.MAINTENANCE_ASSIGNMENT,
             subject=subject,
-            message=body,
+            text_body=body,
             from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            fail_silently=False
+            recipients=[user.email],
+            maintenance_ticket=ticket,
+            user_by_email={user.email.lower(): user},
+            metadata={"ticket_id": ticket.id},
         )
         logger.info(f"Sent assignment email for TKT-{ticket.id} to {user.email}")
-    except Exception as e:
+    except TrackedEmailDeliveryError as e:
         logger.error(f"Failed to send email for TKT-{ticket.id}: {e}")
 
 
@@ -154,16 +159,21 @@ def process_incoming_whatsapp(sender_phone, text_body):
     updates Maintenance Tickets, and posts comments/checklists.
     """
     import re
-    from apps.users.models import CustomUser
-    from apps.maintenance.models import MaintenanceTicket, TicketComment
+
     from apps.alerts.tasks import send_whatsapp_message_task
+    from apps.maintenance.models import TicketComment
+    from apps.users.models import CustomUser
 
     clean_sender = "".join(filter(str.isdigit, sender_phone))
 
     user = None
     for u in CustomUser.objects.exclude(phone_number=""):
         clean_user_phone = "".join(filter(str.isdigit, u.phone_number))
-        if clean_user_phone == clean_sender or clean_user_phone.endswith(clean_sender) or clean_sender.endswith(clean_user_phone):
+        if (
+            clean_user_phone == clean_sender
+            or clean_user_phone.endswith(clean_sender)
+            or clean_sender.endswith(clean_user_phone)
+        ):
             user = u
             break
 
@@ -174,12 +184,9 @@ def process_incoming_whatsapp(sender_phone, text_body):
     command = text_body.upper().strip()
 
     # Get active/assigned tickets
-    active_tickets = MaintenanceTicket.objects.filter(
-        assigned_to=user
-    ).exclude(status__in=[
-        MaintenanceTicket.StatusChoices.RESOLVED,
-        MaintenanceTicket.StatusChoices.CLOSED
-    ])
+    active_tickets = MaintenanceTicket.objects.filter(assigned_to=user).exclude(
+        status__in=[MaintenanceTicket.StatusChoices.RESOLVED, MaintenanceTicket.StatusChoices.CLOSED]
+    )
 
     if command == "LIST":
         if not active_tickets.exists():
@@ -213,7 +220,8 @@ def process_incoming_whatsapp(sender_phone, text_body):
         elif active_tickets.count() > 1:
             send_whatsapp_message_task.delay(
                 sender_phone,
-                "You have multiple active tickets. Please prefix your message with the Ticket ID (e.g., '101 DONE 1' or 'TKT-101 belt checked') or type 'LIST'."
+                "You have multiple active tickets. Please prefix your message with the Ticket ID "
+                "(e.g., '101 DONE 1' or 'TKT-101 belt checked') or type 'LIST'.",
             )
             return
         else:
@@ -238,7 +246,7 @@ def process_incoming_whatsapp(sender_phone, text_body):
                 ticket=ticket,
                 author=user,
                 content=f"Marked task '{item['task']}' as completed via WhatsApp.",
-                is_system_generated=True
+                is_system_generated=True,
             )
 
             send_whatsapp_message_task.delay(
@@ -246,7 +254,8 @@ def process_incoming_whatsapp(sender_phone, text_body):
             )
         else:
             send_whatsapp_message_task.delay(
-                sender_phone, f"❌ Invalid task index {index + 1}. Ticket TKT-{ticket.id} has {len(checklist)} tasks."
+                sender_phone,
+                f"❌ Invalid task index {index + 1}. Ticket TKT-{ticket.id} has {len(checklist)} tasks.",
             )
         return
 
@@ -277,14 +286,15 @@ def process_incoming_whatsapp(sender_phone, text_body):
                 ticket=ticket,
                 author=user,
                 content=f"Changed status from '{old_status}' to '{ticket.get_status_display()}' via WhatsApp.",
-                is_system_generated=True
+                is_system_generated=True,
             )
             send_whatsapp_message_task.delay(
                 sender_phone, f"⚡ Changed status of TKT-{ticket.id} to '{ticket.get_status_display()}'."
             )
         else:
             send_whatsapp_message_task.delay(
-                sender_phone, f"❌ Unknown status value. Choose: Open, In Progress, Waiting, Resolved, Closed."
+                sender_phone,
+                "❌ Unknown status value. Choose: Open, In Progress, Waiting, Resolved, Closed.",
             )
         return
 
@@ -295,9 +305,7 @@ def process_incoming_whatsapp(sender_phone, text_body):
         author=user,
         content=action_text,
     )
-    send_whatsapp_message_task.delay(
-        sender_phone, f"💬 Added comment to TKT-{ticket.id}: \"{action_text[:30]}...\""
-    )
+    send_whatsapp_message_task.delay(sender_phone, f'💬 Added comment to TKT-{ticket.id}: "{action_text[:30]}..."')
 
 
 def create_pm_ticket(schedule, current_usage=None):
@@ -323,11 +331,9 @@ def create_pm_ticket(schedule, current_usage=None):
         description += f"\n\nTemplate Instructions:\n{schedule.template.description}"
         # Copy template checklist
         for item in schedule.template.checklist:
-            checklist_state.append({
-                "task": item.get("task", ""),
-                "required": item.get("required", False),
-                "done": False
-            })
+            checklist_state.append(
+                {"task": item.get("task", ""), "required": item.get("required", False), "done": False}
+            )
 
     ticket = MaintenanceTicket.objects.create(
         team=schedule.team,
@@ -352,9 +358,10 @@ def advance_schedule_due_date(schedule):
     Advances the next_due_at date of a schedule based on its interval.
     Handles Daily, Weekly, Monthly, Quarterly, and Yearly calculations.
     """
-    from django.utils import timezone
     from datetime import timedelta
+
     from dateutil.relativedelta import relativedelta
+    from django.utils import timezone
 
     now = timezone.now()
     base_date = schedule.next_due_at or now

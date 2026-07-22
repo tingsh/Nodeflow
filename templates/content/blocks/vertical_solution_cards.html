@@ -1,0 +1,38 @@
+{% load i18n %}
+<section class="bg-slate-50 py-24">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl">
+      {% if self.tagline %}
+        <p class="mb-3 text-xs font-bold uppercase tracking-widest text-sky-700">{{ self.tagline }}</p>
+      {% endif %}
+      <h2 class="text-3xl font-bold font-heading tracking-normal text-slate-950 sm:text-4xl">{{ self.title }}</h2>
+      {% if self.intro %}
+        <p class="mt-5 text-base leading-7 text-slate-600">{{ self.intro }}</p>
+      {% endif %}
+    </div>
+
+    <div class="mt-12 grid gap-6 lg:grid-cols-4">
+      {% for solution in self.solutions %}
+        <article {% if solution.anchor_id %}id="{{ solution.anchor_id }}"{% endif %} class="scroll-mt-24 flex flex-col rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div class="mb-5 flex items-center gap-3">
+            <span class="flex h-10 w-10 items-center justify-center rounded-md bg-slate-100 text-sky-700"><i class="fa {{ solution.icon }}"></i></span>
+            <span class="text-xs font-bold uppercase tracking-widest text-slate-500">{{ solution.vertical }}</span>
+          </div>
+          <h3 class="text-xl font-bold text-slate-950">{{ solution.title }}</h3>
+          <p class="mt-4 text-sm leading-6 text-slate-600">{{ solution.pain }}</p>
+          <p class="mt-4 text-sm font-semibold leading-6 text-slate-900">{{ solution.outcome }}</p>
+          {% if solution.features %}
+            <ul class="mt-5 space-y-2 text-sm text-slate-600">
+              {% for feature in solution.features %}
+                <li class="flex gap-2"><i class="fa fa-check mt-1 text-emerald-600"></i><span>{{ feature }}</span></li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+          {% if solution.cta_url %}
+            <a href="{{ solution.cta_url }}" class="mt-6 inline-flex text-sm font-bold text-sky-700 hover:text-sky-900">{{ solution.cta_text }} <i class="fa fa-arrow-right ml-2 mt-1 text-xs"></i></a>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>

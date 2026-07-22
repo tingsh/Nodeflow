@@ -20,14 +20,32 @@ class Team(SubscriptionModelBase, BaseModel):
     A Team, with members.
     """
 
+    class Status(models.TextChoices):
+        ACTIVE = "active", gettext("Active")
+        CLOSED = "closed", gettext("Closed")
+
     name = models.CharField(max_length=100)
     slug = models.SlugField(unique=True)
     members = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="teams", through="Membership")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE, db_default=Status.ACTIVE)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    closed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="closed_teams",
+    )
+    closed_reason = models.CharField(max_length=100, blank=True, default="", db_default="")
 
     # your team customizations go here.
 
     def __str__(self):
         return self.name
+
+    @property
+    def is_active(self) -> bool:
+        return self.status == self.Status.ACTIVE
 
     @property
     def email(self):

@@ -1,18 +1,19 @@
 {% load i18n %}
-<div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-32">
+<section class="bg-white py-20">
+  <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
     {% if self.title %}
-        <h2 class="text-4xl font-black text-center mb-16 font-heading tracking-tight">{{ self.title }}</h2>
+      <h2 class="mb-10 text-3xl font-bold font-heading tracking-normal text-slate-950">{{ self.title }}</h2>
     {% endif %}
-    <div class="space-y-4">
-        {% for faq in self.faqs %}
-            <div tabindex="0" class="collapse collapse-arrow border border-base-content/10 bg-base-100 rounded-2xl">
-                <div class="collapse-title text-lg font-bold">
-                    {{ faq.question }}
-                </div>
-                <div class="collapse-content">
-                    <p class="text-base-content/70 text-sm leading-relaxed">{{ faq.answer }}</p>
-                </div>
-            </div>
-        {% endfor %}
+    <div class="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
+      {% for faq in self.faqs %}
+        <details class="group p-6">
+          <summary class="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-bold text-slate-950">
+            {{ faq.question }}
+            <i class="fa fa-chevron-down text-sm text-slate-400 transition-transform group-open:rotate-180"></i>
+          </summary>
+          <p class="mt-4 text-sm leading-6 text-slate-600">{{ faq.answer }}</p>
+        </details>
+      {% endfor %}
     </div>
-</div>
+  </div>
+</section>

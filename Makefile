@@ -6,6 +6,13 @@ include custom.mk
 export MY_UID := 1000
 export MY_GID := 1000
 
+NOVENA_VENV ?= /home/shouheng/.venvs/novena
+NOVENA_PYTHON ?= $(NOVENA_VENV)/bin/python
+NOVENA_DJANGO_SETTINGS_MODULE ?= novena_hub.settings
+
+ensure-local-venv:
+	@[ -x "$(NOVENA_PYTHON)" ] || (echo "Missing executable WSL venv python at $(NOVENA_PYTHON). Run: source $(NOVENA_VENV)/bin/activate" >&2; exit 1)
+
 setup-env:
 	@[ ! -f ./.env ] && cp ./.env.example ./.env || echo ".env file already exists."
 
@@ -52,6 +59,18 @@ dbshell: ## Get a Database shell
 
 test: ## Run Django tests
 	@docker compose run --rm web python manage.py test ${ARGS}
+
+local-manage: ensure-local-venv ## Run a Django management command with the WSL virtualenv. E.g. `make local-manage ARGS='check'`
+	@DJANGO_SETTINGS_MODULE=$(NOVENA_DJANGO_SETTINGS_MODULE) $(NOVENA_PYTHON) manage.py ${ARGS}
+
+local-check: ensure-local-venv ## Run Django checks with the WSL virtualenv
+	@DJANGO_SETTINGS_MODULE=$(NOVENA_DJANGO_SETTINGS_MODULE) $(NOVENA_PYTHON) manage.py check
+
+local-test: ensure-local-venv ## Run Django tests with the WSL virtualenv. E.g. `make local-test ARGS='apps.devices.tests.test_onboarding --keepdb'`
+	@DJANGO_SETTINGS_MODULE=$(NOVENA_DJANGO_SETTINGS_MODULE) $(NOVENA_PYTHON) manage.py test ${ARGS}
+
+local-pytest: ensure-local-venv ## Run pytest with the WSL virtualenv. E.g. `make local-pytest ARGS='apps/devices/tests/test_infrastructure.py -q'`
+	@DJANGO_SETTINGS_MODULE=$(NOVENA_DJANGO_SETTINGS_MODULE) $(NOVENA_PYTHON) -m pytest ${ARGS}
 
 init: setup-env start-bg migrations migrate bootstrap_content  ## Quickly get up and running (start containers and bootstrap DB and front end)
 

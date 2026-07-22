@@ -7,7 +7,7 @@ Site: {{ site.name }}
 
 {% if is_resolved %}CURRENT VALUE{% else %}TRIGGER VALUE{% endif %}: {{ alert.trigger_value }}
 Condition: {{ rule.get_condition_display }} {{ rule.threshold }}
-Timestamp: {{ timestamp|date:"Y-m-d H:i:s" }}
+Timestamp: {{ timestamp_display }}
 
 View details and acknowledge here:
 {{ dashboard_url }}

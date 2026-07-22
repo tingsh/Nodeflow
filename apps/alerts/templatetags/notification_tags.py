@@ -13,8 +13,7 @@ def _has_unresolved_discoveries(gateway):
         return False
 
     registered_ports = {
-        str(port)
-        for port in gateway.devices.exclude(port__isnull=True).exclude(port="").values_list("port", flat=True)
+        str(port) for port in gateway.devices.exclude(port__isnull=True).exclude(port="").values_list("port", flat=True)
     }
     for discovered in discovered_devices:
         port = discovered.get("interface") or discovered.get("port")

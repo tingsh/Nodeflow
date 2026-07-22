@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 from django.conf import settings
 from django.db import models
@@ -12,11 +13,29 @@ from apps.teams.models import BaseTeamModel
 class Site(BaseTeamModel):
     """A physical location (factory, cold room, building, solar farm) belonging to a team."""
 
+    SOLUTION_PROFILE_CHOICES = (
+        ("general_iot", _("General IoT")),
+        ("cold_chain", _("Cold Chain Monitoring")),
+        ("factory_energy", _("Factory Energy Monitoring")),
+        ("facilities_hvac", _("Facilities / HVAC")),
+    )
+
     name = models.CharField(max_length=200)
     address = models.TextField(blank=True)
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     timezone = models.CharField(max_length=50, default="Asia/Singapore")
+    solution_profile = models.CharField(
+        max_length=30,
+        choices=SOLUTION_PROFILE_CHOICES,
+        default="general_iot",
+        help_text=_("UX preset for onboarding, dashboards, alerts, and reports."),
+    )
+    site_type = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text=_("Optional profile-specific site type, such as hotel, clinic, or warehouse."),
+    )
 
     def __str__(self):
         return self.name
@@ -154,6 +173,41 @@ class GatewayInventory(models.Model):
         return f"{self.serial_number} ({self.status})"
 
 
+class GatewayActivation(BaseTeamModel):
+    """Durable activation attempt for first-time operational MQTT credentials."""
+
+    STATUS_CHOICES = (
+        ("pending", _("Pending")),
+        ("delivered", _("Delivered")),
+        ("acknowledged", _("Acknowledged")),
+        ("expired", _("Expired")),
+        ("retried", _("Retried")),
+        ("failed", _("Failed")),
+    )
+    UNRESOLVED_STATUSES = ("pending", "delivered", "retried", "failed")
+
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="activations")
+    request_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    attempt_count = models.PositiveIntegerField(default=0)
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField()
+    encrypted_mqtt_password = models.TextField(blank=True)
+    last_error = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["gateway", "status"]),
+            models.Index(fields=["expires_at", "status"]),
+        ]
+
+    def __str__(self):
+        return f"Activation {self.request_id} -> {self.gateway.serial_number} ({self.status})"
+
+
 class DeviceTemplate(models.Model):
     """Pre-configured register maps for known equipment."""
 
@@ -200,8 +254,11 @@ class DeviceTemplate(models.Model):
     source_url = models.URLField(blank=True, max_length=500, help_text=_("URL where the register map was found"))
     ai_confidence = models.FloatField(null=True, blank=True, help_text=_("AI confidence score 0.0-1.0"))
     created_by_team = models.ForeignKey(
-        "teams.Team", null=True, blank=True, on_delete=models.SET_NULL,
-        help_text=_("Team that originally created this template")
+        "teams.Team",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        help_text=_("Team that originally created this template"),
     )
     usage_count = models.PositiveIntegerField(default=0, help_text=_("Number of devices using this template"))
     created_at = models.DateTimeField(auto_now_add=True, null=True)
@@ -387,6 +444,7 @@ def auto_generate_dashboard_on_template_match(sender, instance, **kwargs):
     if instance.template:
         try:
             from apps.dashboard.services import generate_default_dashboard
+
             generate_default_dashboard(instance)
         except Exception as e:
             logger = logging.getLogger("novena_hub")

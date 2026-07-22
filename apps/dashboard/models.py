@@ -5,8 +5,8 @@ from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
+from apps.devices.models import Device, Site
 from apps.teams.models import BaseTeamModel
-from apps.devices.models import Site, Device
 
 
 class SharedDashboard(BaseTeamModel):
@@ -96,4 +96,3 @@ class Widget(BaseTeamModel):
 
     def __str__(self):
         return f"{self.title} ({self.get_widget_type_display()})"
-

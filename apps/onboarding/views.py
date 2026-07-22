@@ -3,13 +3,22 @@ from django.shortcuts import get_object_or_404, redirect, render
 from apps.alerts.models import AlertRule
 from apps.devices.models import Device, DeviceTemplate, Gateway, Site
 from apps.devices.services import build_commissioning_context
+from apps.devices.solution_profiles import (
+    apply_solution_profile_presets,
+    get_profile,
+    get_site_profile,
+    profile_for_request,
+    rank_templates_for_profile,
+    recommended_alerts_for_device,
+)
 from apps.teams.decorators import require_permission
 
 ONBOARDING_STEPS = [
-    {"num": 1, "label": "Site"},
-    {"num": 2, "label": "Gateway"},
-    {"num": 3, "label": "Device"},
-    {"num": 4, "label": "Alert"},
+    {"num": 1, "label": "Profile"},
+    {"num": 2, "label": "Site"},
+    {"num": 3, "label": "Gateway"},
+    {"num": 4, "label": "Devices"},
+    {"num": 5, "label": "Review"},
 ]
 
 
@@ -21,26 +30,71 @@ def onboarding_start(request, team_slug):
 
 
 @require_permission("manage_devices")
+def step_profile(request, team_slug):
+    from apps.devices.solution_profiles import PROFILES
+
+    selected = request.session.get("solution_profile", "facilities_hvac")
+    if request.method == "POST":
+        selected = request.POST.get("solution_profile", "general_iot")
+        request.session["solution_profile"] = get_profile(selected).key
+        return redirect("web_team:onboarding:step_1_site", team_slug=team_slug)
+
+    context = {
+        "steps": ONBOARDING_STEPS,
+        "current_step": 1,
+        "profiles": PROFILES.values(),
+        "selected_profile": selected,
+    }
+    return render(request, "onboarding/step_profile.html", context)
+
+
+@require_permission("manage_devices")
 def step_1_site(request, team_slug):
+    if not request.session.get("solution_profile"):
+        request.session["solution_profile"] = "general_iot"
+
     site_id = request.session.get("onboarding_site_id")
     site = Site.objects.filter(id=site_id, team=request.team).first() if site_id else None
+    profile = profile_for_request(request)
 
     if request.method == "POST":
         name = request.POST.get("name")
         address = request.POST.get("address", "")
+        timezone = request.POST.get("timezone", "Asia/Singapore")
+        site_type = request.POST.get("site_type", "")
+        solution_profile = request.POST.get("solution_profile") or request.session.get(
+            "solution_profile", "general_iot"
+        )
         if name:
             if site:
                 site.name = name
                 site.address = address
+                site.timezone = timezone
+                site.solution_profile = get_profile(solution_profile).key
+                site.site_type = site_type
                 site.save()
             else:
-                site = Site.objects.create(team=request.team, name=name, address=address)
+                site = Site.objects.create(
+                    team=request.team,
+                    name=name,
+                    address=address,
+                    timezone=timezone,
+                    solution_profile=get_profile(solution_profile).key,
+                    site_type=site_type,
+                )
             request.session["onboarding_site_id"] = site.id
+            request.session["solution_profile"] = site.solution_profile
             if request.session.get("setup_mode"):
                 return redirect("web_team:onboarding:step_connectivity", team_slug=team_slug)
             return redirect("web_team:onboarding:step_2_gateway", team_slug=team_slug)
 
-    context = {"steps": ONBOARDING_STEPS, "current_step": 1, "site": site}
+    context = {
+        "steps": ONBOARDING_STEPS,
+        "current_step": 2,
+        "site": site,
+        "profile": get_site_profile(site) if site else profile,
+        "site_types": profile.site_types,
+    }
     return render(request, "onboarding/step_1_site.html", context)
 
 
@@ -77,9 +131,10 @@ def step_2_gateway(request, team_slug):
         if error:
             context = {
                 "steps": ONBOARDING_STEPS,
-                "current_step": 2,
+                "current_step": 3,
                 "site": site,
                 "gateway": gateway,
+                "profile": get_site_profile(site),
                 "error": error,
             }
             return render(request, "onboarding/step_2_gateway.html", context)
@@ -87,7 +142,13 @@ def step_2_gateway(request, team_slug):
         request.session["onboarding_gateway_id"] = gateway.id
         return redirect("web_team:onboarding:step_2b_wait", team_slug=team_slug)
 
-    context = {"steps": ONBOARDING_STEPS, "current_step": 2, "site": site, "gateway": gateway}
+    context = {
+        "steps": ONBOARDING_STEPS,
+        "current_step": 3,
+        "site": site,
+        "gateway": gateway,
+        "profile": get_site_profile(site),
+    }
     return render(request, "onboarding/step_2_gateway.html", context)
 
 
@@ -105,8 +166,9 @@ def step_2b_wait(request, team_slug):
 
     context = {
         "steps": ONBOARDING_STEPS,
-        "current_step": 2,
+        "current_step": 3,
         "gateway": gateway,
+        "profile": get_site_profile(gateway.site),
         "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
     }
     return render(request, "onboarding/step_2b_wait.html", context)
@@ -120,11 +182,15 @@ def gateway_status_poll(request, team_slug):
         return render(request, "onboarding/partials/gateway_status_badge.html", {"status": "unknown"})
     gateway = Gateway.objects.filter(id=gateway_id, team=request.team).first()
     status = gateway.status if gateway else "unknown"
-    return render(request, "onboarding/partials/gateway_status_badge.html", {
-        "status": status,
-        "gateway": gateway,
-        "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
-    })
+    return render(
+        request,
+        "onboarding/partials/gateway_status_badge.html",
+        {
+            "status": status,
+            "gateway": gateway,
+            "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
+        },
+    )
 
 
 @require_permission("manage_devices")
@@ -140,7 +206,8 @@ def step_3_discover(request, team_slug):
 
     discovery_data = gateway.discovery_data or {}
     discovered_devices = discovery_data.get("devices", [])
-    templates = DeviceTemplate.objects.all()
+    profile = get_site_profile(gateway.site)
+    templates = rank_templates_for_profile(DeviceTemplate.objects.all(), profile)
 
     if request.method != "POST" and gateway.status == "online":
         try:
@@ -213,10 +280,11 @@ def step_3_discover(request, team_slug):
 
     context = {
         "steps": ONBOARDING_STEPS,
-        "current_step": 3,
+        "current_step": 4,
         "gateway": gateway,
         "discovered_devices": discovered_devices,
         "templates": templates,
+        "profile": profile,
         "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
     }
     return render(request, "onboarding/step_3_discover.html", context)
@@ -230,13 +298,19 @@ def discovery_poll(request, team_slug):
         return render(request, "onboarding/partials/discovery_devices.html", {"discovered_devices": []})
     gateway = Gateway.objects.filter(id=gateway_id, team=request.team).first()
     discovered_devices = (gateway.discovery_data or {}).get("devices", []) if gateway else []
-    templates = DeviceTemplate.objects.all()
-    return render(request, "onboarding/partials/discovery_devices.html", {
-        "discovered_devices": discovered_devices,
-        "templates": templates,
-        "gateway": gateway,
-        "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
-    })
+    profile = get_site_profile(gateway.site) if gateway else profile_for_request(request)
+    templates = rank_templates_for_profile(DeviceTemplate.objects.all(), profile)
+    return render(
+        request,
+        "onboarding/partials/discovery_devices.html",
+        {
+            "discovered_devices": discovered_devices,
+            "templates": templates,
+            "gateway": gateway,
+            "profile": profile,
+            "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
+        },
+    )
 
 
 @require_permission("manage_devices")
@@ -250,7 +324,8 @@ def step_3_device(request, team_slug):
     device_id = request.session.get("onboarding_device_id")
     device = Device.objects.filter(id=device_id, team=request.team).first() if device_id else None
 
-    templates = DeviceTemplate.objects.all()
+    profile = get_site_profile(gateway.site)
+    templates = rank_templates_for_profile(DeviceTemplate.objects.all(), profile)
 
     if request.method == "POST":
         name = request.POST.get("name")
@@ -279,7 +354,13 @@ def step_3_device(request, team_slug):
             request.session["onboarding_device_id"] = device.id
             return redirect("web_team:onboarding:step_4_alert", team_slug=team_slug)
 
-    context = {"steps": ONBOARDING_STEPS, "current_step": 3, "templates": templates, "device": device}
+    context = {
+        "steps": ONBOARDING_STEPS,
+        "current_step": 4,
+        "templates": templates,
+        "device": device,
+        "profile": profile,
+    }
     return render(request, "onboarding/step_3_device.html", context)
 
 
@@ -290,10 +371,28 @@ def step_4_alert(request, team_slug):
         return redirect("web_team:onboarding:step_3_device", team_slug=team_slug)
     device = get_object_or_404(Device, id=device_id, team=request.team)
 
-    # Alert rules are often multiple, but for the wizard we usually just handle one.
+    profile = get_site_profile(device.site)
+    recommended_alerts = [
+        {
+            "name": preset.name,
+            "key": preset.key,
+            "condition": preset.condition,
+            "threshold": preset.threshold,
+            "severity": preset.severity,
+            "duration_seconds": preset.duration_seconds,
+            "create_maintenance_ticket": preset.create_maintenance_ticket,
+        }
+        for preset in recommended_alerts_for_device(device, profile.key)
+    ]
+
+    # Alert rules are often multiple, but the wizard still supports one manual fallback.
     existing_rule = AlertRule.objects.filter(device=device).first()
 
     if request.method == "POST":
+        if request.POST.get("accept_profile_presets", "1") == "1":
+            apply_solution_profile_presets(device.site, request.user)
+            return redirect("web_team:onboarding:complete", team_slug=team_slug)
+
         key = request.POST.get("key", "active_power")
         threshold = request.POST.get("threshold")
         if threshold:
@@ -302,8 +401,10 @@ def step_4_alert(request, team_slug):
                 existing_rule.threshold = float(threshold)
                 existing_rule.name = f"{device.name} High {key.replace('_', ' ').title()}"
                 existing_rule.save()
+                if existing_rule.notify_email and not existing_rule.recipients.exists():
+                    existing_rule.recipients.add(request.user)
             else:
-                AlertRule.objects.create(
+                rule = AlertRule.objects.create(
                     team=request.team,
                     device=device,
                     name=f"{device.name} High {key.replace('_', ' ').title()}",
@@ -312,13 +413,16 @@ def step_4_alert(request, team_slug):
                     threshold=float(threshold),
                     severity="critical",
                 )
+                rule.recipients.add(request.user)
             return redirect("web_team:onboarding:complete", team_slug=team_slug)
 
     context = {
         "steps": ONBOARDING_STEPS,
-        "current_step": 4,
+        "current_step": 5,
         "device": device,
         "rule": existing_rule,
+        "profile": profile,
+        "recommended_alerts": recommended_alerts,
         "commissioning": build_commissioning_context(request.team, gateway=device.gateway, session=request.session),
     }
     return render(request, "onboarding/step_4_alert.html", context)
@@ -346,6 +450,7 @@ def complete(request, team_slug):
         "onboarding_device_id",
         "setup_mode",
         "connectivity_type",
+        "solution_profile",
     ]:
         if key in request.session:
             del request.session[key]
@@ -371,9 +476,12 @@ def setup_step_site(request, team_slug):
     if request.method == "POST":
         site_id = request.POST.get("site_id")
         if site_id == "new":
-            return redirect("web_team:onboarding:step_1_site", team_slug=team_slug)
+            return redirect("web_team:onboarding:step_profile", team_slug=team_slug)
         elif site_id:
             request.session["onboarding_site_id"] = int(site_id)
+            site = Site.objects.filter(id=site_id, team=request.team).first()
+            if site:
+                request.session["solution_profile"] = site.solution_profile
             return redirect("web_team:onboarding:step_connectivity", team_slug=team_slug)
 
     context = {"steps": ONBOARDING_STEPS, "current_step": 1, "sites": sites}

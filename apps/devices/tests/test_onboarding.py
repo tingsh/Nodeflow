@@ -1,9 +1,14 @@
-from django.test import TestCase, Client
+from unittest.mock import patch
+
+from django.test import Client, TestCase
 from django.urls import reverse
-from apps.teams.models import Team, Membership
+
+from apps.devices.models import Device, DeviceTemplate, Gateway, Site
+from apps.devices.solution_profiles import apply_solution_profile_presets, rank_templates_for_profile
+from apps.teams.models import Membership, Team
 from apps.teams.roles import ROLE_ADMIN
 from apps.users.models import CustomUser
-from apps.devices.models import Device, DeviceTemplate, Gateway, Site
+
 
 class OnboardingConnectionTest(TestCase):
     def setUp(self):
@@ -21,39 +26,48 @@ class OnboardingConnectionTest(TestCase):
             category="energy",
             register_map={
                 "voltage": {"address": 3028, "type": "float32", "functionCode": 3, "unit": "V"},
-                "active_power": {"address": 3054, "type": "float32", "functionCode": 3, "unit": "W", "writable": True}
-            }
+                "active_power": {"address": 3054, "type": "float32", "functionCode": 3, "unit": "W", "writable": True},
+            },
         )
         self.client = Client()
         self.client.force_login(self.user)
 
+    def _victim_infrastructure(self):
+        victim_team = Team.objects.create(name="Victim Team", slug="victim-team")
+        victim_site = Site.objects.create(team=victim_team, name="Victim Site")
+        victim_gateway = Gateway.objects.create(
+            team=victim_team,
+            site=victim_site,
+            name="Victim GW",
+            serial_number="SN-VICTIM",
+            access_token="victim-token",
+        )
+        return victim_team, victim_site, victim_gateway
+
     def test_htmx_device_create_post_success(self):
         url = reverse("web_team:devices:htmx_device_create", args=[self.team.slug])
         url = f"{url}?site_id={self.site.id}&gateway_id={self.gateway.id}&port=1"
-        
-        response = self.client.post(url, {
-            "name": "New Test Device",
-            "template_id": self.template.id
-        })
-        
+
+        response = self.client.post(url, {"name": "New Test Device", "template_id": self.template.id})
+
         # Check HTTP response code is 200 OK (replaces legacy 204)
         self.assertEqual(response.status_code, 200)
-        
+
         # Check HX-Trigger header exists
         self.assertEqual(response.headers.get("HX-Trigger"), "infrastructureChanged")
-        
+
         # Check that success view content is rendered
         self.assertContains(response, "Device Registered!")
         self.assertContains(response, "New Test Device")
         self.assertContains(response, "Live Connection Test")
-        
+
         # Check that first readable register is identified and details shown
         self.assertContains(response, "voltage")
         self.assertContains(response, "(Address: 3028, FC: 3)")
-        
+
         # Check that writable active_power is NOT chosen as test_register
         self.assertNotContains(response, "active_power")
-        
+
         # Check device was created in DB
         device = Device.objects.get(name="New Test Device")
         self.assertEqual(device.gateway, self.gateway)
@@ -68,19 +82,312 @@ class OnboardingConnectionTest(TestCase):
             model_number="VLT",
             device_type="vfd",
             protocol="modbus_rtu",
-            register_map={
-                "speed_setpoint": {"address": 10, "type": "uint16", "functionCode": 6, "writable": True}
-            }
+            register_map={"speed_setpoint": {"address": 10, "type": "uint16", "functionCode": 6, "writable": True}},
         )
-        
+
         url = reverse("web_team:devices:htmx_device_create", args=[self.team.slug])
         url = f"{url}?site_id={self.site.id}&gateway_id={self.gateway.id}&port=2"
-        
-        response = self.client.post(url, {
-            "name": "Write Only Test Device",
-            "template_id": write_only_template.id
-        })
-        
+
+        response = self.client.post(url, {"name": "Write Only Test Device", "template_id": write_only_template.id})
+
         self.assertEqual(response.status_code, 200)
         # Renders success page cleanly, saying no readable registers
         self.assertContains(response, "No readable registers found in this template to test")
+
+    def test_htmx_device_create_rejects_cross_tenant_gateway_and_site(self):
+        _, victim_site, victim_gateway = self._victim_infrastructure()
+        url = reverse("web_team:devices:htmx_device_create", args=[self.team.slug])
+        url = f"{url}?site_id={victim_site.id}&gateway_id={victim_gateway.id}&port=9"
+
+        with patch("apps.devices.views._push_gateway_config_after_commit") as push_config:
+            response = self.client.post(url, {"name": "Forged Device", "template_id": self.template.id})
+
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Device.objects.filter(name="Forged Device").exists())
+        push_config.assert_not_called()
+
+    def test_htmx_device_create_resolve_cannot_delete_victim_device(self):
+        _, victim_site, victim_gateway = self._victim_infrastructure()
+        victim_device = Device.objects.create(
+            team=victim_gateway.team,
+            site=victim_site,
+            gateway=victim_gateway,
+            name="Victim Meter",
+            template=self.template,
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            port="9",
+        )
+        url = reverse("web_team:devices:htmx_device_create", args=[self.team.slug])
+        url = f"{url}?site_id={victim_site.id}&gateway_id={victim_gateway.id}&port=9&resolve=true"
+
+        with patch("apps.devices.views._push_gateway_config_after_commit") as push_config:
+            response = self.client.post(url, {"name": "Replacement", "template_id": self.template.id})
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Device.objects.filter(pk=victim_device.pk).exists())
+        self.assertFalse(Device.objects.filter(name="Replacement").exists())
+        push_config.assert_not_called()
+
+    def test_htmx_device_create_rejects_same_team_gateway_site_mismatch(self):
+        other_site = Site.objects.create(team=self.team, name="Other Site")
+        url = reverse("web_team:devices:htmx_device_create", args=[self.team.slug])
+        url = f"{url}?site_id={other_site.id}&gateway_id={self.gateway.id}&port=3"
+
+        response = self.client.post(url, {"name": "Mismatched Device", "template_id": self.template.id})
+
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Device.objects.filter(name="Mismatched Device").exists())
+
+    def test_htmx_device_create_rejects_other_team_private_template(self):
+        victim_team, _, _ = self._victim_infrastructure()
+        private_template = DeviceTemplate.objects.create(
+            name="Victim Private Template",
+            manufacturer="PrivateCo",
+            model_number="P1",
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            register_map={"voltage": {"address": 1, "functionCode": 3}},
+            created_by_team=victim_team,
+        )
+        url = reverse("web_team:devices:htmx_device_create", args=[self.team.slug])
+        url = f"{url}?site_id={self.site.id}&gateway_id={self.gateway.id}&port=4"
+
+        with patch("apps.devices.views._push_gateway_config_after_commit") as push_config:
+            response = self.client.post(url, {"name": "Private Attack", "template_id": private_template.id})
+
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Device.objects.filter(name="Private Attack").exists())
+        push_config.assert_not_called()
+
+    def test_htmx_device_create_resolve_replaces_same_team_device(self):
+        old_device = Device.objects.create(
+            team=self.team,
+            site=self.site,
+            gateway=self.gateway,
+            name="Old Device",
+            template=self.template,
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            port="5",
+        )
+        url = reverse("web_team:devices:htmx_device_create", args=[self.team.slug])
+        url = f"{url}?site_id={self.site.id}&gateway_id={self.gateway.id}&port=5&resolve=true"
+
+        response = self.client.post(url, {"name": "New Device", "template_id": self.template.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Device.objects.filter(pk=old_device.pk).exists())
+        self.assertEqual(Device.objects.filter(team=self.team, gateway=self.gateway, port="5").count(), 1)
+        self.assertTrue(
+            Device.objects.filter(team=self.team, gateway=self.gateway, port="5", name="New Device").exists()
+        )
+
+    def test_template_search_hides_other_team_private_templates(self):
+        victim_team, _, _ = self._victim_infrastructure()
+        current_private = DeviceTemplate.objects.create(
+            name="Current Private Meter",
+            manufacturer="PrivateCo",
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            register_map={"voltage": {"address": 1}},
+            created_by_team=self.team,
+        )
+        victim_private = DeviceTemplate.objects.create(
+            name="Victim Private Meter",
+            manufacturer="PrivateCo",
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            register_map={"voltage": {"address": 1}},
+            created_by_team=victim_team,
+        )
+        url = reverse("web_team:devices:template_library_search", args=[self.team.slug])
+
+        response = self.client.get(f"{url}?q=Private")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, current_private.name)
+        self.assertNotContains(response, victim_private.name)
+
+    def test_template_library_hides_other_team_private_templates(self):
+        victim_team, _, _ = self._victim_infrastructure()
+        current_private = DeviceTemplate.objects.create(
+            name="Current Library Template",
+            manufacturer="LibraryCo",
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            register_map={"voltage": {"address": 1}},
+            created_by_team=self.team,
+        )
+        victim_private = DeviceTemplate.objects.create(
+            name="Victim Library Template",
+            manufacturer="LibraryCo",
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            register_map={"voltage": {"address": 1}},
+            created_by_team=victim_team,
+        )
+        url = reverse("web_team:devices:template_library", args=[self.team.slug])
+
+        response = self.client.get(f"{url}?q=Library")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, current_private.name)
+        self.assertNotContains(response, victim_private.name)
+
+    def test_device_create_form_rejects_cross_team_relationships(self):
+        _, victim_site, victim_gateway = self._victim_infrastructure()
+        url = reverse("web_team:devices:device_create", args=[self.team.slug])
+
+        response = self.client.post(
+            url,
+            {
+                "gateway": victim_gateway.id,
+                "site": victim_site.id,
+                "template": self.template.id,
+                "name": "Forged Form Device",
+                "device_type": "power_meter",
+                "protocol": "modbus_tcp",
+                "energy_category": "none",
+                "connection_config": "{}",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Device.objects.filter(name="Forged Form Device").exists())
+
+    def test_device_create_form_rejects_other_team_private_template(self):
+        victim_team, _, _ = self._victim_infrastructure()
+        private_template = DeviceTemplate.objects.create(
+            name="Victim Form Template",
+            manufacturer="PrivateCo",
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            register_map={"voltage": {"address": 1}},
+            created_by_team=victim_team,
+        )
+        url = reverse("web_team:devices:device_create", args=[self.team.slug])
+
+        response = self.client.post(
+            url,
+            {
+                "gateway": self.gateway.id,
+                "site": self.site.id,
+                "template": private_template.id,
+                "name": "Private Form Attack",
+                "device_type": "power_meter",
+                "protocol": "modbus_tcp",
+                "energy_category": "none",
+                "connection_config": "{}",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Device.objects.filter(name="Private Form Attack").exists())
+
+    def test_gateway_update_form_rejects_other_team_site(self):
+        _, victim_site, _ = self._victim_infrastructure()
+        url = reverse("web_team:devices:gateway_edit", args=[self.team.slug, self.gateway.pk])
+
+        response = self.client.post(
+            url,
+            {
+                "site": victim_site.id,
+                "name": self.gateway.name,
+                "serial_number": self.gateway.serial_number,
+                "status": self.gateway.status,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.gateway.refresh_from_db()
+        self.assertEqual(self.gateway.site, self.site)
+
+
+class SolutionProfileOnboardingTest(TestCase):
+    def setUp(self):
+        self.team = Team.objects.create(name="Profile Team", slug="profile-team")
+        self.user = CustomUser.objects.create(email="profile@example.com", username="profileuser")
+        Membership.objects.create(team=self.team, user=self.user, role=ROLE_ADMIN)
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def test_profile_selection_persists_to_created_site(self):
+        profile_url = reverse("web_team:onboarding:step_profile", args=[self.team.slug])
+        site_url = reverse("web_team:onboarding:step_1_site", args=[self.team.slug])
+
+        response = self.client.post(profile_url, {"solution_profile": "facilities_hvac"})
+        self.assertRedirects(response, site_url)
+
+        response = self.client.post(
+            site_url,
+            {
+                "name": "Boutique Hotel",
+                "address": "Orchard",
+                "timezone": "Asia/Singapore",
+                "site_type": "small_hotel",
+                "solution_profile": "facilities_hvac",
+            },
+        )
+
+        site = Site.objects.get(team=self.team, name="Boutique Hotel")
+        self.assertEqual(site.solution_profile, "facilities_hvac")
+        self.assertEqual(site.site_type, "small_hotel")
+        self.assertRedirects(response, reverse("web_team:onboarding:step_2_gateway", args=[self.team.slug]))
+
+    def test_template_ranking_prioritizes_selected_profile(self):
+        hvac = DeviceTemplate.objects.create(
+            name="Chiller Monitor",
+            device_type="chiller",
+            protocol="bacnet",
+            category="factory",
+            register_map={"temperature": {"address": 1}, "run_hours": {"address": 2}},
+            is_verified=True,
+        )
+        generic = DeviceTemplate.objects.create(
+            name="Generic PLC",
+            device_type="plc",
+            protocol="modbus_tcp",
+            category="factory",
+            register_map={"production_count": {"address": 1}},
+            is_verified=True,
+        )
+
+        ranked = rank_templates_for_profile(DeviceTemplate.objects.all(), "facilities_hvac")
+
+        self.assertEqual(ranked[0], hvac)
+        self.assertIn(generic, ranked)
+
+    def test_solution_profile_presets_are_idempotent(self):
+        site = Site.objects.create(
+            team=self.team,
+            name="Cold Room",
+            solution_profile="cold_chain",
+        )
+        template = DeviceTemplate.objects.create(
+            name="Cold Room Sensor",
+            device_type="temp_sensor",
+            protocol="modbus_rtu",
+            category="cold_chain",
+            register_map={
+                "temperature": {"address": 1},
+                "door_open": {"address": 2},
+                "compressor_status": {"address": 3},
+            },
+        )
+        Device.objects.create(
+            team=self.team,
+            site=site,
+            name="Room Sensor",
+            template=template,
+            device_type="temp_sensor",
+            protocol="modbus_rtu",
+        )
+
+        first = apply_solution_profile_presets(site, self.user)
+        second = apply_solution_profile_presets(site, self.user)
+
+        self.assertEqual(first["alerts"], 3)
+        self.assertGreaterEqual(first["automations"], 1)
+        self.assertEqual(second["alerts"], 0)
+        self.assertEqual(second["automations"], 0)

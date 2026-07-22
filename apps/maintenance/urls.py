@@ -11,7 +11,11 @@ urlpatterns = [
     path("tickets/<int:pk>/", views.TicketDetailView.as_view(), name="ticket_detail"),
     path("tickets/<int:pk>/edit/", views.TicketUpdateView.as_view(), name="ticket_edit"),
     path("tickets/<int:pk>/status/", views.update_ticket_status, name="ticket_status_update"),
-    path("tickets/<int:pk>/checklist/<int:item_index>/toggle/", views.toggle_checklist_item, name="ticket_checklist_toggle"),
+    path(
+        "tickets/<int:pk>/checklist/<int:item_index>/toggle/",
+        views.toggle_checklist_item,
+        name="ticket_checklist_toggle",
+    ),
     path("tickets/<int:pk>/comment/", views.add_ticket_comment, name="ticket_comment"),
     path("tickets/<int:pk>/share/", views.generate_shared_link, name="generate_shared_link"),
     path("tickets/<int:pk>/share/<int:link_pk>/revoke/", views.revoke_shared_link, name="revoke_shared_link"),
@@ -24,4 +28,3 @@ urlpatterns = [
     path("schedules/<int:pk>/edit/", views.ScheduleUpdateView.as_view(), name="schedule_edit"),
     path("schedules/<int:pk>/trigger/", views.trigger_preventive_schedule, name="schedule_trigger"),
 ]
-

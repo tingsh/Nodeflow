@@ -1,15 +1,16 @@
 from unittest.mock import patch
 
 from django.contrib.auth.hashers import check_password
-from django.test import override_settings
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
+from apps.devices.activation import encrypt_activation_secret
 from apps.devices.config_generator import generate_connector_config
-from apps.devices.models import Device, DeviceTemplate, Gateway, GatewayInventory, Site
+from apps.devices.models import Device, DeviceTemplate, Gateway, GatewayActivation, GatewayInventory, Site
 from apps.devices.services import GatewayClaimError, claim_gateway_for_team, compute_claim_code
 from apps.teams.models import Team
 
 
+@override_settings(GATEWAY_ACTIVATION_ENCRYPTION_KEY="MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 class GatewayClaimWorkflowTest(TestCase):
     def setUp(self):
         self.team = Team.objects.create(name="Acme", slug="acme")
@@ -19,8 +20,9 @@ class GatewayClaimWorkflowTest(TestCase):
         self.claim_code = compute_claim_code(self.serial)
         self.inventory = GatewayInventory.objects.create(serial_number=self.serial)
 
+    @patch("apps.telemetry.mqtt_publisher.publish_gateway_activation")
     @patch("apps.devices.mqtt_provisioning.provision_gateway_mqtt")
-    def test_valid_inventory_claim_creates_gateway_and_marks_inventory_claimed(self, mock_provision):
+    def test_valid_inventory_claim_creates_gateway_and_marks_inventory_claimed(self, mock_provision, mock_publish):
         gateway = claim_gateway_for_team(self.team, self.site, "Main Gateway", self.serial, self.claim_code)
 
         self.assertEqual(gateway.team, self.team)
@@ -31,6 +33,10 @@ class GatewayClaimWorkflowTest(TestCase):
         self.assertTrue(check_password(mock_provision.call_args.args[1], gateway.mqtt_password))
         self.assertEqual(gateway.lifecycle_status, "claimed")
         self.assertEqual(gateway.mqtt_provisioning_status, "success")
+        activation = GatewayActivation.objects.get(gateway=gateway)
+        self.assertEqual(activation.status, "pending")
+        self.assertNotIn(mock_provision.call_args.args[1], activation.encrypted_mqtt_password)
+        mock_publish.assert_not_called()
 
         self.inventory.refresh_from_db()
         self.assertEqual(self.inventory.status, "claimed")
@@ -58,8 +64,9 @@ class GatewayClaimWorkflowTest(TestCase):
         with self.assertRaises(GatewayClaimError):
             claim_gateway_for_team(self.team, self.site, "Unknown Gateway", serial, compute_claim_code(serial))
 
+    @patch("apps.telemetry.mqtt_publisher.publish_gateway_activation")
     @patch("apps.devices.mqtt_provisioning.provision_gateway_mqtt")
-    def test_claimed_gateway_cannot_move_to_another_team(self, mock_provision):
+    def test_claimed_gateway_cannot_move_to_another_team(self, mock_provision, mock_publish):
         gateway = claim_gateway_for_team(self.team, self.site, "Main Gateway", self.serial, self.claim_code)
         other_site = Site.objects.create(team=self.other_team, name="Other Site")
 
@@ -68,6 +75,165 @@ class GatewayClaimWorkflowTest(TestCase):
 
         gateway.refresh_from_db()
         self.assertEqual(gateway.team, self.team)
+
+    @patch("apps.telemetry.mqtt_publisher.publish_gateway_activation")
+    @patch("apps.devices.mqtt_provisioning.provision_gateway_mqtt")
+    def test_bootstrap_hello_retries_pending_activation(self, mock_provision, mock_publish):
+        from apps.telemetry.management.commands.mqtt_consumer import Command
+
+        gateway = claim_gateway_for_team(self.team, self.site, "Main Gateway", self.serial, self.claim_code)
+        activation = gateway.activations.get()
+
+        Command()._handle_bootstrap_hello({"serial_number": self.serial})
+
+        activation.refresh_from_db()
+        gateway.refresh_from_db()
+        self.assertEqual(activation.status, "retried")
+        self.assertEqual(activation.attempt_count, 1)
+        self.assertIsNotNone(activation.delivered_at)
+        self.assertEqual(gateway.lifecycle_status, "activating")
+        mock_publish.assert_called_once()
+
+    def test_activation_acknowledgement_clears_secret_and_is_idempotent(self):
+        from django.utils import timezone
+
+        from apps.telemetry.management.commands.mqtt_consumer import Command
+
+        gateway = Gateway.objects.create(
+            team=self.team,
+            site=self.site,
+            name="Ack Gateway",
+            serial_number="NF-ACK-001",
+            access_token="ack-token",
+            mqtt_username="NF-ACK-001",
+            lifecycle_status="activating",
+        )
+        activation = GatewayActivation.objects.create(
+            team=self.team,
+            gateway=gateway,
+            status="delivered",
+            expires_at=timezone.now() + timezone.timedelta(hours=1),
+            encrypted_mqtt_password=encrypt_activation_secret("secret-password"),
+        )
+
+        payload = {
+            "serial_number": gateway.serial_number,
+            "attributes": {
+                "credential_update_status": "success",
+                "credential_update_action": "activate",
+                "credential_update_request_id": str(activation.request_id),
+            },
+        }
+        consumer = Command()
+        consumer._handle_attributes(payload)
+        consumer._handle_attributes(payload)
+
+        activation.refresh_from_db()
+        gateway.refresh_from_db()
+        self.assertEqual(activation.status, "acknowledged")
+        self.assertEqual(activation.encrypted_mqtt_password, "")
+        self.assertEqual(gateway.credential_rotation_status, "success")
+        self.assertEqual(gateway.lifecycle_status, "online")
+
+    def test_stale_activation_ack_does_not_acknowledge_current_activation(self):
+        from uuid import uuid4
+
+        from django.utils import timezone
+
+        from apps.telemetry.management.commands.mqtt_consumer import Command
+
+        gateway = Gateway.objects.create(
+            team=self.team,
+            site=self.site,
+            name="Stale Ack Gateway",
+            serial_number="NF-STALE-ACK",
+            access_token="stale-ack-token",
+            mqtt_username="NF-STALE-ACK",
+            lifecycle_status="activating",
+        )
+        activation = GatewayActivation.objects.create(
+            team=self.team,
+            gateway=gateway,
+            status="delivered",
+            expires_at=timezone.now() + timezone.timedelta(hours=1),
+            encrypted_mqtt_password=encrypt_activation_secret("secret-password"),
+        )
+
+        Command()._handle_attributes(
+            {
+                "serial_number": gateway.serial_number,
+                "attributes": {
+                    "credential_update_status": "success",
+                    "credential_update_action": "activate",
+                    "credential_update_request_id": str(uuid4()),
+                },
+            }
+        )
+
+        activation.refresh_from_db()
+        self.assertEqual(activation.status, "delivered")
+        self.assertNotEqual(activation.encrypted_mqtt_password, "")
+
+    def test_expiry_task_clears_unacknowledged_activation_secret(self):
+        from django.utils import timezone
+
+        from apps.devices.tasks import expire_and_retry_gateway_activations
+
+        gateway = Gateway.objects.create(
+            team=self.team,
+            site=self.site,
+            name="Expired Gateway",
+            serial_number="NF-EXPIRED-001",
+            access_token="expired-token",
+            mqtt_username="NF-EXPIRED-001",
+        )
+        activation = GatewayActivation.objects.create(
+            team=self.team,
+            gateway=gateway,
+            status="pending",
+            expires_at=timezone.now() - timezone.timedelta(minutes=1),
+            encrypted_mqtt_password=encrypt_activation_secret("expired-password"),
+        )
+
+        result = expire_and_retry_gateway_activations()
+
+        activation.refresh_from_db()
+        self.assertEqual(result["expired"], 1)
+        self.assertEqual(activation.status, "expired")
+        self.assertEqual(activation.encrypted_mqtt_password, "")
+
+
+class GatewayMqttProvisioningAclTest(TestCase):
+    def setUp(self):
+        self.team = Team.objects.create(name="ACL Team", slug="acl-team")
+        self.site = Site.objects.create(team=self.team, name="Factory")
+        self.gateway = Gateway.objects.create(
+            team=self.team,
+            site=self.site,
+            name="ACL Gateway",
+            serial_number="NF-ACL-001",
+            access_token="acl-token",
+        )
+
+    @patch("apps.devices.mqtt_provisioning._publish_dynsec_command")
+    def test_operational_gateway_role_uses_only_serial_scoped_publish_acls(self, mock_publish):
+        from apps.devices.mqtt_provisioning import provision_gateway_mqtt
+
+        provision_gateway_mqtt(self.gateway, "operational-secret")
+
+        commands = [call.args[0] for call in mock_publish.call_args_list]
+        role_command = next(command for command in commands if command.get("roleName") == "gw-NF-ACL-001")
+        send_topics = {acl["topic"] for acl in role_command["acls"] if acl["acltype"] == "publishClientSend"}
+        self.assertEqual(
+            send_topics,
+            {
+                "v1/gateway/NF-ACL-001/telemetry",
+                "v1/gateway/NF-ACL-001/logs",
+                "v1/gateway/NF-ACL-001/attributes",
+                "v1/gateway/NF-ACL-001/rpc/response",
+            },
+        )
+        self.assertNotIn("v1/gateway/telemetry", send_topics)
 
 
 class EdgeConfigGenerationTest(TestCase):
@@ -255,9 +421,10 @@ class GatewayDeleteReleaseViewTest(TestCase):
         self.gateway.refresh_from_db()
         self.assertEqual(self.gateway.lifecycle_status, "release_pending")
 
+    @patch("apps.telemetry.mqtt_publisher.publish_gateway_activation")
     @patch("apps.devices.mqtt_provisioning.provision_gateway_mqtt")
     @patch("apps.devices.mqtt_provisioning.deprovision_gateway_mqtt")
-    def test_released_gateway_can_be_onboarded_by_another_team(self, mock_deprovision, mock_provision):
+    def test_released_gateway_can_be_onboarded_by_another_team(self, mock_deprovision, mock_provision, mock_publish):
         self.client.force_login(self.admin)
         self.client.post(self._delete_url(), {"confirmation_serial": self.serial})
 
@@ -275,7 +442,6 @@ class GatewayDeleteReleaseViewTest(TestCase):
         mock_deprovision.assert_called_once()
         self.assertEqual(mock_deprovision.call_args.args[0].serial_number, self.serial)
         mock_provision.assert_called_once()
-
 
 
 class CommissioningContextTest(TestCase):
@@ -312,6 +478,7 @@ class CommissioningContextTest(TestCase):
 
     def test_online_gateway_with_discovery_splits_ready_and_needs_template(self):
         from django.utils import timezone
+
         from apps.devices.services import build_commissioning_context
 
         self.gateway.status = "online"
@@ -333,7 +500,9 @@ class CommissioningContextTest(TestCase):
 
     def test_config_push_and_first_telemetry_make_dashboard_ready(self):
         import uuid
+
         from django.utils import timezone
+
         from apps.devices.models import GatewayConfig
         from apps.devices.services import build_commissioning_context
 

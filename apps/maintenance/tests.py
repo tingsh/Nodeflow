@@ -1,15 +1,15 @@
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.alerts.models import Alert, AlertRule
 from apps.devices.models import Device, Site
-from django.core.files.uploadedfile import SimpleUploadedFile
 from apps.maintenance.forms import MaintenanceTicketForm
-from apps.maintenance.models import MaintenanceTicket, PreventiveSchedule, TicketTemplate, SharedTicketLink
+from apps.maintenance.models import MaintenanceTicket, PreventiveSchedule, SharedTicketLink, TicketTemplate
 from apps.maintenance.services import auto_create_ticket, process_incoming_whatsapp
 from apps.teams.models import Membership, Team
 from apps.teams.roles import ROLE_MANAGER, ROLE_VIEWER
@@ -19,8 +19,12 @@ from apps.users.models import CustomUser
 class MaintenanceTests(TestCase):
     def setUp(self):
         self.team = Team.objects.create(name="Test Team", slug="test")
-        self.manager = CustomUser.objects.create_user(username="m", email="m@ex.com", password="pwd", phone_number="+15551112222")
-        self.viewer = CustomUser.objects.create_user(username="v", email="v@ex.com", password="pwd", phone_number="+15553334444")
+        self.manager = CustomUser.objects.create_user(
+            username="m", email="m@ex.com", password="pwd", phone_number="+15551112222"
+        )
+        self.viewer = CustomUser.objects.create_user(
+            username="v", email="v@ex.com", password="pwd", phone_number="+15553334444"
+        )
         Membership.objects.create(team=self.team, user=self.manager, role=ROLE_MANAGER)
         Membership.objects.create(team=self.team, user=self.viewer, role=ROLE_VIEWER)
 
@@ -60,8 +64,8 @@ class MaintenanceTests(TestCase):
             name="Calibration Checklist",
             checklist=[
                 {"task": "Verify zero offset", "required": True},
-                {"task": "Test span response", "required": False}
-            ]
+                {"task": "Test span response", "required": False},
+            ],
         )
         rule = AlertRule.objects.create(
             team=self.team,
@@ -72,7 +76,7 @@ class MaintenanceTests(TestCase):
             threshold=240.0,
             severity="warning",
             create_maintenance_ticket=True,
-            maintenance_template=template
+            maintenance_template=template,
         )
         alert = Alert.objects.create(team=self.team, rule=rule, device=self.device, trigger_value=245.0)
 
@@ -104,29 +108,29 @@ class MaintenanceTests(TestCase):
         self.assertTrue(form.is_valid())
 
     @patch("apps.alerts.tasks.send_whatsapp_message_task")
-    @patch("apps.maintenance.services.send_mail")
-    def test_ticket_assignment_signals(self, mock_send_mail, mock_whatsapp_task):
-        ticket = MaintenanceTicket.objects.create(
+    @patch("apps.maintenance.services.send_tracked_email")
+    def test_ticket_assignment_signals(self, mock_send_tracked_email, mock_whatsapp_task):
+        MaintenanceTicket.objects.create(
             team=self.team,
             device=self.device,
             title="Manual Inspection",
             ticket_type="preventive",
             send_email_notification=True,
             send_whatsapp_notification=True,
-            assigned_to=self.manager
+            assigned_to=self.manager,
         )
 
         # Signal should fire notifications
         self.assertTrue(mock_whatsapp_task.delay.called)
-        self.assertTrue(mock_send_mail.called)
+        self.assertTrue(mock_send_tracked_email.called)
 
         # Check call arguments
         wa_args, wa_kwargs = mock_whatsapp_task.delay.call_args
         self.assertEqual(wa_args[0], self.manager.phone_number)
         self.assertIn("Manual Inspection", wa_args[1])
 
-        mail_kwargs = mock_send_mail.call_args[1]
-        self.assertEqual(mail_kwargs["recipient_list"], [self.manager.email])
+        mail_kwargs = mock_send_tracked_email.call_args[1]
+        self.assertEqual(mail_kwargs["recipients"], [self.manager.email])
 
     @patch("apps.alerts.tasks.send_whatsapp_message_task")
     def test_whatsapp_webhook_inbound_commands(self, mock_whatsapp_task):
@@ -137,9 +141,9 @@ class MaintenanceTests(TestCase):
             status="open",
             checklist_state=[
                 {"task": "Loosen bolt", "required": True, "done": False},
-                {"task": "Adjust spring", "required": True, "done": False}
+                {"task": "Adjust spring", "required": True, "done": False},
             ],
-            assigned_to=self.manager
+            assigned_to=self.manager,
         )
 
         # Test command: DONE 1
@@ -173,10 +177,7 @@ class MaintenanceTests(TestCase):
 
     def test_schedule_edit_view(self):
         schedule = PreventiveSchedule.objects.create(
-            team=self.team,
-            device=self.device,
-            title="Edit Test Schedule",
-            interval="monthly"
+            team=self.team, device=self.device, title="Edit Test Schedule", interval="monthly"
         )
         self.client.force_login(self.viewer)
         response = self.client.get(reverse("web_team:maintenance:schedule_edit", args=[self.team.slug, schedule.id]))
@@ -188,9 +189,7 @@ class MaintenanceTests(TestCase):
 
     def test_preventive_schedule_auto_assignment(self):
         template = TicketTemplate.objects.create(
-            team=self.team,
-            name="Checklist",
-            checklist=[{"task": "Verify Valve", "required": True}]
+            team=self.team, name="Checklist", checklist=[{"task": "Verify Valve", "required": True}]
         )
         # Create schedule with assignment
         schedule = PreventiveSchedule.objects.create(
@@ -202,11 +201,15 @@ class MaintenanceTests(TestCase):
             next_due_at=timezone.now() - timedelta(minutes=1),
             assigned_to=self.manager,
             send_email_notification=True,
-            send_whatsapp_notification=False
+            send_whatsapp_notification=False,
         )
 
         from apps.maintenance.tasks import generate_preventive_tickets
-        with patch("apps.alerts.tasks.send_whatsapp_message_task"), patch("apps.maintenance.services.send_mail") as mock_send_mail:
+
+        with (
+            patch("apps.alerts.tasks.send_whatsapp_message_task"),
+            patch("apps.maintenance.services.send_tracked_email") as mock_send_tracked_email,
+        ):
             generate_preventive_tickets()
 
         # Ticket should be created and auto-assigned
@@ -215,13 +218,15 @@ class MaintenanceTests(TestCase):
         self.assertEqual(ticket.assigned_to, self.manager)
         self.assertTrue(ticket.send_email_notification)
         self.assertFalse(ticket.send_whatsapp_notification)
-        self.assertTrue(mock_send_mail.called)
+        self.assertTrue(mock_send_tracked_email.called)
 
 
 class ComplianceWorkflowTests(TestCase):
     def setUp(self):
         self.team = Team.objects.create(name="Test Team", slug="test")
-        self.manager = CustomUser.objects.create_user(username="m2", email="m2@ex.com", password="pwd", phone_number="+15551112223")
+        self.manager = CustomUser.objects.create_user(
+            username="m2", email="m2@ex.com", password="pwd", phone_number="+15551112223"
+        )
         Membership.objects.create(team=self.team, user=self.manager, role=ROLE_MANAGER)
         self.site = Site.objects.create(team=self.team, name="HQ")
         self.device = Device.objects.create(
@@ -233,17 +238,14 @@ class ComplianceWorkflowTests(TestCase):
             title="Compliance Test Ticket",
             checklist_state=[
                 {"task": "Verify Valve", "required": True, "done": False},
-                {"task": "Clean Cover", "required": False, "done": False}
+                {"task": "Clean Cover", "required": False, "done": False},
             ],
-            reported_by=self.manager
+            reported_by=self.manager,
         )
 
     def test_shared_link_lifecycle(self):
         link = SharedTicketLink.objects.create(
-            team=self.team,
-            ticket=self.ticket,
-            created_by=self.manager,
-            auto_revoke_on_resolve=True
+            team=self.team, ticket=self.ticket, created_by=self.manager, auto_revoke_on_resolve=True
         )
         self.assertFalse(link.is_expired)
         self.assertTrue(link.is_active)
@@ -264,32 +266,25 @@ class ComplianceWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_public_toggle_checklist(self):
-        link = SharedTicketLink.objects.create(
-            team=self.team,
-            ticket=self.ticket,
-            created_by=self.manager
-        )
+        link = SharedTicketLink.objects.create(team=self.team, ticket=self.ticket, created_by=self.manager)
         url = reverse("maintenance_public:public_toggle_checklist_item", args=[str(link.token), 0])
-        
+
         # Toggle via HTMX
         response = self.client.post(url)
         self.assertEqual(response.status_code, 200)
         self.ticket.refresh_from_db()
         self.assertTrue(self.ticket.checklist_state[0]["done"])
-        
+
         # Verify comment audit log
         comment = self.ticket.comments.last()
         self.assertIsNotNone(comment)
         self.assertIn("via Shareable Link", comment.content)
         self.assertIsNone(comment.author)
 
-    @patch("apps.maintenance.public_views.send_mail")
-    def test_public_update_status_compliance_and_revocation(self, mock_send_mail):
+    @patch("apps.maintenance.public_views.send_tracked_email")
+    def test_public_update_status_compliance_and_revocation(self, mock_send_tracked_email):
         link = SharedTicketLink.objects.create(
-            team=self.team,
-            ticket=self.ticket,
-            created_by=self.manager,
-            auto_revoke_on_resolve=True
+            team=self.team, ticket=self.ticket, created_by=self.manager, auto_revoke_on_resolve=True
         )
         url = reverse("maintenance_public:public_update_status", args=[str(link.token)])
 
@@ -311,30 +306,22 @@ class ComplianceWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.ticket.refresh_from_db()
         self.assertEqual(self.ticket.status, "resolved")
-        
+
         # Verify auto-revocation
         link.refresh_from_db()
         self.assertFalse(link.is_active)
 
         # Verify manager notification
-        self.assertTrue(mock_send_mail.called)
-        mail_args = mock_send_mail.call_args[1]
-        self.assertEqual(mail_args["recipient_list"], [self.manager.email])
+        self.assertTrue(mock_send_tracked_email.called)
+        mail_args = mock_send_tracked_email.call_args[1]
+        self.assertEqual(mail_args["recipients"], [self.manager.email])
 
     def test_guest_comment_upload(self):
-        link = SharedTicketLink.objects.create(
-            team=self.team,
-            ticket=self.ticket,
-            created_by=self.manager
-        )
+        link = SharedTicketLink.objects.create(team=self.team, ticket=self.ticket, created_by=self.manager)
         url = reverse("maintenance_public:public_add_comment", args=[str(link.token)])
 
         mock_file = SimpleUploadedFile("checklist.png", b"file_content", content_type="image/png")
-        data = {
-            "guest_name": "Acme Contractors Ltd",
-            "content": "Completed onsite testing.",
-            "attachment": mock_file
-        }
+        data = {"guest_name": "Acme Contractors Ltd", "content": "Completed onsite testing.", "attachment": mock_file}
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, 302)
 
@@ -355,6 +342,7 @@ class PreventiveTriggerTests(TestCase):
 
         from apps.teams.models import Membership
         from apps.teams.roles import ROLE_MANAGER, ROLE_VIEWER
+
         Membership.objects.create(team=self.team, user=self.manager, role=ROLE_MANAGER)
         Membership.objects.create(team=self.team, user=self.viewer, role=ROLE_VIEWER)
 
@@ -363,9 +351,7 @@ class PreventiveTriggerTests(TestCase):
             team=self.team, site=self.site, name="Lift 1", device_type="custom", protocol="modbus_tcp"
         )
         self.template = TicketTemplate.objects.create(
-            team=self.team,
-            name="Lift Checklist",
-            checklist=[{"task": "Inspect ropes", "required": True}]
+            team=self.team, name="Lift Checklist", checklist=[{"task": "Inspect ropes", "required": True}]
         )
         self.schedule = PreventiveSchedule.objects.create(
             team=self.team,
@@ -374,7 +360,7 @@ class PreventiveTriggerTests(TestCase):
             title="Annual Lift maintenance",
             interval="yearly",
             next_due_at=timezone.now() + timedelta(days=365),
-            is_active=True
+            is_active=True,
         )
 
     def test_manual_trigger_unauthorized(self):
@@ -398,7 +384,7 @@ class PreventiveTriggerTests(TestCase):
         # Verify ticket creation
         ticket = MaintenanceTicket.objects.filter(schedule_reference=self.schedule).first()
         self.assertIsNotNone(ticket)
-        self.assertEqual(ticket.title, f"[PM] Annual Lift maintenance on Lift 1")
+        self.assertEqual(ticket.title, "[PM] Annual Lift maintenance on Lift 1")
         self.assertEqual(ticket.ticket_type, "preventive")
         self.assertEqual(len(ticket.checklist_state), 1)
         self.assertEqual(ticket.checklist_state[0]["task"], "Inspect ropes")
@@ -410,5 +396,3 @@ class PreventiveTriggerTests(TestCase):
         # Verify schedule due date is advanced
         self.schedule.refresh_from_db()
         self.assertGreater(self.schedule.next_due_at, original_due)
-
-

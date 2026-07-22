@@ -1,5 +1,6 @@
 {% extends "web/app/app_base.html" %}
 {% load static %}
+{% load utils_tags %}
 {% block app %}
 <div class="px-4 sm:px-6 lg:px-8 py-8">
     <!-- Breadcrumb -->
@@ -71,7 +72,7 @@
                 <tbody class="divide-y divide-gray-50 dark:divide-gray-700 font-mono text-xs">
                     {% for log in logs %}
                     <tr class="{% if log.level == 'ERROR' or log.level == 'CRITICAL' %}bg-red-50/50 dark:bg-red-900/10{% elif log.level == 'WARNING' %}bg-amber-50/50 dark:bg-amber-900/10{% endif %}">
-                        <td class="px-4 py-2.5 text-gray-500 whitespace-nowrap">{{ log.timestamp|date:"Y-m-d H:i:s" }}</td>
+                        <td class="px-4 py-2.5 text-gray-500 whitespace-nowrap">{{ log.timestamp|site_datetime:gateway.site }}</td>
                         <td class="px-4 py-2.5 whitespace-nowrap">
                             <span class="px-2 py-0.5 text-[10px] font-black uppercase rounded-full
                                 {% if log.level == 'ERROR' or log.level == 'CRITICAL' %}bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400

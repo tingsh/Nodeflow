@@ -1,4 +1,5 @@
 import uuid
+
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -35,7 +36,9 @@ class PreventiveSchedule(BaseTeamModel):
     device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name="maintenance_schedules")
     template = models.ForeignKey(TicketTemplate, on_delete=models.SET_NULL, null=True, blank=True)
     title = models.CharField(max_length=200)
-    interval = models.CharField(max_length=20, choices=IntervalChoices.choices, default=IntervalChoices.MONTHLY, null=True, blank=True)
+    interval = models.CharField(
+        max_length=20, choices=IntervalChoices.choices, default=IntervalChoices.MONTHLY, null=True, blank=True
+    )
     next_due_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
 
@@ -119,6 +122,7 @@ class MaintenanceTicket(BaseTeamModel):
         if not self.alert_reference:
             return None
         from apps.alerts.models import Alert
+
         try:
             return Alert.objects.filter(id=self.alert_reference, team=self.team).first()
         except (ValueError, TypeError):
@@ -130,7 +134,6 @@ class MaintenanceTicket(BaseTeamModel):
         super().save(*args, **kwargs)
 
 
-
 class TicketComment(BaseTeamModel):
     """Threaded notes, updates, and attachments appended to a ticket."""
 
@@ -139,10 +142,10 @@ class TicketComment(BaseTeamModel):
     content = models.TextField()
     is_system_generated = models.BooleanField(default=False)
     attachment = models.FileField(
-        upload_to="maintenance/attachments/", 
-        blank=True, 
+        upload_to="maintenance/attachments/",
+        blank=True,
         null=True,
-        help_text="Upload signed logsheets, checklist photos, or certificates (PDF, JPG, PNG up to 10MB)"
+        help_text="Upload signed logsheets, checklist photos, or certificates (PDF, JPG, PNG up to 10MB)",
     )
     guest_name = models.CharField(max_length=100, blank=True, null=True)
 
@@ -159,7 +162,9 @@ class SharedTicketLink(BaseTeamModel):
     token = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
     is_active = models.BooleanField(default=True)
     expires_at = models.DateTimeField(null=True, blank=True, help_text=_("Optional expiration date"))
-    auto_revoke_on_resolve = models.BooleanField(default=True, help_text=_("Deactivate this link automatically once the ticket is resolved"))
+    auto_revoke_on_resolve = models.BooleanField(
+        default=True, help_text=_("Deactivate this link automatically once the ticket is resolved")
+    )
     view_count = models.PositiveIntegerField(default=0)
     last_viewed_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
@@ -173,4 +178,3 @@ class SharedTicketLink(BaseTeamModel):
     @property
     def is_expired(self):
         return bool(self.expires_at and timezone.now() > self.expires_at)
-

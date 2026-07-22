@@ -1,6 +1,16 @@
 from django.contrib import admin
 
-from .models import Device, DeviceTemplate, FirmwareRelease, Gateway, GatewayConfig, GatewayInventory, RpcCommand, Site
+from .models import (
+    Device,
+    DeviceTemplate,
+    FirmwareRelease,
+    Gateway,
+    GatewayActivation,
+    GatewayConfig,
+    GatewayInventory,
+    RpcCommand,
+    Site,
+)
 
 
 @admin.register(Site)
@@ -18,10 +28,43 @@ class GatewayAdmin(admin.ModelAdmin):
     readonly_fields = ("access_token", "mqtt_username", "mqtt_password")
     actions = ["recover_claim_codes"]
     fieldsets = (
-        (None, {"fields": ("team", "site", "name", "serial_number", "status", "lifecycle_status", "firmware_version", "capacity")}),
+        (
+            None,
+            {
+                "fields": (
+                    "team",
+                    "site",
+                    "name",
+                    "serial_number",
+                    "status",
+                    "lifecycle_status",
+                    "firmware_version",
+                    "capacity",
+                )
+            },
+        ),
         ("MQTT Credentials", {"fields": ("access_token", "mqtt_username", "mqtt_password", "tls_mode")}),
-        ("Heartbeat Attributes", {"fields": ("last_seen", "ip_address", "uptime_seconds", "python_version", "platform_info", "active_connectors", "connected_devices")}),
-        ("Advanced", {"fields": ("config", "discovery_data", "client_cert_pem", "client_key_pem"), "classes": ("collapse",)}),
+        (
+            "Heartbeat Attributes",
+            {
+                "fields": (
+                    "last_seen",
+                    "ip_address",
+                    "uptime_seconds",
+                    "python_version",
+                    "platform_info",
+                    "active_connectors",
+                    "connected_devices",
+                )
+            },
+        ),
+        (
+            "Advanced",
+            {
+                "fields": ("config", "discovery_data", "client_cert_pem", "client_key_pem"),
+                "classes": ("collapse",),
+            },
+        ),
     )
 
     @admin.action(description="Recover claim codes for selected gateways")
@@ -57,7 +100,18 @@ class GatewayInventoryAdmin(admin.ModelAdmin):
 
 @admin.register(DeviceTemplate)
 class DeviceTemplateAdmin(admin.ModelAdmin):
-    list_display = ("name", "manufacturer", "device_type", "protocol", "category", "is_verified", "source", "ai_confidence", "usage_count", "created_at")
+    list_display = (
+        "name",
+        "manufacturer",
+        "device_type",
+        "protocol",
+        "category",
+        "is_verified",
+        "source",
+        "ai_confidence",
+        "usage_count",
+        "created_at",
+    )
     list_filter = ("device_type", "protocol", "category", "is_verified", "source")
     search_fields = ("name", "manufacturer", "model_number")
     readonly_fields = ("usage_count", "created_at")
@@ -78,6 +132,24 @@ class GatewayConfigAdmin(admin.ModelAdmin):
     readonly_fields = ("request_id", "pushed_at")
 
 
+@admin.register(GatewayActivation)
+class GatewayActivationAdmin(admin.ModelAdmin):
+    list_display = ("gateway", "status", "attempt_count", "expires_at", "delivered_at", "acknowledged_at")
+    list_filter = ("status", "gateway__team")
+    search_fields = ("gateway__serial_number", "request_id")
+    readonly_fields = (
+        "request_id",
+        "status",
+        "attempt_count",
+        "last_attempt_at",
+        "delivered_at",
+        "acknowledged_at",
+        "expires_at",
+        "encrypted_mqtt_password",
+        "last_error",
+    )
+
+
 @admin.register(RpcCommand)
 class RpcCommandAdmin(admin.ModelAdmin):
     list_display = ("gateway", "method", "status", "sent_at", "responded_at")
@@ -92,4 +164,3 @@ class FirmwareReleaseAdmin(admin.ModelAdmin):
     list_filter = ("is_active",)
     search_fields = ("version", "release_notes")
     readonly_fields = ("released_at",)
-

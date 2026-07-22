@@ -1,10 +1,13 @@
 import json
 import logging
+import uuid
 
-from django.db import transaction
 from django.contrib.auth.hashers import make_password
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
-from django.shortcuts import render
+from django.core.cache import cache
+from django.db import transaction
+from django.db.models import Q
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -14,7 +17,10 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 from apps.teams.decorators import require_permission
 from apps.teams.mixins import PermissionRequiredMixin
 
-from .models import Device, DeviceTemplate, Gateway, GatewayConfig, GatewayInventory, RpcCommand, Site
+from .models import Device, DeviceTemplate, Gateway, GatewayConfig, RpcCommand, Site
+from .services import gateways_for_team, sites_for_team, visible_templates_for_team
+from .tasks import generate_template_ai_task
+from .template_ai import save_approved_template
 
 logger = logging.getLogger("novena_hub")
 
@@ -71,7 +77,11 @@ class SiteDetailView(PermissionRequiredMixin, DetailView):
                     # Check for conflict
                     reg_device = port_map[port_key]["device"]
                     sig = disc.get("signature", "")
-                    if sig and sig.lower() not in reg_device.name.lower() and sig.lower() not in reg_device.device_type.lower():
+                    if (
+                        sig
+                        and sig.lower() not in reg_device.name.lower()
+                        and sig.lower() not in reg_device.device_type.lower()
+                    ):
                         port_map[port_key]["status"] = "conflict"
                         port_map[port_key]["discovered"] = disc
                 else:
@@ -102,7 +112,7 @@ class SiteDetailView(PermissionRequiredMixin, DetailView):
 class SiteCreateView(PermissionRequiredMixin, CreateView):
     permission_required = "manage_devices"
     model = Site
-    fields = ["name", "address", "latitude", "longitude", "timezone"]
+    fields = ["name", "solution_profile", "site_type", "address", "latitude", "longitude", "timezone"]
     template_name = "devices/site_form.html"
 
     def form_valid(self, form):
@@ -116,7 +126,7 @@ class SiteCreateView(PermissionRequiredMixin, CreateView):
 class SiteUpdateView(PermissionRequiredMixin, UpdateView):
     permission_required = "manage_devices"
     model = Site
-    fields = ["name", "address", "latitude", "longitude", "timezone"]
+    fields = ["name", "solution_profile", "site_type", "address", "latitude", "longitude", "timezone"]
     template_name = "devices/site_form.html"
 
     def get_success_url(self):
@@ -163,6 +173,7 @@ class GatewayDetailView(PermissionRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         from apps.telemetry.models import GatewayLog
+
         from .models import FirmwareRelease
 
         gateway = self.object
@@ -183,6 +194,11 @@ class GatewayCreateView(PermissionRequiredMixin, CreateView):
     model = Gateway
     fields = ["site", "name", "serial_number"]
     template_name = "devices/gateway_form.html"
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        form.fields["site"].queryset = sites_for_team(self.request.team)
+        return form
 
     def post(self, request, *args, **kwargs):
         from django.shortcuts import redirect
@@ -229,6 +245,11 @@ class GatewayUpdateView(PermissionRequiredMixin, UpdateView):
     fields = ["site", "name", "serial_number", "status"]
     template_name = "devices/gateway_form.html"
 
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        form.fields["site"].queryset = sites_for_team(self.request.team)
+        return form
+
     def get_success_url(self):
         return reverse_lazy("web_team:devices:gateway_list", args=[self.request.team.slug])
 
@@ -268,6 +289,7 @@ class GatewayDeleteView(PermissionRequiredMixin, DeleteView):
     def get_success_url(self):
         return reverse_lazy("web_team:devices:gateway_list", args=[self.request.team.slug])
 
+
 # ── Gateway Management Views (Cloud ↔ Edge) ────────────────────────────
 
 
@@ -284,9 +306,7 @@ def gateway_rotate_password(request, team_slug, pk):
     gateway = Gateway.objects.get(pk=pk, team=request.team)
 
     if gateway.status != "online":
-        return JsonResponse(
-            {"error": "Gateway must be online to rotate password."}, status=400
-        )
+        return JsonResponse({"error": "Gateway must be online to rotate password."}, status=400)
 
     new_password = secrets.token_urlsafe(32)
 
@@ -325,9 +345,7 @@ def gateway_send_rpc(request, team_slug, pk):
 
     rpc = publish_rpc_command(gateway, method, params)
 
-    return JsonResponse(
-        {"request_id": str(rpc.request_id), "method": method, "status": "sent"}
-    )
+    return JsonResponse({"request_id": str(rpc.request_id), "method": method, "status": "sent"})
 
 
 @require_permission("manage_devices")
@@ -345,9 +363,7 @@ def gateway_push_config(request, team_slug, pk):
 
     config_record = publish_config_update(gateway, action, config)
 
-    return JsonResponse(
-        {"request_id": str(config_record.request_id), "action": action, "status": "sent"}
-    )
+    return JsonResponse({"request_id": str(config_record.request_id), "action": action, "status": "sent"})
 
 
 @require_permission("view_devices")
@@ -457,7 +473,6 @@ def gateway_rpc_status(request, team_slug, gateway_pk, request_id):
             "error": rpc.error_message or None,
         }
     )
-
 
 
 class DeviceListView(PermissionRequiredMixin, ListView):
@@ -609,7 +624,19 @@ class DeviceCreateView(PermissionRequiredMixin, CreateView):
             )
         return super().dispatch(request, *args, **kwargs)
 
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        form.fields["gateway"].queryset = gateways_for_team(self.request.team)
+        form.fields["site"].queryset = sites_for_team(self.request.team)
+        form.fields["template"].queryset = visible_templates_for_team(self.request.team)
+        return form
+
     def form_valid(self, form):
+        gateway = form.cleaned_data.get("gateway")
+        site = form.cleaned_data.get("site")
+        if gateway and site and gateway.site_id != site.id:
+            form.add_error("gateway", "Select a gateway that belongs to the selected site.")
+            return self.form_invalid(form)
         form.instance.team = self.request.team
         return super().form_valid(form)
 
@@ -639,6 +666,54 @@ class DeviceDeleteView(PermissionRequiredMixin, DeleteView):
 # HTMX Views
 
 
+def _resolve_quick_add_gateway_and_site(team, gateway_id, site_id=None, lock_gateway=False):
+    gateway_qs = gateways_for_team(team).select_related("site")
+    if lock_gateway:
+        gateway_qs = gateway_qs.select_for_update()
+
+    gateway = get_object_or_404(gateway_qs, id=gateway_id)
+    if site_id:
+        site = get_object_or_404(sites_for_team(team), id=site_id)
+        if gateway.site_id != site.id:
+            raise Http404("Gateway does not belong to the selected site.")
+        return gateway, site
+    return gateway, gateway.site
+
+
+def _discovery_entry_for_port(gateway, port):
+    for discovered in (gateway.discovery_data or {}).get("devices", []):
+        discovered_key = str(discovered.get("interface") or discovered.get("port", ""))
+        if discovered_key == str(port):
+            return discovered
+    return None
+
+
+def _first_readable_register(template):
+    if not template.register_map:
+        return None
+    for key, config in template.register_map.items():
+        if isinstance(config, dict) and not config.get("writable"):
+            return {
+                "key": key,
+                "address": config.get("address", 0),
+                "functionCode": config.get("functionCode", 3),
+                "type": config.get("type", "uint16"),
+                "unit": config.get("unit", ""),
+                "objectsCount": config.get("objectsCount", 1),
+            }
+    return None
+
+
+def _push_gateway_config_after_commit(gateway_id, team_id):
+    try:
+        from .config_generator import generate_and_push_config
+
+        gateway = Gateway.objects.get(id=gateway_id, team_id=team_id)
+        generate_and_push_config(gateway)
+    except Exception as e:
+        logger.warning("Config push failed after device creation: %s", e)
+
+
 @require_permission("manage_devices")
 def htmx_device_create(request, team_slug):
     gateway_id = request.GET.get("gateway_id")
@@ -647,121 +722,101 @@ def htmx_device_create(request, team_slug):
     provision = request.GET.get("provision")
     resolve = request.GET.get("resolve")
 
+    gateway, site = _resolve_quick_add_gateway_and_site(request.team, gateway_id, site_id)
+    template_qs = visible_templates_for_team(request.team)
+
     prefill_data = {}
     discovery_entry = None
     suggested_templates = []
     if provision == "true" or resolve == "true":
-        gateway = Gateway.objects.get(id=gateway_id)
-        disc_devices = (gateway.discovery_data or {}).get("devices", [])
-        for d in disc_devices:
-            # Match by interface key (new format) or legacy port number
-            d_key = str(d.get("interface") or d.get("port", ""))
-            if d_key == str(port):
-                discovery_entry = d
-                prefill_data["name"] = d.get("signature", "New Device")
-                
-                # Check for pre-matched template from discovery
-                if d.get("matched_template_id"):
-                    first_tpl = DeviceTemplate.objects.filter(id=d["matched_template_id"]).first()
-                    if first_tpl:
-                        suggested_templates.append(first_tpl)
-                
-                # Fuzzy matches by signature
-                sig = d.get("signature", "").lower()
-                if sig and sig != "unknown":
-                    from django.db.models import Q
-                    other_tpls = DeviceTemplate.objects.filter(
-                        Q(name__icontains=sig) | Q(manufacturer__icontains=sig)
-                    ).exclude(id__in=[t.id for t in suggested_templates])[:3 - len(suggested_templates)]
-                    suggested_templates.extend(other_tpls)
-                
-                if suggested_templates:
-                    prefill_data["template_id"] = suggested_templates[0].id
-                break
+        discovery_entry = _discovery_entry_for_port(gateway, port)
+        if discovery_entry:
+            prefill_data["name"] = discovery_entry.get("signature", "New Device")
+
+            if discovery_entry.get("matched_template_id"):
+                first_tpl = template_qs.filter(id=discovery_entry["matched_template_id"]).first()
+                if first_tpl:
+                    suggested_templates.append(first_tpl)
+
+            sig = discovery_entry.get("signature", "").lower()
+            if sig and sig != "unknown":
+                other_tpls = template_qs.filter(Q(name__icontains=sig) | Q(manufacturer__icontains=sig)).exclude(
+                    id__in=[template.id for template in suggested_templates]
+                )[: 3 - len(suggested_templates)]
+                suggested_templates.extend(other_tpls)
+
+            if suggested_templates:
+                prefill_data["template_id"] = suggested_templates[0].id
 
     if request.method == "POST":
         name = request.POST.get("name")
         template_id = request.POST.get("template_id")
 
-        template = DeviceTemplate.objects.get(id=template_id)
+        with transaction.atomic():
+            gateway, site = _resolve_quick_add_gateway_and_site(request.team, gateway_id, site_id, lock_gateway=True)
+            if provision == "true" or resolve == "true":
+                discovery_entry = _discovery_entry_for_port(gateway, port)
+            template = get_object_or_404(visible_templates_for_team(request.team), id=template_id)
 
-        # If resolving, delete the old device on this port first
-        if resolve == "true":
-            Device.objects.filter(gateway_id=gateway_id, port=port).delete()
+            disc_meta = {}
+            if discovery_entry:
+                disc_meta = {
+                    "interface": discovery_entry.get("interface"),
+                    "connection": discovery_entry.get("connection"),
+                    "slave_id": discovery_entry.get("slave_id"),
+                    "baud_rate": discovery_entry.get("baud_rate"),
+                    "signature": discovery_entry.get("signature"),
+                    "identification": discovery_entry.get("identification"),
+                }
 
-        # Build discovery_meta from the discovery entry
-        disc_meta = {}
-        if discovery_entry:
-            disc_meta = {
-                "interface": discovery_entry.get("interface"),
-                "connection": discovery_entry.get("connection"),
-                "slave_id": discovery_entry.get("slave_id"),
-                "baud_rate": discovery_entry.get("baud_rate"),
-                "signature": discovery_entry.get("signature"),
-                "identification": discovery_entry.get("identification"),
-            }
+            if resolve == "true":
+                Device.objects.filter(team=request.team, site=site, gateway=gateway, port=port).delete()
 
-        device = Device.objects.create(
-            team=request.team,
-            site_id=site_id,
-            gateway_id=gateway_id,
-            port=port,
-            name=name,
-            template=template,
-            device_type=template.device_type,
-            protocol=template.protocol,
-            connection_config=template.register_map,
-            discovery_meta=disc_meta,
+            device = Device.objects.create(
+                team=request.team,
+                site=site,
+                gateway=gateway,
+                port=port,
+                name=name,
+                template=template,
+                device_type=template.device_type,
+                protocol=template.protocol,
+                connection_config=template.register_map,
+                discovery_meta=disc_meta,
+            )
+
+            from apps.events.services import log_event
+
+            log_event(
+                category="audit",
+                message=f"Created device {device.name} via Intelligent Port Grid.",
+                team=request.team,
+                device=device,
+                site=device.site,
+                user=request.user,
+            )
+            transaction.on_commit(lambda: _push_gateway_config_after_commit(gateway.id, request.team.id))
+
+        test_register = _first_readable_register(template)
+
+        response = render(
+            request,
+            "devices/partials/device_quick_add_success.html",
+            {
+                "device": device,
+                "test_register": test_register,
+            },
         )
-
-        from apps.events.services import log_event
-
-        log_event(
-            category="audit",
-            message=f"Created device {device.name} via Intelligent Port Grid.",
-            team=request.team,
-            device=device,
-            site=device.site,
-            user=request.user,
-        )
-
-        # Push updated connector config to the Edge gateway
-        try:
-            from .config_generator import generate_and_push_config
-
-            gw = Gateway.objects.get(id=gateway_id)
-            generate_and_push_config(gw)
-        except Exception as e:
-            logger.warning("Config push failed after device creation: %s", e)
-
-        # Find first readable register for connection test
-        test_register = None
-        if template.register_map:
-            for key, config in template.register_map.items():
-                if isinstance(config, dict) and not config.get("writable"):
-                    test_register = {
-                        "key": key,
-                        "address": config.get("address", 0),
-                        "functionCode": config.get("functionCode", 3),
-                        "type": config.get("type", "uint16"),
-                        "unit": config.get("unit", ""),
-                        "objectsCount": config.get("objectsCount", 1),
-                    }
-                    break
-
-        response = render(request, "devices/partials/device_quick_add_success.html", {
-            "device": device,
-            "test_register": test_register,
-        })
         response["HX-Trigger"] = "infrastructureChanged"
         return response
 
-    templates = DeviceTemplate.objects.all()[:10]
+    templates = template_qs.order_by("-is_verified", "-usage_count")[:10]
     context = {
         "templates": templates,
         "suggested_templates": suggested_templates,
-        "gateway_id": gateway_id,
-        "site_id": site_id,
+        "gateway": gateway,
+        "gateway_id": gateway.id,
+        "site_id": site.id,
         "port": port,
         "prefill": prefill_data,
         "resolve": resolve,
@@ -772,8 +827,8 @@ def htmx_device_create(request, team_slug):
 @require_permission("view_devices")
 def template_library_search(request, team_slug):
     query = request.GET.get("q", "")
-    templates = DeviceTemplate.objects.filter(name__icontains=query) | DeviceTemplate.objects.filter(
-        manufacturer__icontains=query
+    templates = visible_templates_for_team(request.team).filter(
+        Q(name__icontains=query) | Q(manufacturer__icontains=query)
     )
     return render(request, "devices/partials/template_search_results.html", {"templates": templates[:10]})
 
@@ -827,12 +882,6 @@ def gateway_discovery_api(request, team_slug):
         return HttpResponse(str(e), status=400)
 
 
-import uuid
-from django.core.cache import cache
-from django.db.models import Q
-from .tasks import generate_template_ai_task
-from .template_ai import save_approved_template
-
 @require_permission("manage_devices")
 @require_POST
 def ai_template_generate(request, team_slug):
@@ -841,10 +890,11 @@ def ai_template_generate(request, team_slug):
     doc_url = request.POST.get("doc_url", "").strip() or None
 
     if not manufacturer or not model_number:
-        return render(request, "devices/partials/ai_template_result.html", {
-            "status": "error",
-            "error": "Both Manufacturer and Model Number are required."
-        })
+        return render(
+            request,
+            "devices/partials/ai_template_result.html",
+            {"status": "error", "error": "Both Manufacturer and Model Number are required."},
+        )
 
     # Check for existing template first (case-insensitive)
     existing = DeviceTemplate.objects.filter(
@@ -852,10 +902,9 @@ def ai_template_generate(request, team_slug):
         model_number__iexact=model_number,
     ).first()
     if existing:
-        return render(request, "devices/partials/ai_template_result.html", {
-            "status": "found_existing",
-            "template": existing
-        })
+        return render(
+            request, "devices/partials/ai_template_result.html", {"status": "found_existing", "template": existing}
+        )
 
     # Kick off async task
     task_id = str(uuid.uuid4())
@@ -872,16 +921,17 @@ def ai_template_status(request, team_slug, task_id):
         # HTMX will poll this again
         return render(request, "devices/partials/ai_template_loading.html", {"task_id": task_id})
     elif result.get("status") == "complete":
-        return render(request, "devices/partials/ai_template_result.html", {
-            "status": "draft",
-            "draft": result["draft"],
-            "task_id": task_id
-        })
+        return render(
+            request,
+            "devices/partials/ai_template_result.html",
+            {"status": "draft", "draft": result["draft"], "task_id": task_id},
+        )
     else:
-        return render(request, "devices/partials/ai_template_result.html", {
-            "status": "error",
-            "error": result.get("error", "AI template generation failed or timed out.")
-        })
+        return render(
+            request,
+            "devices/partials/ai_template_result.html",
+            {"status": "error", "error": result.get("error", "AI template generation failed or timed out.")},
+        )
 
 
 @require_permission("manage_devices")
@@ -890,29 +940,28 @@ def ai_template_approve(request, team_slug):
     task_id = request.POST.get("task_id")
     result = cache.get(f"ai_template:{task_id}")
     if not result or result.get("status") != "complete" or "draft" not in result:
-        return render(request, "devices/partials/ai_template_result.html", {
-            "status": "error",
-            "error": "Template draft expired or not found. Please try generating again."
-        })
+        return render(
+            request,
+            "devices/partials/ai_template_result.html",
+            {"status": "error", "error": "Template draft expired or not found. Please try generating again."},
+        )
 
     try:
         # Get team context from request
         team = getattr(request, "team", None)
         template = save_approved_template(result["draft"], team=team)
-        
+
         # Clear cache
         cache.delete(f"ai_template:{task_id}")
-        
-        return render(request, "devices/partials/ai_template_result.html", {
-            "status": "approved",
-            "template": template
-        })
+
+        return render(request, "devices/partials/ai_template_result.html", {"status": "approved", "template": template})
     except Exception as e:
         logger.exception("Failed to save approved template")
-        return render(request, "devices/partials/ai_template_result.html", {
-            "status": "error",
-            "error": f"Failed to save template: {e}"
-        })
+        return render(
+            request,
+            "devices/partials/ai_template_result.html",
+            {"status": "error", "error": f"Failed to save template: {e}"},
+        )
 
 
 class TemplateLibraryView(PermissionRequiredMixin, ListView):
@@ -922,10 +971,13 @@ class TemplateLibraryView(PermissionRequiredMixin, ListView):
     context_object_name = "templates"
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        from apps.devices.solution_profiles import get_profile, rank_templates_for_profile
+
+        qs = visible_templates_for_team(self.request.team)
         q = self.request.GET.get("q", "").strip()
         protocol = self.request.GET.get("protocol", "").strip()
         category = self.request.GET.get("category", "").strip()
+        profile_key = self.request.GET.get("profile", "").strip()
         verified_only = self.request.GET.get("verified_only", "") == "true"
 
         if q:
@@ -937,17 +989,23 @@ class TemplateLibraryView(PermissionRequiredMixin, ListView):
         if verified_only:
             qs = qs.filter(is_verified=True)
 
+        if profile_key:
+            return rank_templates_for_profile(qs, get_profile(profile_key))
         return qs.order_by("-is_verified", "-usage_count")
 
     def get_context_data(self, **kwargs):
+        from apps.devices.solution_profiles import PROFILES
+
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "templates"
         context["search_query"] = self.request.GET.get("q", "")
         context["selected_protocol"] = self.request.GET.get("protocol", "")
         context["selected_category"] = self.request.GET.get("category", "")
+        context["selected_profile"] = self.request.GET.get("profile", "")
         context["verified_only"] = self.request.GET.get("verified_only", "") == "true"
         context["protocols"] = DeviceTemplate.PROTOCOL_CHOICES
         context["categories"] = DeviceTemplate.VERTICAL_CHOICES
+        context["solution_profiles"] = PROFILES.values()
         return context
 
 
@@ -956,6 +1014,7 @@ class TemplateLibraryView(PermissionRequiredMixin, ListView):
 def gateway_ota_update(request, team_slug, pk):
     """Trigger an OTA Firmware update on the gateway."""
     from apps.telemetry.mqtt_publisher import publish_rpc_command
+
     from .models import FirmwareRelease
 
     gateway = Gateway.objects.get(pk=pk, team=request.team)
@@ -989,14 +1048,15 @@ def gateway_ota_update(request, team_slug, pk):
         "token": "novena_internal_token_mock",
     }
 
-    rpc = publish_rpc_command(gateway, "update_firmware", params)
+    publish_rpc_command(gateway, "update_firmware", params)
 
     return HttpResponse(
-        f'<div class="p-4 bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-xl flex items-center gap-3">'
+        f'<div class="p-4 bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-xl '
+        f'flex items-center gap-3">'
         f'<i class="fa fa-spinner fa-spin"></i>'
-        f'<div>'
+        f"<div>"
         f'<p class="font-bold">Update Initiated</p>'
         f'<p class="text-sm opacity-90">Sending v{release.version} to gateway. Do not disconnect power.</p>'
-        f'</div>'
-        f'</div>'
+        f"</div>"
+        f"</div>"
     )

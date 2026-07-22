@@ -1,15 +1,12 @@
 import logging
 
-from django.conf import settings
-
-logger = logging.getLogger("novena_hub")
-
-
 from .tasks import (
     dispatch_alert_email_task,
-    dispatch_alert_whatsapp_task,
     dispatch_alert_webhook_task,
+    dispatch_alert_whatsapp_task,
 )
+
+logger = logging.getLogger("novena_hub")
 
 
 def send_alert_notifications(alert):

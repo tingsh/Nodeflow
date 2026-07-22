@@ -1,22 +1,24 @@
 import asyncio
 import logging
+
 from amqtt.broker import Broker
 
 logger = logging.getLogger(__name__)
 
 # Basic amqtt broker configuration
 config = {
-    'listeners': {
-        'default': {
-            'type': 'tcp',
-            'bind': '127.0.0.1:1883',
+    "listeners": {
+        "default": {
+            "type": "tcp",
+            "bind": "127.0.0.1:1883",
         }
     },
-    'sys_interval': 10,
-    'auth': {
-        'allow-anonymous': True,
-    }
+    "sys_interval": 10,
+    "auth": {
+        "allow-anonymous": True,
+    },
 }
+
 
 async def start_broker():
     broker = Broker(config)
@@ -30,7 +32,8 @@ async def start_broker():
         logger.info("Shutting down MQTT Broker...")
         await broker.shutdown()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     formatter = "[%(asctime)s] %(levelname)s [%(name)s] - %(message)s"
     logging.basicConfig(level=logging.INFO, format=formatter)
     try:

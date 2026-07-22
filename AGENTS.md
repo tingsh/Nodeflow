@@ -12,6 +12,19 @@ Use the relevant repo-local Codex skills in .agents/skills/ when the task matche
 ## Development Mode
 We are currently developing and testing locally. Use local PostgreSQL and Redis. Docker is reserved for deployment only.
 
+## Production Readiness Discipline
+The Production Readiness Kit is part of the product baseline, not a one-time deployment artifact. When making product, UI/UX, onboarding, telemetry, gateway, MQTT, email, WhatsApp, payment, Celery, database, or external-service changes, always check whether production deployment is affected.
+
+Before finishing any change that alters production behavior, review whether these need updates:
+
+1. `deploy/env/production.env.example` for new or changed environment variables.
+2. `Dockerfile.prod`, `docker-compose.prod.yml`, `deploy/nginx/`, or `deploy/mosquitto/` for runtime, port, proxy, MQTT, or service changes.
+3. `apps/web/management/commands/production_readiness_check.py` for new production blockers or warnings.
+4. `docs/production_readiness_kit.md` and `docs/production_backup_restore.md` for operator guidance.
+5. Backup, restore, health check, and rollback instructions if migrations or data handling change.
+
+If the change introduces a new required production dependency, update the readiness kit in the same branch as the product change. Run the relevant checks before handoff, especially `python manage.py production_readiness_check`, Django checks/tests, `npm run build`, and `docker compose -f docker-compose.prod.yml config` when Docker is available.
+
 ### Local Shell / Runtime Default
 On this Windows development machine, default to WSL for Novena development and testing. The active Hub project is stored in WSL-native storage at:
 
@@ -23,3 +36,17 @@ Use the WSL-native Python virtual environment ~/.venvs/novena by default for Dja
 ## Session Wrap-up (CRITICAL)
 Whenever you complete a feature or are about to end a chat session, update docs/agent_context/skills/novena-project-status/references/project_status.md.
 Log the work you accomplished in the Recent Activity Log section so the next AI agent has the correct context.
+
+## Git Workflow
+
+When starting a new coding task:
+
+1. Check `git status -sb` and the current branch before editing.
+2. If on `main` or `master`, create a focused feature branch before making changes.
+3. Keep each task scoped to one feature, fix, or polish area.
+4. Do not stage unrelated local changes.
+5. Before committing, summarize the changed files and tests run.
+6. Commit only the relevant files for the task.
+7. Push the feature branch to GitHub.
+8. Prefer opening a Pull Request into `main`. If the GitHub CLI is unavailable, provide the branch name and instructions/link for opening the PR manually.
+9. Never push directly to `main` unless explicitly instructed.

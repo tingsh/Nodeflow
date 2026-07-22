@@ -5,12 +5,13 @@ import time
 import paho.mqtt.client as mqtt
 
 # ThingsBoard Gateway standard telemetry format
-# Topic: v1/gateway/telemetry
+# Topic: v1/gateway/{serial}/telemetry
 # Payload: {"Device Name": [{"ts": 123456789, "values": {"key": "value"}}]}
 
 BROKER = "localhost"
 PORT = 1883
-TOPIC = "v1/gateway/telemetry"
+GATEWAY_SN = "NOVENA-DEMO-01"
+TOPIC = f"v1/gateway/{GATEWAY_SN}/telemetry"
 
 
 def run_tb_simulator():
@@ -42,7 +43,7 @@ def run_tb_simulator():
             ],
             # To make our consumer happy without real auth, we inject the SN
             # into a known hidden field or just ensure a gateway exists for the test.
-            "serial_number": "NOVENA-DEMO-01",
+            "serial_number": GATEWAY_SN,
         }
 
         client.publish(TOPIC, json.dumps(payload))

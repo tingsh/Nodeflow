@@ -2,6 +2,7 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from wagtail import blocks
 
+
 class CaptionBlock(blocks.TextBlock):
     """
     A block for generating <figcaptions> that can also use html characters (so you can add, e.g. links).
@@ -35,6 +36,144 @@ class FeatureCardBlock(blocks.StructBlock):
     link_url = blocks.CharBlock(required=False)
 
 
+class MetricItemBlock(blocks.StructBlock):
+    value = blocks.CharBlock(required=True)
+    label = blocks.CharBlock(required=True)
+    detail = blocks.CharBlock(required=False)
+
+
+class MetricBandBlock(blocks.StructBlock):
+    tagline = blocks.CharBlock(required=False, default="Operational outcomes")
+    title = blocks.CharBlock(required=False)
+    metrics = blocks.ListBlock(MetricItemBlock())
+
+    class Meta:
+        template = "content/blocks/metric_band.html"
+        icon = "pick"
+        label = "Metric Band"
+
+
+class ProductVisualBlock(blocks.StructBlock):
+    tagline = blocks.CharBlock(required=False, default="Product view")
+    title = blocks.CharBlock(required=True)
+    subtitle = blocks.TextBlock(required=False)
+    visual_type = blocks.ChoiceBlock(
+        choices=[
+            ("operations", "Operations Dashboard"),
+            ("energy", "Energy Monitoring"),
+            ("gateway", "Gateway Fleet"),
+            ("ai", "AI Assistant"),
+        ],
+        default="operations",
+    )
+    bg_color = blocks.ChoiceBlock(
+        choices=[
+            ("white", "White"),
+            ("light_gray", "Light Gray"),
+            ("dark", "Dark"),
+        ],
+        default="white",
+    )
+
+    class Meta:
+        template = "content/blocks/product_visual.html"
+        icon = "image"
+        label = "Product Visual"
+
+
+class PlatformCapabilityBlock(blocks.StructBlock):
+    anchor_id = blocks.CharBlock(required=False, help_text="Optional HTML anchor without #")
+    icon = blocks.CharBlock(required=False, default="fa-chart-line")
+    title = blocks.CharBlock(required=True)
+    description = blocks.TextBlock(required=True)
+    proof = blocks.CharBlock(required=False)
+
+
+class PlatformCapabilitiesBlock(blocks.StructBlock):
+    tagline = blocks.CharBlock(required=False, default="Platform")
+    title = blocks.CharBlock(required=True)
+    intro = blocks.TextBlock(required=False)
+    capabilities = blocks.ListBlock(PlatformCapabilityBlock())
+
+    class Meta:
+        template = "content/blocks/platform_capabilities.html"
+        icon = "cogs"
+        label = "Platform Capabilities"
+
+
+class ProcessStepBlock(blocks.StructBlock):
+    step = blocks.CharBlock(required=True)
+    title = blocks.CharBlock(required=True)
+    description = blocks.TextBlock(required=True)
+
+
+class ProcessBlock(blocks.StructBlock):
+    tagline = blocks.CharBlock(required=False, default="How it works")
+    title = blocks.CharBlock(required=True)
+    steps = blocks.ListBlock(ProcessStepBlock())
+
+    class Meta:
+        template = "content/blocks/process.html"
+        icon = "list-ol"
+        label = "Process"
+
+
+class VerticalSolutionCardBlock(blocks.StructBlock):
+    anchor_id = blocks.CharBlock(required=False, help_text="Optional HTML anchor without #")
+    icon = blocks.CharBlock(required=False, default="fa-industry")
+    vertical = blocks.CharBlock(required=True)
+    title = blocks.CharBlock(required=True)
+    pain = blocks.TextBlock(required=True)
+    outcome = blocks.TextBlock(required=True)
+    features = blocks.ListBlock(blocks.CharBlock(label="Feature"), required=False)
+    cta_text = blocks.CharBlock(required=False, default="Explore solution")
+    cta_url = blocks.CharBlock(required=False, default="/solutions/")
+
+
+class VerticalSolutionCardsBlock(blocks.StructBlock):
+    tagline = blocks.CharBlock(required=False, default="Solutions")
+    title = blocks.CharBlock(required=True)
+    intro = blocks.TextBlock(required=False)
+    solutions = blocks.ListBlock(VerticalSolutionCardBlock())
+
+    class Meta:
+        template = "content/blocks/vertical_solution_cards.html"
+        icon = "site"
+        label = "Vertical Solution Cards"
+
+
+class ProofPointBlock(blocks.StructBlock):
+    label = blocks.CharBlock(required=False)
+    title = blocks.CharBlock(required=True)
+    body = blocks.TextBlock(required=True)
+    metric = blocks.CharBlock(required=False)
+    metric_label = blocks.CharBlock(required=False)
+
+
+class ProofStripBlock(blocks.StructBlock):
+    tagline = blocks.CharBlock(required=False, default="Proof")
+    title = blocks.CharBlock(required=True)
+    intro = blocks.TextBlock(required=False)
+    proof_points = blocks.ListBlock(ProofPointBlock())
+
+    class Meta:
+        template = "content/blocks/proof_strip.html"
+        icon = "success"
+        label = "Proof / Case Study Strip"
+
+
+class LeadCaptureBlock(blocks.StructBlock):
+    tagline = blocks.CharBlock(required=False, default="Request a pilot")
+    title = blocks.CharBlock(required=True, default="See Novena on your equipment")
+    body = blocks.TextBlock(required=True)
+    default_interest = blocks.CharBlock(required=False, default="Energy monitoring pilot")
+
+    class Meta:
+        template = "content/blocks/lead_capture.html"
+        icon = "mail"
+        label = "Lead Capture Form"
+
+
 class FeatureGridBlock(blocks.StructBlock):
     tagline = blocks.CharBlock(required=False, default="Core Capabilities")
     title = blocks.CharBlock(required=True, default="Engineered for Extreme Operational Resilience.")
@@ -62,7 +201,9 @@ class AISpotlightBlock(blocks.StructBlock):
 
 class FinalCTABlock(blocks.StructBlock):
     title = blocks.CharBlock(required=True, default="Ready to secure your operations?")
-    subtitle = blocks.CharBlock(required=True, default="Connect your first edge gateway in 24 hours. Activate your pilot program today.")
+    subtitle = blocks.CharBlock(
+        required=True, default="Connect your first edge gateway in 24 hours. Activate your pilot program today."
+    )
     primary_cta_text = blocks.CharBlock(required=True, default="Activate Pilot Program")
     primary_cta_url = blocks.CharBlock(required=True, default="/accounts/signup/")
     secondary_cta_text = blocks.CharBlock(required=False, default="See Plans & Pricing")
@@ -80,22 +221,31 @@ class FeatureSectionBlock(blocks.StructBlock):
     icon = blocks.CharBlock(required=False, default="fa-chart-line")
     badge = blocks.CharBlock(required=False)
     check_items = blocks.ListBlock(blocks.CharBlock(label="Bullet Point"), required=False)
-    mockup_type = blocks.ChoiceBlock(choices=[
-        ("dashboard", "Dashboard Mockup"),
-        ("ai_chat", "AI Chat Mockup"),
-        ("remote_control", "Remote Control Mockup"),
-        ("multi_wan", "Multi-WAN Active Watchdog"),
-    ], default="dashboard")
+    mockup_type = blocks.ChoiceBlock(
+        choices=[
+            ("dashboard", "Dashboard Mockup"),
+            ("ai_chat", "AI Chat Mockup"),
+            ("remote_control", "Remote Control Mockup"),
+            ("multi_wan", "Multi-WAN Active Watchdog"),
+        ],
+        default="dashboard",
+    )
     mockup_title = blocks.CharBlock(required=False, default="Mockup")
-    align_image = blocks.ChoiceBlock(choices=[
-        ("left", "Image Left"),
-        ("right", "Image Right"),
-    ], default="right")
-    bg_color = blocks.ChoiceBlock(choices=[
-        ("white", "White"),
-        ("light_gray", "Light Gray"),
-        ("dark_indigo", "Dark Indigo"),
-    ], default="white")
+    align_image = blocks.ChoiceBlock(
+        choices=[
+            ("left", "Image Left"),
+            ("right", "Image Right"),
+        ],
+        default="right",
+    )
+    bg_color = blocks.ChoiceBlock(
+        choices=[
+            ("white", "White"),
+            ("light_gray", "Light Gray"),
+            ("dark_indigo", "Dark Indigo"),
+        ],
+        default="white",
+    )
 
     class Meta:
         template = "content/blocks/feature_section.html"
@@ -144,10 +294,14 @@ class PricingComparisonBlock(blocks.StructBlock):
 
 class FAQAccordionBlock(blocks.StructBlock):
     title = blocks.CharBlock(required=False, default="Frequently Asked Questions")
-    faqs = blocks.ListBlock(blocks.StructBlock([
-        ("question", blocks.CharBlock(required=True)),
-        ("answer", blocks.TextBlock(required=True)),
-    ]))
+    faqs = blocks.ListBlock(
+        blocks.StructBlock(
+            [
+                ("question", blocks.CharBlock(required=True)),
+                ("answer", blocks.TextBlock(required=True)),
+            ]
+        )
+    )
 
     class Meta:
         template = "content/blocks/faq_accordion.html"
@@ -160,19 +314,28 @@ class SolutionsSectionBlock(blocks.StructBlock):
     title = blocks.CharBlock(required=True)
     pain_point_text = blocks.TextBlock(required=True)
     solution_text = blocks.TextBlock(required=True)
-    illustration_type = blocks.ChoiceBlock(choices=[
-        ("grid", "Grids/Stats"),
-        ("snowflake", "Snowflake Icon"),
-        ("gear", "Rotating Gear"),
-    ], default="grid")
-    align_image = blocks.ChoiceBlock(choices=[
-        ("left", "Image Left"),
-        ("right", "Image Right"),
-    ], default="right")
-    bg_color = blocks.ChoiceBlock(choices=[
-        ("white", "White"),
-        ("light_gray", "Light Gray"),
-    ], default="white")
+    illustration_type = blocks.ChoiceBlock(
+        choices=[
+            ("grid", "Grids/Stats"),
+            ("snowflake", "Snowflake Icon"),
+            ("gear", "Rotating Gear"),
+        ],
+        default="grid",
+    )
+    align_image = blocks.ChoiceBlock(
+        choices=[
+            ("left", "Image Left"),
+            ("right", "Image Right"),
+        ],
+        default="right",
+    )
+    bg_color = blocks.ChoiceBlock(
+        choices=[
+            ("white", "White"),
+            ("light_gray", "Light Gray"),
+        ],
+        default="white",
+    )
 
     class Meta:
         template = "content/blocks/solutions_section.html"
@@ -181,17 +344,20 @@ class SolutionsSectionBlock(blocks.StructBlock):
 
 
 class HeroBlock(blocks.StructBlock):
-    tagline = blocks.CharBlock(required=False, default="Industrial Intelligence")
-    title = blocks.CharBlock(required=True, default="Your Factory, Perfectly Synchronized.")
+    tagline = blocks.CharBlock(required=False, default="Industrial IoT for SME operations")
+    title = blocks.CharBlock(required=True, default="Connect equipment. See operations clearly. Act faster.")
     subtitle = blocks.CharBlock(required=True)
-    primary_cta_text = blocks.CharBlock(required=True, default="Activate Cloud Access")
+    primary_cta_text = blocks.CharBlock(required=True, default="Sign up")
     primary_cta_url = blocks.CharBlock(required=True, default="/accounts/signup/")
     secondary_cta_text = blocks.CharBlock(required=False, default="Explore Platform")
     secondary_cta_url = blocks.CharBlock(required=False, default="#features")
-    bg_style = blocks.ChoiceBlock(choices=[
-        ("light", "Light Background"),
-        ("dark", "Dark Background"),
-    ], default="light")
+    bg_style = blocks.ChoiceBlock(
+        choices=[
+            ("light", "Light Background"),
+            ("dark", "Dark Background"),
+        ],
+        default="light",
+    )
     show_terminal_simulator = blocks.BooleanBlock(required=False, default=True)
 
     class Meta:

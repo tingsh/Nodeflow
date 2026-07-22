@@ -1,8 +1,8 @@
-from django.db.models.signals import pre_save, post_save
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
+from . import services
 from .models import MaintenanceTicket
-from .services import send_ticket_assignment_whatsapp, send_ticket_assignment_email
 
 
 @receiver(pre_save, sender=MaintenanceTicket)
@@ -27,6 +27,6 @@ def ticket_post_save(sender, instance, created, **kwargs):
     """
     if getattr(instance, "_assignee_changed", False) and instance.assigned_to:
         if instance.send_whatsapp_notification:
-            send_ticket_assignment_whatsapp(instance)
+            services.send_ticket_assignment_whatsapp(instance)
         if instance.send_email_notification:
-            send_ticket_assignment_email(instance)
+            services.send_ticket_assignment_email(instance)

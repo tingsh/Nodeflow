@@ -1,0 +1,41 @@
+{
+  "clients": [],
+  "roles": [
+    {
+      "roleName": "admin",
+      "acls": [
+        {"acltype": "publishClientSend", "topic": "$CONTROL/dynamic-security/#", "allow": true},
+        {"acltype": "publishClientReceive", "topic": "$CONTROL/dynamic-security/#", "allow": true},
+        {"acltype": "subscribePattern", "topic": "$CONTROL/dynamic-security/#", "allow": true},
+        {"acltype": "publishClientSend", "topic": "#", "allow": true},
+        {"acltype": "publishClientReceive", "topic": "#", "allow": true},
+        {"acltype": "subscribePattern", "topic": "#", "allow": true}
+      ]
+    },
+    {
+      "roleName": "cloud-internal",
+      "textDescription": "Full access for Django Cloud services (consumer + publisher)",
+      "acls": [
+        {"acltype": "publishClientSend", "topic": "#", "allow": true},
+        {"acltype": "publishClientReceive", "topic": "#", "allow": true},
+        {"acltype": "subscribePattern", "topic": "#", "allow": true}
+      ]
+    },
+    {
+      "roleName": "gateway",
+      "textDescription": "Shared baseline role for operational edge gateways. Hub provisioning adds per-gateway scoped publish ACLs.",
+      "acls": []
+    },
+    {
+      "roleName": "bootstrap-gateway-template",
+      "textDescription": "Documentation role only. Hub creates per-gateway bootstrap-gw-{serial} roles scoped to hello/activate topics during claim.",
+      "acls": []
+    }
+  ],
+  "defaultACLAccess": {
+    "publishClientSend": false,
+    "publishClientReceive": false,
+    "subscribe": false,
+    "unsubscribe": true
+  }
+}

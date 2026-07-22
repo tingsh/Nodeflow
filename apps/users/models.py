@@ -25,11 +25,16 @@ class CustomUser(AbstractUser):
     phone_number = models.CharField(max_length=20, blank=True, help_text="Format: +65XXXXXXXX for Singapore numbers.")
     job_title = models.CharField(max_length=100, blank=True, default="")
     department = models.CharField(max_length=100, blank=True, default="")
+    closed_at = models.DateTimeField(null=True, blank=True)
+    closed_reason = models.CharField(max_length=100, blank=True, default="", db_default="")
+    original_email_hash = models.CharField(max_length=64, blank=True, default="", db_default="")
 
     def __str__(self):
         return f"{self.get_full_name()} <{self.email or self.username}>"
 
     def get_display_name(self) -> str:
+        if self.closed_at:
+            return "Closed account"
         if self.get_full_name().strip():
             return self.get_full_name()
         return self.email or self.username

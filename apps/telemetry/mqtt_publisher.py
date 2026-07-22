@@ -163,15 +163,17 @@ def publish_credential_rotation(gateway, new_password):
     )
 
 
-def publish_gateway_activation(gateway, operational_password):
+def publish_gateway_activation(activation, operational_password):
     """
     Send fresh operational MQTT credentials while the gateway is in bootstrap mode.
     """
-    request_id = str(uuid.uuid4())
+    gateway = activation.gateway
+    request_id = str(activation.request_id)
     topic = f"v1/gateway/{gateway.serial_number}/bootstrap/activate"
     payload = {
         "request_id": request_id,
         "action": "activate",
+        "activation_expires_at": activation.expires_at.isoformat(),
         "mqtt": {
             "username": gateway.mqtt_username or gateway.serial_number,
             "password": operational_password,
