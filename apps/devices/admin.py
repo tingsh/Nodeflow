@@ -160,7 +160,17 @@ class RpcCommandAdmin(admin.ModelAdmin):
 
 @admin.register(FirmwareRelease)
 class FirmwareReleaseAdmin(admin.ModelAdmin):
-    list_display = ("version", "is_active", "released_at")
-    list_filter = ("is_active",)
+    list_display = ("version", "channel", "signing_status", "key_id", "is_active", "released_at")
+    list_filter = ("is_active", "channel", "signing_status")
     search_fields = ("version", "release_notes")
-    readonly_fields = ("released_at",)
+    readonly_fields = (
+        "sha256",
+        "size_bytes",
+        "manifest",
+        "signature",
+        "key_id",
+        "signing_status",
+        "signed_at",
+        "expires_at",
+        "released_at",
+    )

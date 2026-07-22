@@ -257,33 +257,25 @@
                     </button>
 
                     {% if update_available %}
-                    <div class="border-t border-gray-100 dark:border-gray-700 pt-4 mt-4" id="ota-update-container" x-data="{ showOtaModal: false, confirmText: '', expectedText: '{{ gateway.serial_number }}' }">
-                        <button 
-                            @click="showOtaModal = true"
-                            class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 transition text-sm font-bold text-white shadow-lg shadow-indigo-600/20">
-                            <span><i class="fa fa-cloud-arrow-down mr-2"></i> Update Firmware (to v{{ latest_release.version }})</span>
-                            <i class="fa fa-play text-xs text-indigo-200"></i>
-                        </button>
-                                    <i class="fa fa-exclamation-triangle text-2xl animate-bounce"></i>
-                                    <h4 class="text-lg font-black uppercase tracking-wide">Confirm Firmware Update</h4>
-                                </div>
-                                <p class="text-sm text-base-content/70 leading-relaxed mb-6">
-                                    This will download and install firmware version <strong>v1.2.0</strong> on edge gateway <strong>{{ gateway.serial_number }}</strong>.
-                                    <br><br>
-                                    <strong class="text-amber-600 dark:text-amber-500">Warning:</strong> Although this utilizes a blue/green atomic swap, the system daemon will restart, causing a downtime of up to 1 second. Active telemetry polling might be briefly interrupted.
-                                </p>
-                                <div class="flex space-x-3">
-                                    <button @click="showConfirmation = false" class="flex-1 py-2.5 rounded-xl border border-base-content/10 text-xs font-bold hover:bg-base-200 transition-colors">
-                                        Cancel
-                                    </button>
-                                    <button @click="triggerUpdate()" class="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-600/25">
-                                        Confirm & Update
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="border-t border-gray-100 dark:border-gray-700 pt-4 mt-4" id="ota-update-container" x-data="otaFirmware()">
+                        <form @submit.prevent="triggerUpdate()" class="space-y-3">
+                            <input type="hidden" name="version" value="{{ latest_release.version }}">
+                            <button
+                                type="submit"
+                                :disabled="otaBusy || {% if ota_signing_ready %}false{% else %}true{% endif %}"
+                                class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 transition text-sm font-bold text-white shadow-lg shadow-indigo-600/20">
+                                <span><i class="fa fa-cloud-arrow-down mr-2"></i> Update Firmware (to v{{ latest_release.version }})</span>
+                                <i class="fa fa-play text-xs text-indigo-200"></i>
+                            </button>
+                            <p class="text-[10px] text-base-content/50 leading-relaxed">
+                                {% if ota_signing_ready %}
+                                Signed Novena release. Gateway will verify the manifest before downloading and installing.
+                                {% else %}
+                                Release signing is not configured yet. Add the Novena OTA signing key before dispatching this update.
+                                {% endif %}
+                            </p>
+                        </form>
 
-                        <!-- Progress/Status Tracking Indicator -->
                         <div x-show="otaStatus" class="mt-3 p-4 bg-base-200 rounded-2xl border border-base-content/5" x-cloak>
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-[10px] font-black uppercase tracking-widest text-base-content/40">OTA Firmware Update</span>
@@ -298,25 +290,22 @@
                     <script>
                         function otaFirmware() {
                             return {
-                                showConfirmation: false,
+                                otaBusy: false,
                                 otaStatus: '',
                                 otaProgress: 0,
                                 otaMessage: '',
                                 async triggerUpdate() {
-                                    this.showConfirmation = false;
+                                    if (!confirm('Install signed firmware v{{ latest_release.version }} on gateway {{ gateway.serial_number }}?')) return;
+                                    this.otaBusy = true;
                                     this.otaStatus = 'Dispatched';
                                     this.otaProgress = 10;
-                                    this.otaMessage = 'Sending update command to gateway...';
+                                    this.otaMessage = 'Preparing signed release manifest...';
                                     
                                     try {
-                                        const res = await fetch('{% url 'web_team:devices:gateway_send_rpc' request.team.slug gateway.pk %}', {
+                                        const res = await fetch('{% url 'web_team:devices:gateway_ota_update' request.team.slug gateway.pk %}', {
                                             method: 'POST',
                                             headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/x-www-form-urlencoded'},
-                                            body: 'method=update_firmware&params=' + JSON.stringify({
-                                                version: '1.2.0',
-                                                url: 'https://raw.githubusercontent.com/novena-iot/firmware/main/v1.2.0.tar.gz',
-                                                token: '{{ gateway.access_token }}'
-                                            })
+                                            body: 'version={{ latest_release.version|urlencode }}'
                                         });
                                         const data = await res.json();
                                         
@@ -328,11 +317,13 @@
                                         } else {
                                             this.otaStatus = 'Failed';
                                             this.otaProgress = 0;
-                                            this.otaMessage = 'Failed to dispatch OTA command.';
+                                            this.otaBusy = false;
+                                            this.otaMessage = data.error || 'Failed to dispatch OTA command.';
                                         }
                                     } catch (e) {
                                         this.otaStatus = 'Failed';
                                         this.otaProgress = 0;
+                                        this.otaBusy = false;
                                         this.otaMessage = 'Error sending command: ' + e.message;
                                     }
                                 },
@@ -354,17 +345,20 @@
                                                 this.otaStatus = 'Success';
                                                 this.otaProgress = 100;
                                                 this.otaMessage = 'Firmware update completed successfully! Gateway is online.';
+                                                this.otaBusy = false;
                                                 
                                                 setTimeout(() => window.location.reload(), 2000);
                                                 return;
                                             } else if (data.status === 'error') {
                                                 this.otaStatus = 'Failed';
                                                 this.otaProgress = 0;
+                                                this.otaBusy = false;
                                                 this.otaMessage = 'Update failed: ' + (data.error || 'Execution error');
                                                 return;
                                             } else if (data.status === 'timeout') {
                                                 this.otaStatus = 'Timeout';
                                                 this.otaProgress = 0;
+                                                this.otaBusy = false;
                                                 this.otaMessage = 'Update timed out waiting for gateway response.';
                                                 return;
                                             }
@@ -374,6 +368,7 @@
                                     }
                                     this.otaStatus = 'Timeout';
                                     this.otaProgress = 0;
+                                    this.otaBusy = false;
                                     this.otaMessage = 'OTA operation timed out.';
                                 }
                             }

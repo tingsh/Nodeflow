@@ -424,16 +424,40 @@ class DeviceCommand(BaseTeamModel):
 class FirmwareRelease(models.Model):
     """Firmware binaries uploaded by administrators for OTA updates."""
 
+    CHANNEL_CHOICES = (
+        ("stable", _("Stable")),
+        ("pilot", _("Pilot")),
+        ("canary", _("Canary")),
+    )
+    SIGNING_STATUS_CHOICES = (
+        ("unsigned", _("Unsigned")),
+        ("signed", _("Signed")),
+        ("failed", _("Failed")),
+    )
+
     version = models.CharField(max_length=50, unique=True, help_text=_("Version string, e.g. '1.1.0'"))
     release_notes = models.TextField(blank=True)
     file = models.FileField(upload_to="firmware/", help_text=_("The firmware binary tarball (.tar.gz)"))
     sha256 = models.CharField(max_length=64, blank=True)
     size_bytes = models.PositiveBigIntegerField(null=True, blank=True)
+    channel = models.CharField(max_length=20, choices=CHANNEL_CHOICES, default="stable")
+    minimum_gateway_version = models.CharField(max_length=50, blank=True, default="0.1.0")
+    maximum_gateway_version = models.CharField(max_length=50, blank=True)
+    manifest = models.JSONField(default=dict, blank=True)
+    signature = models.TextField(blank=True)
+    key_id = models.CharField(max_length=80, blank=True)
+    signing_status = models.CharField(max_length=20, choices=SIGNING_STATUS_CHOICES, default="unsigned")
+    signed_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=False, help_text=_("Whether this release is available to gateways"))
     released_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-released_at"]
+
+    @property
+    def is_signed(self):
+        return self.signing_status == "signed" and bool(self.manifest and self.signature and self.key_id)
 
     def __str__(self):
         return f"Firmware v{self.version} ({'Active' if self.is_active else 'Draft'})"

@@ -672,6 +672,10 @@ DJSTRIPE_SUBSCRIBER_MODEL_REQUEST_CALLBACK = lambda request: request.team  # noq
 DJSTRIPE_WEBHOOK_VALIDATION = None
 DJSTRIPE_WEBHOOK_SECRET = env("DJSTRIPE_WEBHOOK_SECRET", default="")
 
+NOVENA_OTA_SIGNING_PRIVATE_KEY = env("NOVENA_OTA_SIGNING_PRIVATE_KEY", default="")
+NOVENA_OTA_SIGNING_KEY_ID = env("NOVENA_OTA_SIGNING_KEY_ID", default="novena-ota-v1")
+NOVENA_OTA_MANIFEST_TTL_DAYS = env.int("NOVENA_OTA_MANIFEST_TTL_DAYS", default=14)
+
 SILENCED_SYSTEM_CHECKS = [
     "djstripe.I002",  # Pegasus uses the same settings as dj-stripe for keys, so don't complain they are here
 ]

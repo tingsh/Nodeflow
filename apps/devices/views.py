@@ -4,6 +4,7 @@ import uuid
 
 from django.contrib.auth.hashers import make_password
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
@@ -185,6 +186,9 @@ class GatewayDetailView(PermissionRequiredMixin, DetailView):
         if latest_release and latest_release.version != gateway.firmware_version:
             context["update_available"] = True
             context["latest_release"] = latest_release
+            context["ota_signing_ready"] = latest_release.is_signed or bool(
+                getattr(settings, "NOVENA_OTA_SIGNING_PRIVATE_KEY", "")
+            )
 
         return context
 
@@ -341,6 +345,11 @@ def gateway_send_rpc(request, team_slug, pk):
 
     gateway = Gateway.objects.get(pk=pk, team=request.team)
     method = request.POST.get("method")
+    if method == "update_firmware":
+        return JsonResponse(
+            {"error": "Firmware updates must use the signed OTA release endpoint."},
+            status=400,
+        )
     params = json.loads(request.POST.get("params", "{}"))
 
     rpc = publish_rpc_command(gateway, method, params)
@@ -1016,47 +1025,27 @@ def gateway_ota_update(request, team_slug, pk):
     from apps.telemetry.mqtt_publisher import publish_rpc_command
 
     from .models import FirmwareRelease
+    from .ota_signing import ensure_release_signed
 
     gateway = Gateway.objects.get(pk=pk, team=request.team)
     version = request.POST.get("version")
 
     release = FirmwareRelease.objects.filter(version=version, is_active=True).first()
     if not release:
-        return HttpResponse("Firmware release not found.", status=404)
+        return JsonResponse({"error": "Firmware release not found."}, status=404)
 
     url = request.build_absolute_uri(release.file.url)
-    sha256 = release.sha256
-    if not sha256 and release.file:
-        import hashlib
-
-        h = hashlib.sha256()
-        release.file.open("rb")
-        try:
-            for chunk in iter(lambda: release.file.read(1024 * 1024), b""):
-                h.update(chunk)
-        finally:
-            release.file.close()
-        sha256 = h.hexdigest()
-        release.sha256 = sha256
-        release.size_bytes = release.file.size
-        release.save(update_fields=["sha256", "size_bytes"])
+    try:
+        release = ensure_release_signed(release, url)
+    except ValidationError as e:
+        message = "; ".join(e.messages) if hasattr(e, "messages") else str(e)
+        return JsonResponse({"error": f"Firmware release is not signed: {message}"}, status=400)
 
     params = {
-        "version": release.version,
-        "url": url,
-        "sha256": sha256,
-        "token": "novena_internal_token_mock",
+        "manifest": release.manifest,
+        "signature": release.signature,
     }
 
-    publish_rpc_command(gateway, "update_firmware", params)
+    rpc = publish_rpc_command(gateway, "update_firmware", params)
 
-    return HttpResponse(
-        f'<div class="p-4 bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-xl '
-        f'flex items-center gap-3">'
-        f'<i class="fa fa-spinner fa-spin"></i>'
-        f"<div>"
-        f'<p class="font-bold">Update Initiated</p>'
-        f'<p class="text-sm opacity-90">Sending v{release.version} to gateway. Do not disconnect power.</p>'
-        f"</div>"
-        f"</div>"
-    )
+    return JsonResponse({"request_id": str(rpc.request_id), "version": release.version, "status": "sent"})
