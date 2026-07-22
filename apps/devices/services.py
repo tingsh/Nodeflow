@@ -152,9 +152,11 @@ def claim_gateway_for_team(team, site, name: str, serial_number: str, claim_code
         gateway.mqtt_provisioned_at = timezone.now()
         gateway.save(update_fields=["mqtt_provisioning_status", "mqtt_provisioning_error", "mqtt_provisioned_at"])
         try:
-            from apps.telemetry.mqtt_publisher import publish_gateway_activation
+            from .activation import create_gateway_activation, deliver_gateway_activation
 
-            publish_gateway_activation(gateway, operational_password)
+            activation = create_gateway_activation(gateway, operational_password)
+            if gateway.status == "online" or gateway.last_bootstrap_seen_at:
+                deliver_gateway_activation(activation)
         except Exception as e:
             logger.info("Gateway activation publish deferred for %s: %s", gateway.serial_number, e)
     except Exception as e:
@@ -496,7 +498,8 @@ def _commissioning_candidates(gateway):
             "slave_id": discovery.get("slave_id"),
             "baud_rate": discovery.get("baud_rate"),
             "matched_template": matched_template,
-            "matched_template_name": discovery.get("matched_template_name") or (matched_template.name if matched_template else ""),
+            "matched_template_name": discovery.get("matched_template_name")
+            or (matched_template.name if matched_template else ""),
             "status": status,
             "recommended": status == "ready",
             "raw": discovery,

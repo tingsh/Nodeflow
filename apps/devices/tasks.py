@@ -78,6 +78,21 @@ def check_rpc_timeouts():
 
 
 @shared_task
+def expire_and_retry_gateway_activations():
+    """Expire stale activation escrow and retry unresolved gateway activations."""
+    from .activation import expire_and_retry_gateway_activations as run_activation_maintenance
+
+    result = run_activation_maintenance()
+    if result["expired"] or result["retried"]:
+        logger.info(
+            "Gateway activation maintenance completed: expired=%d retried=%d",
+            result["expired"],
+            result["retried"],
+        )
+    return result
+
+
+@shared_task
 def generate_template_ai_task(task_id: str, manufacturer: str, model_number: str, doc_url: str = None):
     '''Background task: AI generates a device template draft.'''
     from django.core.cache import cache

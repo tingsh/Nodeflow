@@ -41,6 +41,7 @@ dependencies = [
     "celery[redis]",
     "channels",
     "channels_redis",
+    "cryptography>=44.0.3",
     "dj-stripe>=2.9",
     "django-allauth[socialaccount,mfa]",
     "django-anymail[amazon-ses]", # email services

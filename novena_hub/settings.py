@@ -128,10 +128,16 @@ MQTT_DYNSEC_PORT = env.int("MQTT_DYNSEC_PORT", default=1884)
 MQTT_DYNSEC_ADMIN_USER = env("MQTT_DYNSEC_ADMIN_USER", default="dynsec-admin")
 MQTT_DYNSEC_ADMIN_PASS = env("MQTT_DYNSEC_ADMIN_PASS", default="dynsec-password")
 MQTT_PROVISIONING_REQUIRED = env.bool("MQTT_PROVISIONING_REQUIRED", default=False)
+MQTT_ACCEPT_LEGACY_SHARED_INBOUND = env.bool("MQTT_ACCEPT_LEGACY_SHARED_INBOUND", default=False)
 NOVENA_DEPLOYMENT_MODE = env("NOVENA_DEPLOYMENT_MODE", default="local")
+PUBLIC_MQTT_BROKER_SCHEME = env("PUBLIC_MQTT_BROKER_SCHEME", default="mqtt")
+PUBLIC_MQTT_BROKER_HOST = env("PUBLIC_MQTT_BROKER_HOST", default=MQTT_BROKER_HOST)
+PUBLIC_MQTT_BROKER_PORT = env.int("PUBLIC_MQTT_BROKER_PORT", default=MQTT_BROKER_PORT)
 
 # Gateway Claim Code (HMAC secret for deriving claim codes from serial numbers)
 GATEWAY_CLAIM_SECRET = env("GATEWAY_CLAIM_SECRET", default="change-me-in-production")
+GATEWAY_ACTIVATION_ENCRYPTION_KEY = env("GATEWAY_ACTIVATION_ENCRYPTION_KEY", default="")
+GATEWAY_ACTIVATION_TTL_HOURS = env.int("GATEWAY_ACTIVATION_TTL_HOURS", default=24)
 
 # Hardware health and telemetry freshness thresholds.
 DEVICE_OFFLINE_MIN_SECONDS = env.int("DEVICE_OFFLINE_MIN_SECONDS", default=30)
@@ -341,7 +347,7 @@ if USE_HEADLESS_URLS:
     }
 
 # needed for cross-origin CSRF
-CSRF_TRUSTED_ORIGINS = [FRONTEND_ADDRESS]
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[FRONTEND_ADDRESS])
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = (*default_headers, "x-password-reset-key", "x-email-verification-key")
 
@@ -585,6 +591,10 @@ CELERY_BEAT_SCHEDULE = {
     "check-gateway-heartbeats": {
         "task": "apps.devices.tasks.check_gateway_heartbeats",
         "schedule": 30.0,
+    },
+    "expire-and-retry-gateway-activations": {
+        "task": "apps.devices.tasks.expire_and_retry_gateway_activations",
+        "schedule": 60.0,
     },
 }
 

@@ -1,4 +1,5 @@
 import logging
+import uuid
 
 from django.conf import settings
 from django.db import models
@@ -170,6 +171,41 @@ class GatewayInventory(models.Model):
 
     def __str__(self):
         return f"{self.serial_number} ({self.status})"
+
+
+class GatewayActivation(BaseTeamModel):
+    """Durable activation attempt for first-time operational MQTT credentials."""
+
+    STATUS_CHOICES = (
+        ("pending", _("Pending")),
+        ("delivered", _("Delivered")),
+        ("acknowledged", _("Acknowledged")),
+        ("expired", _("Expired")),
+        ("retried", _("Retried")),
+        ("failed", _("Failed")),
+    )
+    UNRESOLVED_STATUSES = ("pending", "delivered", "retried", "failed")
+
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="activations")
+    request_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    attempt_count = models.PositiveIntegerField(default=0)
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField()
+    encrypted_mqtt_password = models.TextField(blank=True)
+    last_error = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["gateway", "status"]),
+            models.Index(fields=["expires_at", "status"]),
+        ]
+
+    def __str__(self):
+        return f"Activation {self.request_id} -> {self.gateway.serial_number} ({self.status})"
 
 
 class DeviceTemplate(models.Model):

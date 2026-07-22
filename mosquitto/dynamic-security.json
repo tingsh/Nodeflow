@@ -84,29 +84,13 @@
     },
     {
       "roleName": "gateway",
-      "textDescription": "Shared role for all edge gateways — grants access to shared inbound topics",
-      "acls": [
-        {
-          "acltype": "publishClientSend",
-          "topic": "v1/gateway/telemetry",
-          "allow": true
-        },
-        {
-          "acltype": "publishClientSend",
-          "topic": "v1/gateway/logs",
-          "allow": true
-        },
-        {
-          "acltype": "publishClientSend",
-          "topic": "v1/gateway/attributes",
-          "allow": true
-        },
-        {
-          "acltype": "publishClientSend",
-          "topic": "v1/gateway/rpc/response",
-          "allow": true
-        }
-      ]
+      "textDescription": "Shared baseline role for all edge gateways. Per-gateway roles grant scoped publish access.",
+      "acls": []
+    },
+    {
+      "roleName": "bootstrap-gateway-template",
+      "textDescription": "Documentation role only. Hub creates per-gateway bootstrap-gw-{serial} roles scoped to hello/activate topics during claim.",
+      "acls": []
     }
   ],
   "defaultACLAccess": {

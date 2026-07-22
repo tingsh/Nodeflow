@@ -8,6 +8,20 @@ from django.utils import timezone
 
 logger = logging.getLogger("novena_hub")
 
+SCOPED_INBOUND_TOPICS = {
+    "telemetry": "v1/gateway/+/telemetry",
+    "logs": "v1/gateway/+/logs",
+    "attributes": "v1/gateway/+/attributes",
+    "rpc_response": "v1/gateway/+/rpc/response",
+    "bootstrap_hello": "v1/gateway/+/bootstrap/hello",
+}
+LEGACY_SHARED_TOPICS = {
+    "v1/gateway/telemetry": "telemetry",
+    "v1/gateway/logs": "logs",
+    "v1/gateway/attributes": "attributes",
+    "v1/gateway/rpc/response": "rpc_response",
+}
+
 
 class Command(BaseCommand):
     help = "Starts the MQTT consumer service to ingest device telemetry and edge gateway messages"
@@ -41,14 +55,13 @@ class Command(BaseCommand):
     def on_connect(self, client, userdata, flags, reason_code, properties):
         if reason_code == 0:
             self.stdout.write(self.style.SUCCESS("Connected to MQTT Broker successfully."))
-            # Subscribe to all inbound topics
-            client.subscribe("v1/gateway/telemetry")
-            client.subscribe("v1/gateway/logs")
-            client.subscribe("v1/gateway/attributes")
-            client.subscribe("v1/gateway/rpc/response")
-            client.subscribe("v1/gateway/+/bootstrap/hello")
+            for topic in SCOPED_INBOUND_TOPICS.values():
+                client.subscribe(topic)
+            if getattr(settings, "MQTT_ACCEPT_LEGACY_SHARED_INBOUND", False):
+                for topic in LEGACY_SHARED_TOPICS:
+                    client.subscribe(topic)
             self.stdout.write(
-                self.style.NOTICE("Subscribed to: telemetry, logs, attributes, rpc/response, bootstrap")
+                self.style.NOTICE("Subscribed to scoped gateway inbound topics")
             )
         else:
             self.stdout.write(self.style.ERROR(f"Connection failed with code {reason_code}"))
@@ -56,31 +69,93 @@ class Command(BaseCommand):
     def on_message(self, client, userdata, msg):
         try:
             payload = json.loads(msg.payload.decode())
+            message_type, gateway = self._resolve_inbound_gateway(msg.topic, payload)
+            if not message_type or not gateway:
+                return
 
-            if msg.topic == "v1/gateway/telemetry":
-                self._handle_telemetry(payload)
-            elif msg.topic == "v1/gateway/logs":
-                self._handle_logs(payload)
-            elif msg.topic == "v1/gateway/attributes":
-                self._handle_attributes(payload)
-            elif msg.topic == "v1/gateway/rpc/response":
-                self._handle_rpc_response(payload)
-            elif msg.topic.endswith("/bootstrap/hello"):
-                self._handle_bootstrap_hello(payload)
+            if message_type == "telemetry":
+                self._handle_telemetry(payload, gateway=gateway, topic=msg.topic)
+            elif message_type == "logs":
+                self._handle_logs(payload, gateway=gateway)
+            elif message_type == "attributes":
+                self._handle_attributes(payload, gateway=gateway)
+            elif message_type == "rpc_response":
+                self._handle_rpc_response(payload, gateway=gateway)
+            elif message_type == "bootstrap_hello":
+                self._handle_bootstrap_hello(payload, gateway=gateway)
             else:
                 logger.warning("Unknown MQTT topic: %s", msg.topic)
         except Exception as e:
             logger.error("Error processing MQTT message on %s: %s", msg.topic, e, exc_info=True)
 
+    def _resolve_inbound_gateway(self, topic, payload):
+        from apps.devices.models import Gateway
+
+        parts = topic.split("/")
+        message_type = None
+        topic_serial = None
+
+        if len(parts) >= 4 and parts[:2] == ["v1", "gateway"]:
+            topic_serial = parts[2]
+            suffix = "/".join(parts[3:])
+            message_type = {
+                "telemetry": "telemetry",
+                "logs": "logs",
+                "attributes": "attributes",
+                "rpc/response": "rpc_response",
+                "bootstrap/hello": "bootstrap_hello",
+            }.get(suffix)
+
+        if not message_type and topic in LEGACY_SHARED_TOPICS:
+            if not getattr(settings, "MQTT_ACCEPT_LEGACY_SHARED_INBOUND", False):
+                logger.warning("Rejected legacy shared MQTT topic while bridge is disabled: %s", topic)
+                return None, None
+            message_type = LEGACY_SHARED_TOPICS[topic]
+            topic_serial = payload.get("serial_number")
+            logger.warning(
+                "Accepted legacy shared MQTT topic %s using payload serial %s. "
+                "Enable only during Gateway migration.",
+                topic,
+                topic_serial or "missing",
+            )
+
+        if not message_type:
+            logger.warning("Unknown MQTT topic: %s", topic)
+            return None, None
+
+        payload_serial = payload.get("serial_number")
+        if topic_serial and payload_serial and payload_serial != topic_serial:
+            logger.warning(
+                "Rejected MQTT %s from topic serial %s with payload serial %s.",
+                message_type,
+                topic_serial,
+                payload_serial,
+            )
+            return None, None
+
+        if not topic_serial:
+            logger.warning("Rejected MQTT %s on %s because no gateway serial was identified.", message_type, topic)
+            return None, None
+
+        gateway = Gateway.objects.filter(serial_number=topic_serial).first()
+        if not gateway:
+            logger.warning("Rejected MQTT %s for unknown gateway serial %s.", message_type, topic_serial)
+            return None, None
+
+        return message_type, gateway
+
     # ── Telemetry (Ingestion queueing and WebSockets broadcast) ──────────
 
-    def _handle_telemetry(self, payload):
+    def _handle_telemetry(self, payload, gateway=None, topic="v1/gateway/telemetry"):
         """Queue telemetry data and broadcast it to the browser live stream."""
         cloud_received_at = timezone.now()
+        trusted_gateway_sn = gateway.serial_number if gateway else None
 
         try:
             queued_payload = dict(payload)
             queued_payload['_cloud_received_at'] = cloud_received_at.isoformat()
+            if trusted_gateway_sn:
+                queued_payload['_topic_gateway_sn'] = trusted_gateway_sn
             self.redis_client.rpush('telemetry_ingest_queue', json.dumps(queued_payload))
         except Exception as e:
             logger.error('Failed to queue telemetry raw payload to Redis: %s', e)
@@ -93,10 +168,10 @@ class Command(BaseCommand):
             from apps.telemetry.mqtt_parser import parse_mqtt_payload
             from apps.utils.timezones import format_site_datetime, site_timezone_metadata
 
-            events = parse_mqtt_payload('v1/gateway/telemetry', payload)
+            events = parse_mqtt_payload(topic, payload, trusted_gateway_sn=trusted_gateway_sn)
             channel_layer = get_channel_layer()
 
-            gateway_cache = {}
+            gateway_cache = {gateway.serial_number: gateway} if gateway else {}
             device_cache = {}
             device_by_id = {}
 
@@ -165,24 +240,28 @@ class Command(BaseCommand):
 
     # ── Remote Logging ──────────────────────────────────────────────────
 
-    def _handle_logs(self, payload):
+    def _handle_logs(self, payload, gateway=None):
         """Queue log entries from a gateway to Redis."""
         try:
-            self.redis_client.rpush("logs_ingest_queue", json.dumps(payload))
+            queued_payload = dict(payload)
+            if gateway:
+                queued_payload["_topic_gateway_sn"] = gateway.serial_number
+            self.redis_client.rpush("logs_ingest_queue", json.dumps(queued_payload))
         except Exception as e:
             logger.error(f"Failed to queue logs raw payload to Redis: {e}")
 
 
     # ── Attribute Sync / Heartbeat ──────────────────────────────────────
 
-    def _handle_bootstrap_hello(self, payload):
+    def _handle_bootstrap_hello(self, payload, gateway=None):
         """Mark a released/unclaimed gateway as visible in bootstrap mode."""
         from apps.devices.models import Gateway
+        from apps.devices.activation import retry_activation_for_gateway
 
-        gateway_sn = payload.get("serial_number")
+        gateway_sn = gateway.serial_number if gateway else payload.get("serial_number")
         if not gateway_sn:
             return
-        gateway = Gateway.objects.filter(serial_number=gateway_sn).first()
+        gateway = gateway or Gateway.objects.filter(serial_number=gateway_sn).first()
         if not gateway:
             logger.info("Bootstrap hello from unknown gateway %s", gateway_sn)
             return
@@ -192,20 +271,22 @@ class Command(BaseCommand):
             gateway.save(update_fields=["last_bootstrap_seen_at", "lifecycle_status"])
         else:
             gateway.save(update_fields=["last_bootstrap_seen_at"])
+        retry_activation_for_gateway(gateway)
 
-    def _handle_attributes(self, payload):
+    def _handle_attributes(self, payload, gateway=None):
         """Update gateway status from heartbeat attributes or LWT."""
         from apps.devices.models import Gateway, GatewayConfig
 
-        gateway_sn = payload.get("serial_number")
+        gateway_sn = gateway.serial_number if gateway else payload.get("serial_number")
         if not gateway_sn:
             return
 
-        try:
-            gateway = Gateway.objects.get(serial_number=gateway_sn)
-        except Gateway.DoesNotExist:
-            logger.warning("Gateway %s not found for attribute sync", gateway_sn)
-            return
+        if not gateway:
+            try:
+                gateway = Gateway.objects.get(serial_number=gateway_sn)
+            except Gateway.DoesNotExist:
+                logger.warning("Gateway %s not found for attribute sync", gateway_sn)
+                return
 
         attrs = payload.get("attributes", {})
 
@@ -272,7 +353,7 @@ class Command(BaseCommand):
         config_request_id = attrs.get("config_update_request_id")
         if config_request_id:
             try:
-                config_record = GatewayConfig.objects.get(request_id=config_request_id)
+                config_record = GatewayConfig.objects.get(request_id=config_request_id, gateway=gateway)
                 config_status = attrs.get("config_update_status", "unknown")
                 config_record.status = config_status
                 config_record.error_message = attrs.get("config_update_error", "") or ""
@@ -297,14 +378,34 @@ class Command(BaseCommand):
 
         credential_status = attrs.get("credential_update_status")
         if credential_status:
-            gateway.credential_rotation_status = credential_status
-            gateway.save(update_fields=["credential_rotation_status"])
+            credential_action = attrs.get("credential_update_action")
+            credential_request_id = attrs.get("credential_update_request_id")
+            if credential_action == "activate" and credential_request_id:
+                from apps.devices.activation import acknowledge_gateway_activation
+
+                activation = acknowledge_gateway_activation(
+                    gateway,
+                    credential_request_id,
+                    credential_status,
+                    attrs.get("credential_update_error", "") or "",
+                )
+                if activation and credential_status == "success":
+                    gateway.credential_rotation_status = "success"
+                    if gateway.lifecycle_status in ("claimed", "bootstrap_seen", "activating"):
+                        gateway.lifecycle_status = "online"
+                    gateway.save(update_fields=["credential_rotation_status", "lifecycle_status"])
+                elif activation:
+                    gateway.credential_rotation_status = credential_status
+                    gateway.save(update_fields=["credential_rotation_status"])
+            else:
+                gateway.credential_rotation_status = credential_status
+                gateway.save(update_fields=["credential_rotation_status"])
 
         logger.debug("Updated attributes for gateway %s (status=%s)", gateway_sn, attrs.get("status"))
 
     # ── RPC Response ────────────────────────────────────────────────────
 
-    def _handle_rpc_response(self, payload):
+    def _handle_rpc_response(self, payload, gateway=None):
         """Process RPC command response from a gateway."""
         from apps.devices.models import RpcCommand
 
@@ -313,7 +414,10 @@ class Command(BaseCommand):
             return
 
         try:
-            rpc_record = RpcCommand.objects.get(request_id=request_id)
+            if gateway:
+                rpc_record = RpcCommand.objects.get(request_id=request_id, gateway=gateway)
+            else:
+                rpc_record = RpcCommand.objects.get(request_id=request_id)
             rpc_record.status = payload.get("status", "unknown")
             rpc_record.result = payload.get("result")
             rpc_record.error_message = payload.get("error", "") or ""
