@@ -46,23 +46,20 @@ class AlertRule(BaseTeamModel):
     )
     notify_webhook = models.URLField(blank=True)
     create_maintenance_ticket = models.BooleanField(
-        default=False,
-        help_text=_("Automatically create a maintenance ticket when this alert triggers")
+        default=False, help_text=_("Automatically create a maintenance ticket when this alert triggers")
     )
     maintenance_template = models.ForeignKey(
         "maintenance.TicketTemplate",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        help_text=_("Optional checklist template to attach to the generated ticket")
+        help_text=_("Optional checklist template to attach to the generated ticket"),
     )
     cooldown_minutes = models.IntegerField(
         default=15, help_text=_("Minutes to wait before re-triggering notifications for the same alert")
     )
     recipients = models.ManyToManyField(
-        settings.AUTH_USER_MODEL,
-        blank=True,
-        help_text=_("Specific team members to notify.")
+        settings.AUTH_USER_MODEL, blank=True, help_text=_("Specific team members to notify.")
     )
 
     def __str__(self):
@@ -93,6 +90,7 @@ class Alert(BaseTeamModel):
     @property
     def ticket(self):
         from apps.maintenance.models import MaintenanceTicket
+
         return MaintenanceTicket.objects.filter(alert_reference=str(self.id), team=self.team).first()
 
     @property

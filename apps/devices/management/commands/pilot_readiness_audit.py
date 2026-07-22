@@ -21,7 +21,6 @@ from apps.telemetry.models import GatewayLog, TelemetryData
 from apps.telemetry.mqtt_parser import parse_mqtt_payload
 from apps.users.models import CustomUser
 
-
 AUDIT_USER_EMAIL = "pilot.audit@novena.local"
 AUDIT_USER_PASSWORD = "PilotReady123!"
 AUDIT_BATCH = "pilot-readiness-2026-07"
@@ -92,7 +91,13 @@ TEMPLATE_SPECS = {
             },
         },
         "alert_presets": [
-            {"name": "High Temperature", "key": "temperature", "condition": "gt", "threshold": 4, "severity": "critical"}
+            {
+                "name": "High Temperature",
+                "key": "temperature",
+                "condition": "gt",
+                "threshold": 4,
+                "severity": "critical",
+            }
         ],
     },
     "power_meter": {
@@ -140,7 +145,13 @@ TEMPLATE_SPECS = {
                 "functionCode": 3,
                 "dashboard_role": "trend",
             },
-            "motor_speed": {"label": "Motor Speed", "unit": "rpm", "type": "uint16", "address": 4002, "functionCode": 3},
+            "motor_speed": {
+                "label": "Motor Speed",
+                "unit": "rpm",
+                "type": "uint16",
+                "address": 4002,
+                "functionCode": 3,
+            },
             "run_status": {"label": "Run Status", "type": "bool", "address": 20, "functionCode": 1},
             "fault": {"label": "Fault", "type": "bool", "address": 21, "functionCode": 1},
         },
@@ -155,13 +166,25 @@ TEMPLATE_SPECS = {
         "is_verified": True,
         "discovery_hints": {"signature_keywords": ["chiller", "ahu", "hvac"]},
         "register_map": {
-            "temperature": {"label": "Supply Temperature", "unit": "degC", "type": "float32", "address": 100, "functionCode": 3},
+            "temperature": {
+                "label": "Supply Temperature",
+                "unit": "degC",
+                "type": "float32",
+                "address": 100,
+                "functionCode": 3,
+            },
             "compressor_status": {"label": "Compressor", "type": "bool", "address": 101, "functionCode": 1},
             "active_power": {"label": "Power Draw", "unit": "W", "type": "float32", "address": 102, "functionCode": 3},
             "run_hours": {"label": "Run Hours", "unit": "h", "type": "float32", "address": 103, "functionCode": 3},
         },
         "alert_presets": [
-            {"name": "Chiller Temperature Drift", "key": "temperature", "condition": "gt", "threshold": 9, "severity": "warning"}
+            {
+                "name": "Chiller Temperature Drift",
+                "key": "temperature",
+                "condition": "gt",
+                "threshold": 9,
+                "severity": "warning",
+            }
         ],
     },
 }
@@ -178,7 +201,12 @@ SCENARIOS = (
         sim_serial="NOV-AUDIT-COLD-SIM",
         replay_serial="NOV-AUDIT-COLD-HW",
         device_specs=(
-            {"name": "Cold Room Temperature Sensor", "template": "cold_room_sensor", "port": "RS485-1", "signature": "Novena cold room sensor"},
+            {
+                "name": "Cold Room Temperature Sensor",
+                "template": "cold_room_sensor",
+                "port": "RS485-1",
+                "signature": "Novena cold room sensor",
+            },
         ),
         alert_key="temperature",
         alert_threshold=4.0,
@@ -196,14 +224,31 @@ SCENARIOS = (
         sim_serial="NOV-AUDIT-FACTORY-SIM",
         replay_serial="NOV-AUDIT-FACTORY-HW",
         device_specs=(
-            {"name": "Main Incomer Power Meter", "template": "power_meter", "port": "10.0.0.20:502", "signature": "Novena PM-100 power meter"},
+            {
+                "name": "Main Incomer Power Meter",
+                "template": "power_meter",
+                "port": "10.0.0.20:502",
+                "signature": "Novena PM-100 power meter",
+            },
             {"name": "Packaging Line VFD", "template": "vfd", "port": "RS485-2", "signature": "Novena VFD drive"},
         ),
         alert_key="active_power",
         alert_threshold=1200.0,
         normal_payload={"voltage": 231.5, "current": 3.2, "active_power": 740.0, "frequency": 50.0, "energy": 43012.2},
-        incident_payload={"voltage": 229.8, "current": 8.4, "active_power": 1940.0, "frequency": 49.9, "energy": 43015.8},
-        recovery_payload={"voltage": 232.0, "current": 3.8, "active_power": 820.0, "frequency": 50.0, "energy": 43018.1},
+        incident_payload={
+            "voltage": 229.8,
+            "current": 8.4,
+            "active_power": 1940.0,
+            "frequency": 49.9,
+            "energy": 43015.8,
+        },
+        recovery_payload={
+            "voltage": 232.0,
+            "current": 3.8,
+            "active_power": 820.0,
+            "frequency": 50.0,
+            "energy": 43018.1,
+        },
     ),
     Scenario(
         key="facilities",
@@ -215,8 +260,18 @@ SCENARIOS = (
         sim_serial="NOV-AUDIT-FACILITY-SIM",
         replay_serial="NOV-AUDIT-FACILITY-HW",
         device_specs=(
-            {"name": "Level 3 Chiller Monitor", "template": "chiller", "port": "BACNET-1", "signature": "Novena chiller monitor"},
-            {"name": "Tenant Power Meter", "template": "power_meter", "port": "10.0.1.20:502", "signature": "Novena PM-100 power meter"},
+            {
+                "name": "Level 3 Chiller Monitor",
+                "template": "chiller",
+                "port": "BACNET-1",
+                "signature": "Novena chiller monitor",
+            },
+            {
+                "name": "Tenant Power Meter",
+                "template": "power_meter",
+                "port": "10.0.1.20:502",
+                "signature": "Novena PM-100 power meter",
+            },
         ),
         alert_key="temperature",
         alert_threshold=9.0,
@@ -242,7 +297,10 @@ class Command(BaseCommand):
         parser.add_argument(
             "--publish-mqtt",
             action="store_true",
-            help="Also publish scenario messages to the configured MQTT broker. Direct DB ingestion still runs for repeatability.",
+            help=(
+                "Also publish scenario messages to the configured MQTT broker. "
+                "Direct DB ingestion still runs for repeatability."
+            ),
         )
         parser.add_argument(
             "--minutes",
@@ -291,13 +349,21 @@ class Command(BaseCommand):
             for serial in (scenario.sim_serial, scenario.replay_serial):
                 GatewayInventory.objects.update_or_create(
                     serial_number=serial,
-                    defaults={"status": "unclaimed", "batch": AUDIT_BATCH, "notes": f"{scenario.persona} audit gateway"},
+                    defaults={
+                        "status": "unclaimed",
+                        "batch": AUDIT_BATCH,
+                        "notes": f"{scenario.persona} audit gateway",
+                    },
                 )
             self.stdout.write(self.style.HTTP_INFO(f"{scenario.persona}:"))
             self.stdout.write(f"  Team URL: /a/{team.slug}/")
             self.stdout.write(f"  Onboarding URL: /a/{team.slug}/onboarding/")
-            self.stdout.write(f"  Simulation serial: {scenario.sim_serial} claim {compute_claim_code(scenario.sim_serial)}")
-            self.stdout.write(f"  Hardware replay serial: {scenario.replay_serial} claim {compute_claim_code(scenario.replay_serial)}")
+            self.stdout.write(
+                f"  Simulation serial: {scenario.sim_serial} claim {compute_claim_code(scenario.sim_serial)}"
+            )
+            self.stdout.write(
+                f"  Hardware replay serial: {scenario.replay_serial} claim {compute_claim_code(scenario.replay_serial)}"
+            )
 
         self.stdout.write("")
         self.stdout.write(f"Prepared {len(SCENARIOS)} personas and {len(templates)} templates.")
@@ -318,14 +384,20 @@ class Command(BaseCommand):
             self._ensure_alert_rule(team, scenario, devices[0])
             self._ensure_facilities_second_site(team, user)
 
-            self._ingest_device_payload(gateway, devices[0], scenario.normal_payload, now - timezone.timedelta(minutes=3), publish_mqtt)
-            self._ingest_device_payload(gateway, devices[0], scenario.incident_payload, now - timezone.timedelta(minutes=1), publish_mqtt)
+            self._ingest_device_payload(
+                gateway, devices[0], scenario.normal_payload, now - timezone.timedelta(minutes=3), publish_mqtt
+            )
+            self._ingest_device_payload(
+                gateway, devices[0], scenario.incident_payload, now - timezone.timedelta(minutes=1), publish_mqtt
+            )
             if scenario.recovery_payload:
                 self._ingest_device_payload(gateway, devices[0], scenario.recovery_payload, now, publish_mqtt)
 
             for extra_device in devices[1:]:
                 payload = self._secondary_payload(extra_device)
-                self._ingest_device_payload(gateway, extra_device, payload, now - timezone.timedelta(seconds=30), publish_mqtt)
+                self._ingest_device_payload(
+                    gateway, extra_device, payload, now - timezone.timedelta(seconds=30), publish_mqtt
+                )
 
             self._ensure_preventive_schedule(team, user, scenario, devices[0])
             self._ensure_shared_link(team, user, scenario)
@@ -351,7 +423,9 @@ class Command(BaseCommand):
             self.stdout.write(self.style.HTTP_INFO(f"{scenario.persona} ({team.slug})"))
             self.stdout.write(f"  URL: /a/{team.slug}/")
             self.stdout.write(f"  Sites {sites} | Gateways {gateways} | Devices {devices} | Telemetry points {points}")
-            self.stdout.write(f"  Alerts {alerts} ({active_alerts} active) | Tickets {tickets} | Shared links {shared_links}")
+            self.stdout.write(
+                f"  Alerts {alerts} ({active_alerts} active) | Tickets {tickets} | Shared links {shared_links}"
+            )
             for gateway in Gateway.objects.filter(team=team).order_by("name"):
                 self.stdout.write(f"  Gateway {gateway.serial_number}: {gateway.freshness.display}")
             for device in Device.objects.filter(team=team).order_by("name"):
@@ -460,7 +534,12 @@ class Command(BaseCommand):
     def _ensure_gateway(self, team, site, scenario):
         GatewayInventory.objects.update_or_create(
             serial_number=scenario.sim_serial,
-            defaults={"status": "claimed", "batch": AUDIT_BATCH, "claimed_by_team": team, "notes": "Simulation gateway"},
+            defaults={
+                "status": "claimed",
+                "batch": AUDIT_BATCH,
+                "claimed_by_team": team,
+                "notes": "Simulation gateway",
+            },
         )
         gateway, _ = Gateway.objects.update_or_create(
             serial_number=scenario.sim_serial,

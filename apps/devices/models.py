@@ -254,8 +254,11 @@ class DeviceTemplate(models.Model):
     source_url = models.URLField(blank=True, max_length=500, help_text=_("URL where the register map was found"))
     ai_confidence = models.FloatField(null=True, blank=True, help_text=_("AI confidence score 0.0-1.0"))
     created_by_team = models.ForeignKey(
-        "teams.Team", null=True, blank=True, on_delete=models.SET_NULL,
-        help_text=_("Team that originally created this template")
+        "teams.Team",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        help_text=_("Team that originally created this template"),
     )
     usage_count = models.PositiveIntegerField(default=0, help_text=_("Number of devices using this template"))
     created_at = models.DateTimeField(auto_now_add=True, null=True)
@@ -441,6 +444,7 @@ def auto_generate_dashboard_on_template_match(sender, instance, **kwargs):
     if instance.template:
         try:
             from apps.dashboard.services import generate_default_dashboard
+
             generate_default_dashboard(instance)
         except Exception as e:
             logger = logging.getLogger("novena_hub")

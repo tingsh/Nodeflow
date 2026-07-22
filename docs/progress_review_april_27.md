@@ -1,5 +1,7 @@
 # Novena — CTO Progress Review & Unicorn Assessment
 
+> **Historical review:** This document records the 27 April 2026 state. The current cross-repository assessment is [CTO Product Progress Review — 18 July 2026](cto_product_progress_review_2026-07-18.md).
+
 > **Date:** April 27, 2026  
 > **Reviewer:** CTO / Co-founder  
 > **Scope:** Full audit of both `Novena-Hub` and `Novena-Gateway` codebases  

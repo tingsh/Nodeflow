@@ -5,6 +5,7 @@ from django.db import models
 from django.utils import timezone
 
 from apps.telemetry.models import TelemetryData
+
 from .models import Alert, AlertRule
 
 logger = logging.getLogger("novena_hub")
@@ -41,12 +42,8 @@ def evaluate_condition(rule, device, key, value):
 
     # Check historical values in duration window
     window_start = timezone.now() - timedelta(seconds=rule.duration_seconds)
-    points = TelemetryData.objects.filter(
-        device=device,
-        key=key,
-        timestamp__gte=window_start
-    )
-    
+    points = TelemetryData.objects.filter(device=device, key=key, timestamp__gte=window_start)
+
     oldest_in_window = points.order_by("timestamp").first()
     if not oldest_in_window:
         return False
@@ -54,23 +51,19 @@ def evaluate_condition(rule, device, key, value):
     # If the oldest telemetry point in the window is newer than window_start + tolerance,
     # we must check if there is an out-of-bounds point immediately before the window.
     if oldest_in_window.timestamp > window_start + timedelta(seconds=2):
-        prev_point = TelemetryData.objects.filter(
-            device=device,
-            key=key,
-            timestamp__lt=window_start
-        ).order_by("-timestamp").first()
-        
+        prev_point = (
+            TelemetryData.objects.filter(device=device, key=key, timestamp__lt=window_start)
+            .order_by("-timestamp")
+            .first()
+        )
+
         if not prev_point:
             return False
-            
+
         if prev_point.value_numeric is None or not evaluate_condition_value(rule, prev_point.value_numeric):
             return False
 
-    for pt in points:
-        if pt.value_numeric is None or not evaluate_condition_value(rule, pt.value_numeric):
-            return False
-
-    return True
+    return all(pt.value_numeric is not None and evaluate_condition_value(rule, pt.value_numeric) for pt in points)
 
 
 def evaluate_condition_value(rule, value):
@@ -96,10 +89,7 @@ def trigger_alert(rule, device, value):
 
     # Cooldown Hardening: include both "active" and "acknowledged" alerts
     recent_alert = Alert.objects.filter(
-        rule=rule,
-        device=device,
-        status__in=["active", "acknowledged"],
-        triggered_at__gte=cooldown_limit
+        rule=rule, device=device, status__in=["active", "acknowledged"], triggered_at__gte=cooldown_limit
     ).exists()
 
     if not recent_alert:
@@ -119,11 +109,7 @@ def trigger_alert(rule, device, value):
 
 def resolve_alert(rule, device, value):
     """Marks any active or acknowledged alerts for this rule as resolved."""
-    active_alerts = Alert.objects.filter(
-        rule=rule,
-        device=device,
-        status__in=["active", "acknowledged"]
-    )
+    active_alerts = Alert.objects.filter(rule=rule, device=device, status__in=["active", "acknowledged"])
     for alert in active_alerts:
         alert.status = "resolved"
         alert.resolved_at = timezone.now()

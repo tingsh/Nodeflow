@@ -28,6 +28,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         import redis
+
         self.redis_client = redis.Redis.from_url(settings.REDIS_URL)
 
         client = mqtt.Client(
@@ -60,9 +61,7 @@ class Command(BaseCommand):
             if getattr(settings, "MQTT_ACCEPT_LEGACY_SHARED_INBOUND", False):
                 for topic in LEGACY_SHARED_TOPICS:
                     client.subscribe(topic)
-            self.stdout.write(
-                self.style.NOTICE("Subscribed to scoped gateway inbound topics")
-            )
+            self.stdout.write(self.style.NOTICE("Subscribed to scoped gateway inbound topics"))
         else:
             self.stdout.write(self.style.ERROR(f"Connection failed with code {reason_code}"))
 
@@ -113,8 +112,7 @@ class Command(BaseCommand):
             message_type = LEGACY_SHARED_TOPICS[topic]
             topic_serial = payload.get("serial_number")
             logger.warning(
-                "Accepted legacy shared MQTT topic %s using payload serial %s. "
-                "Enable only during Gateway migration.",
+                "Accepted legacy shared MQTT topic %s using payload serial %s. Enable only during Gateway migration.",
                 topic,
                 topic_serial or "missing",
             )
@@ -153,12 +151,12 @@ class Command(BaseCommand):
 
         try:
             queued_payload = dict(payload)
-            queued_payload['_cloud_received_at'] = cloud_received_at.isoformat()
+            queued_payload["_cloud_received_at"] = cloud_received_at.isoformat()
             if trusted_gateway_sn:
-                queued_payload['_topic_gateway_sn'] = trusted_gateway_sn
-            self.redis_client.rpush('telemetry_ingest_queue', json.dumps(queued_payload))
+                queued_payload["_topic_gateway_sn"] = trusted_gateway_sn
+            self.redis_client.rpush("telemetry_ingest_queue", json.dumps(queued_payload))
         except Exception as e:
-            logger.error('Failed to queue telemetry raw payload to Redis: %s', e)
+            logger.error("Failed to queue telemetry raw payload to Redis: %s", e)
 
         try:
             from asgiref.sync import async_to_sync
@@ -176,14 +174,14 @@ class Command(BaseCommand):
             device_by_id = {}
 
             for event in events:
-                gateway_sn = event.get('gateway_sn')
-                device_name = event.get('device_name')
-                device_id = event.get('device_id')
-                values = dict(event.get('values', {}))
-                timestamp = event.get('timestamp') or cloud_received_at
+                gateway_sn = event.get("gateway_sn")
+                device_name = event.get("device_name")
+                device_id = event.get("device_id")
+                values = dict(event.get("values", {}))
+                timestamp = event.get("timestamp") or cloud_received_at
 
-                if device_name and 'device_name' not in values:
-                    values['device_name'] = device_name
+                if device_name and "device_name" not in values:
+                    values["device_name"] = device_name
 
                 if not gateway_sn:
                     continue
@@ -203,7 +201,7 @@ class Command(BaseCommand):
                             device_by_id[d_id] = Device.objects.filter(id=d_id, gateway=gateway).first()
                         target_device = device_by_id[d_id]
                     except (ValueError, TypeError):
-                        logger.warning('Invalid telemetry device_id %s from gateway %s.', device_id, gateway_sn)
+                        logger.warning("Invalid telemetry device_id %s from gateway %s.", device_id, gateway_sn)
 
                 if not target_device and device_name:
                     cache_key = (gateway.id, device_name)
@@ -215,8 +213,8 @@ class Command(BaseCommand):
                     target_device = Device.objects.filter(gateway=gateway).first()
                     if target_device:
                         logger.warning(
-                            'Using legacy first-device telemetry fallback for gateway %s. '
-                            'Payload device_id=%s device_name=%s resolved_device=%s.',
+                            "Using legacy first-device telemetry fallback for gateway %s. "
+                            "Payload device_id=%s device_name=%s resolved_device=%s.",
                             gateway_sn,
                             device_id,
                             device_name,
@@ -226,17 +224,17 @@ class Command(BaseCommand):
                 if target_device:
                     timezone_data = site_timezone_metadata(target_device.site)
                     async_to_sync(channel_layer.group_send)(
-                        f'device_{target_device.id}',
+                        f"device_{target_device.id}",
                         {
-                            'type': 'telemetry_message',
-                            'timestamp': timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp),
-                            'timestamp_local': format_site_datetime(timestamp, target_device.site),
+                            "type": "telemetry_message",
+                            "timestamp": timestamp.isoformat() if hasattr(timestamp, "isoformat") else str(timestamp),
+                            "timestamp_local": format_site_datetime(timestamp, target_device.site),
                             **timezone_data,
-                            'values': values,
+                            "values": values,
                         },
                     )
         except Exception as e:
-            logger.error('Error broadcasting WebSocket telemetry: %s', e, exc_info=True)
+            logger.error("Error broadcasting WebSocket telemetry: %s", e, exc_info=True)
 
     # ── Remote Logging ──────────────────────────────────────────────────
 
@@ -250,13 +248,12 @@ class Command(BaseCommand):
         except Exception as e:
             logger.error(f"Failed to queue logs raw payload to Redis: {e}")
 
-
     # ── Attribute Sync / Heartbeat ──────────────────────────────────────
 
     def _handle_bootstrap_hello(self, payload, gateway=None):
         """Mark a released/unclaimed gateway as visible in bootstrap mode."""
-        from apps.devices.models import Gateway
         from apps.devices.activation import retry_activation_for_gateway
+        from apps.devices.models import Gateway
 
         gateway_sn = gateway.serial_number if gateway else payload.get("serial_number")
         if not gateway_sn:
@@ -360,19 +357,19 @@ class Command(BaseCommand):
                 config_record.rollback_performed = bool(attrs.get("rollback_performed", False))
                 config_record.connector_results = attrs.get("connector_results", []) or []
                 config_record.acknowledged_at = timezone.now()
-                config_record.save(update_fields=[
-                    "status",
-                    "error_message",
-                    "rollback_performed",
-                    "connector_results",
-                    "acknowledged_at",
-                ])
+                config_record.save(
+                    update_fields=[
+                        "status",
+                        "error_message",
+                        "rollback_performed",
+                        "connector_results",
+                        "acknowledged_at",
+                    ]
+                )
                 if config_status == "success":
                     gateway.lifecycle_status = "active"
                     gateway.save(update_fields=["lifecycle_status"])
-                logger.info(
-                    "Config update %s acknowledged: %s", config_request_id, config_record.status
-                )
+                logger.info("Config update %s acknowledged: %s", config_request_id, config_record.status)
             except GatewayConfig.DoesNotExist:
                 pass
 

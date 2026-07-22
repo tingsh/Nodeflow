@@ -50,11 +50,11 @@ class DeviceCommandTest(TestCase):
         # Verify MQTT call
         self.assertTrue(mock_publish_rpc.called)
         args, kwargs = mock_publish_rpc.call_args
-        
+
         # Check method argument
         method = kwargs.get("method") if "method" in kwargs else args[1]
         self.assertEqual(method, "write_device")
-        
+
         # Check params argument
         params = kwargs.get("params") if "params" in kwargs else args[2]
         self.assertEqual(params["device_name"], self.device.name)
@@ -126,12 +126,14 @@ class DeviceCommandTest(TestCase):
             status="sent",
         )
 
-        response_payload = json.dumps({
-            "request_id": str(rpc.request_id),
-            "method": "write_device",
-            "status": "success",
-            "result": {"operation": "write", "response": {"success": True}},
-        })
+        response_payload = json.dumps(
+            {
+                "request_id": str(rpc.request_id),
+                "method": "write_device",
+                "status": "success",
+                "result": {"operation": "write", "response": {"success": True}},
+            }
+        )
 
         process_command_response(response_payload)
 

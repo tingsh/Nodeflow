@@ -140,9 +140,11 @@ class ProductionReadinessCommandTest(TestCase):
             json.dump(unsafe_dynsec, dynsec_file)
             dynsec_file.flush()
 
-            with _patch_external_checks(), patch.object(
-                readiness, "_candidate_dynsec_files", return_value=[Path(dynsec_file.name)]
-            ), self.assertRaises(CommandError):
+            with (
+                _patch_external_checks(),
+                patch.object(readiness, "_candidate_dynsec_files", return_value=[Path(dynsec_file.name)]),
+                self.assertRaises(CommandError),
+            ):
                 call_command("production_readiness_check", stdout=io.StringIO())
 
             with patch.object(readiness, "_candidate_dynsec_files", return_value=[Path(dynsec_file.name)]):

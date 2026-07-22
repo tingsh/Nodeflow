@@ -16,6 +16,7 @@ node_modules/
 .vite/
 openapitools.json
 media/
+backups/
 docs/_build
 _dist/
 .env

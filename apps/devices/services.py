@@ -22,11 +22,15 @@ def compute_claim_code(serial_number: str) -> str:
     Derive a deterministic claim code from a gateway serial number using HMAC-SHA256.
     The claim code is printed on the gateway sticker and used as the initial MQTT password.
     """
-    return hmac.new(
-        settings.GATEWAY_CLAIM_SECRET.encode(),
-        serial_number.strip().upper().encode(),
-        hashlib.sha256,
-    ).hexdigest()[:8].upper()
+    return (
+        hmac.new(
+            settings.GATEWAY_CLAIM_SECRET.encode(),
+            serial_number.strip().upper().encode(),
+            hashlib.sha256,
+        )
+        .hexdigest()[:8]
+        .upper()
+    )
 
 
 def validate_claim_code(serial_number: str, claim_code: str) -> bool:
@@ -69,9 +73,7 @@ def validate_gateway_claim(serial_number: str, claim_code: str):
     inventory = GatewayInventory.objects.filter(serial_number__iexact=serial_number).first()
     existing_gateway = Gateway.objects.filter(serial_number=serial_number).first()
     if not inventory and not existing_gateway:
-        raise GatewayClaimError(
-            "This serial number is not in the Novena factory inventory. Please contact support."
-        )
+        raise GatewayClaimError("This serial number is not in the Novena factory inventory. Please contact support.")
     if inventory and inventory.status == "retired":
         raise GatewayClaimError("This gateway has been retired and cannot be claimed.")
     return inventory
@@ -132,11 +134,19 @@ def claim_gateway_for_team(team, site, name: str, serial_number: str, claim_code
             gateway.lifecycle_status = "activating"
         elif gateway.lifecycle_status not in ("commissioning", "active"):
             gateway.lifecycle_status = "claimed"
-        gateway.save(update_fields=[
-            "team", "site", "name", "mqtt_username", "mqtt_password",
-            "mqtt_provisioning_status", "mqtt_provisioning_error",
-            "credential_rotation_status", "lifecycle_status",
-        ])
+        gateway.save(
+            update_fields=[
+                "team",
+                "site",
+                "name",
+                "mqtt_username",
+                "mqtt_password",
+                "mqtt_provisioning_status",
+                "mqtt_provisioning_error",
+                "credential_rotation_status",
+                "lifecycle_status",
+            ]
+        )
     else:
         gateway = Gateway.objects.create(
             team=team,
@@ -222,11 +232,20 @@ def release_gateway_for_redo(gateway):
     gateway.mqtt_provisioning_error = ""
     gateway.credential_rotation_status = "not_started"
     gateway.last_seen = None
-    gateway.save(update_fields=[
-        "status", "lifecycle_status", "discovery_data", "config",
-        "connected_devices", "active_connectors", "mqtt_provisioning_status",
-        "mqtt_provisioning_error", "credential_rotation_status", "last_seen",
-    ])
+    gateway.save(
+        update_fields=[
+            "status",
+            "lifecycle_status",
+            "discovery_data",
+            "config",
+            "connected_devices",
+            "active_connectors",
+            "mqtt_provisioning_status",
+            "mqtt_provisioning_error",
+            "credential_rotation_status",
+            "last_seen",
+        ]
+    )
     return gateway
 
 
@@ -493,8 +512,7 @@ def _commissioning_candidates(gateway):
     from .models import DeviceTemplate
 
     registered_ports = {
-        str(device.port): device.name
-        for device in gateway.devices.exclude(port__isnull=True).exclude(port="")
+        str(device.port): device.name for device in gateway.devices.exclude(port__isnull=True).exclude(port="")
     }
     candidates = []
     for index, discovery in enumerate((gateway.discovery_data or {}).get("devices", [])):
@@ -506,20 +524,22 @@ def _commissioning_candidates(gateway):
         status = "ready" if matched_template else "needs_template"
         if interface and interface in registered_ports:
             status = "registered"
-        candidates.append({
-            "index": index,
-            "interface": interface,
-            "signature": discovery.get("signature") or "Unknown device",
-            "connection": discovery.get("connection") or "unknown",
-            "slave_id": discovery.get("slave_id"),
-            "baud_rate": discovery.get("baud_rate"),
-            "matched_template": matched_template,
-            "matched_template_name": discovery.get("matched_template_name")
-            or (matched_template.name if matched_template else ""),
-            "status": status,
-            "recommended": status == "ready",
-            "raw": discovery,
-        })
+        candidates.append(
+            {
+                "index": index,
+                "interface": interface,
+                "signature": discovery.get("signature") or "Unknown device",
+                "connection": discovery.get("connection") or "unknown",
+                "slave_id": discovery.get("slave_id"),
+                "baud_rate": discovery.get("baud_rate"),
+                "matched_template": matched_template,
+                "matched_template_name": discovery.get("matched_template_name")
+                or (matched_template.name if matched_template else ""),
+                "status": status,
+                "recommended": status == "ready",
+                "raw": discovery,
+            }
+        )
     return candidates
 
 

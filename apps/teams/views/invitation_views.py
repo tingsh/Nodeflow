@@ -45,6 +45,7 @@ def accept_invitation(request, invitation_id):
             else:
                 try:
                     from django.db import IntegrityError
+
                     process_invitation(invitation, request.user)
                     messages.success(request, _("You successfully joined {}").format(invitation.team.name))
                 except IntegrityError:
@@ -86,6 +87,7 @@ class SignupAfterInvite(SignupView):
 
     def get_form_class(self):
         from allauth.account.forms import SignupForm
+
         return SignupForm
 
     def get_initial(self):

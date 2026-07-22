@@ -28,6 +28,7 @@ def home(request):
             return HttpResponseRedirect(reverse("teams:manage_teams"))
     else:
         from wagtail.views import serve
+
         return serve(request, request.path)
 
 

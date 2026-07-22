@@ -166,8 +166,7 @@ def dispatch_alert_whatsapp_task(alert_id, is_resolved=False):
         )
         if sent:
             logger.info(
-                "WhatsApp alert template dispatched for alert %s (is_resolved=%s, template=%s). "
-                "Alert summary: %s",
+                "WhatsApp alert template dispatched for alert %s (is_resolved=%s, template=%s). Alert summary: %s",
                 alert.id,
                 is_resolved,
                 template_name,

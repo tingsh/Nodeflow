@@ -1,4 +1,4 @@
-﻿"""Flush local Redis ingestion queues during hardware tests.
+"""Flush local Redis ingestion queues during hardware tests.
 
 This is a local development helper for machines that are not running Celery.
 It periodically invokes the same task functions Celery Beat would run.
@@ -20,7 +20,6 @@ django.setup()
 
 from apps.telemetry.tasks import flush_logs_buffer_task, flush_telemetry_buffer_task  # noqa: E402
 
-
 if __name__ == "__main__":
     print("dev_flush_redis_queues running", flush=True)
     while True:
@@ -32,4 +31,3 @@ if __name__ == "__main__":
         except Exception as exc:
             print(f"flush error: {exc}", flush=True)
         time.sleep(5)
-

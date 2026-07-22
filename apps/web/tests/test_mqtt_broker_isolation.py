@@ -6,7 +6,6 @@ import time
 import unittest
 from pathlib import Path
 
-
 REQUIRED_TOOLS = ("mosquitto", "mosquitto_ctrl", "mosquitto_pub", "mosquitto_sub")
 PLUGIN_PATH = Path("/usr/lib/x86_64-linux-gnu/mosquitto_dynamic_security.so")
 
@@ -32,8 +31,7 @@ class MosquittoGatewayIsolationTest(unittest.TestCase):
         subprocess.run(
             ["mosquitto_ctrl", "dynsec", "init", str(self.dynsec_path), "admin", "adminpass"],
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
         )
         self.conf_path.write_text(
@@ -79,8 +77,7 @@ class MosquittoGatewayIsolationTest(unittest.TestCase):
                 "dynsec",
                 *args,
             ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
         )
         if result.returncode != 0:
@@ -103,8 +100,7 @@ class MosquittoGatewayIsolationTest(unittest.TestCase):
                     "dynsec",
                     "listRoles",
                 ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
             )
             if result.returncode == 0:
@@ -151,8 +147,7 @@ class MosquittoGatewayIsolationTest(unittest.TestCase):
                 "-m",
                 "{}",
             ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=5,
         )

@@ -66,9 +66,6 @@ def manage_team(request, team_slug):
     )
 
 
-
-
-
 @require_permission("delete_team")
 @require_POST
 def delete_team(request, team_slug):

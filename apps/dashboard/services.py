@@ -15,8 +15,18 @@ PUMP_KEYS = {"pressure", "flow", "flow_rate", "pump_status", "pump_fault"}
 PLC_KEYS = {"plc_status", "alarm", "fault", "process_value", "setpoint", "input", "output"}
 COLD_CHAIN_KEYS = {"temperature", "humidity", "door_status", "door_open", "compressor_status"}
 PROCESS_TREND_KEYS = [
-    "active_power", "energy", "output_frequency", "frequency", "speed", "pressure", "flow_rate", "flow",
-    "temperature", "humidity", "current", "voltage",
+    "active_power",
+    "energy",
+    "output_frequency",
+    "frequency",
+    "speed",
+    "pressure",
+    "flow_rate",
+    "flow",
+    "temperature",
+    "humidity",
+    "current",
+    "voltage",
 ]
 WIDGET_TREND_KEYS = {"active_power", "energy", "output_frequency", "frequency_command"}
 UNIT_LIMITS = {
@@ -59,27 +69,34 @@ def _register_items(device, include_writable_display=False):
             continue
         writable = bool(config.get("writable"))
         role = config.get("dashboard_role", "control" if writable else "secondary")
-        if writable and not include_writable_display and not config.get("display") and role not in {"primary", "trend", "health", "secondary"}:
+        if (
+            writable
+            and not include_writable_display
+            and not config.get("display")
+            and role not in {"primary", "trend", "health", "secondary"}
+        ):
             continue
-        items.append({
-            "key": key,
-            "label": config.get("label", key.replace("_", " ").title()),
-            "unit": config.get("unit", ""),
-            "type": config.get("type", "uint16"),
-            "priority": int(config.get("priority", 50)),
-            "dashboard_role": role,
-            "writable": writable,
-            "min": config.get("min"),
-            "max": config.get("max"),
-            "normal_min": config.get("normal_min"),
-            "normal_max": config.get("normal_max"),
-            "address": config.get("address", 0),
-            "functionCode": config.get("functionCode", 3),
-            "objectsCount": config.get("objectsCount", 1),
-            "control": config.get("control", "input"),
-            "labels": config.get("labels", ["OFF", "ON"]),
-            "config": config,
-        })
+        items.append(
+            {
+                "key": key,
+                "label": config.get("label", key.replace("_", " ").title()),
+                "unit": config.get("unit", ""),
+                "type": config.get("type", "uint16"),
+                "priority": int(config.get("priority", 50)),
+                "dashboard_role": role,
+                "writable": writable,
+                "min": config.get("min"),
+                "max": config.get("max"),
+                "normal_min": config.get("normal_min"),
+                "normal_max": config.get("normal_max"),
+                "address": config.get("address", 0),
+                "functionCode": config.get("functionCode", 3),
+                "objectsCount": config.get("objectsCount", 1),
+                "control": config.get("control", "input"),
+                "labels": config.get("labels", ["OFF", "ON"]),
+                "config": config,
+            }
+        )
     return sorted(items, key=lambda item: (profile_priority.get(item["key"], 100), item["priority"], item["label"]))
 
 
@@ -115,12 +132,7 @@ def _format_value(value):
 def _recent_keys(device):
     from apps.telemetry.models import TelemetryData
 
-    return set(
-        TelemetryData.objects.filter(device=device)
-        .order_by()
-        .values_list("key", flat=True)
-        .distinct()[:20]
-    )
+    return set(TelemetryData.objects.filter(device=device).order_by().values_list("key", flat=True).distinct()[:20])
 
 
 def _device_keys(device):
@@ -163,7 +175,14 @@ def _widget_definition(device, key, config):
         height = 4
     elif reg_type in {"bool", "bits"} or "status" in key_lower or "alarm" in key_lower or "fault" in key_lower:
         widget_type = "indicator"
-    elif unit in UNIT_LIMITS or unit == "°C" or any(token in key_lower for token in ["voltage", "current", "temperature", "pressure", "flow", "speed", "frequency"]):
+    elif (
+        unit in UNIT_LIMITS
+        or unit == "°C"
+        or any(
+            token in key_lower
+            for token in ["voltage", "current", "temperature", "pressure", "flow", "speed", "frequency"]
+        )
+    ):
         widget_type = "gauge"
     else:
         widget_type = "value"
@@ -172,7 +191,10 @@ def _widget_definition(device, key, config):
         width = 4
     if widget_type == "gauge":
         default_limits = UNIT_LIMITS.get(unit, UNIT_LIMITS.get("degC") if unit == "°C" else {"min": 0, "max": 100})
-        widget_config = {"min": config.get("min", default_limits["min"]), "max": config.get("max", default_limits["max"])}
+        widget_config = {
+            "min": config.get("min", default_limits["min"]),
+            "max": config.get("max", default_limits["max"]),
+        }
         if config.get("normal_min") is not None:
             widget_config["normal_min"] = config["normal_min"]
         if config.get("normal_max") is not None:
@@ -227,27 +249,31 @@ def _latest_readings_for_device(device, limit=4):
         for item in items:
             point = _latest_point(device, item["key"])
             value = _point_value(point)
-            readings.append({
-                "key": item["key"],
-                "label": item["label"],
-                "unit": item["unit"],
-                "value": value,
-                "display_value": _format_value(value),
-                "timestamp": point.timestamp if point else None,
-            })
+            readings.append(
+                {
+                    "key": item["key"],
+                    "label": item["label"],
+                    "unit": item["unit"],
+                    "value": value,
+                    "display_value": _format_value(value),
+                    "timestamp": point.timestamp if point else None,
+                }
+            )
         return readings
 
     point = _latest_point(device)
     if point:
         value = _point_value(point)
-        readings.append({
-            "key": point.key,
-            "label": point.key.replace("_", " ").title(),
-            "unit": "",
-            "value": value,
-            "display_value": _format_value(value),
-            "timestamp": point.timestamp,
-        })
+        readings.append(
+            {
+                "key": point.key,
+                "label": point.key.replace("_", " ").title(),
+                "unit": "",
+                "value": value,
+                "display_value": _format_value(value),
+                "timestamp": point.timestamp,
+            }
+        )
     return readings
 
 
@@ -266,7 +292,14 @@ def _trend_candidates(devices):
         else:
             for key in _recent_keys(device):
                 if key in PROCESS_TREND_KEYS:
-                    candidates.append((device, {"key": key, "label": key.replace("_", " ").title(), "unit": ""}, classification, profile_priority.get(key, 100)))
+                    candidates.append(
+                        (
+                            device,
+                            {"key": key, "label": key.replace("_", " ").title(), "unit": ""},
+                            classification,
+                            profile_priority.get(key, 100),
+                        )
+                    )
     priority = {key: idx for idx, key in enumerate(PROCESS_TREND_KEYS)}
     candidates.sort(key=lambda row: (row[3], priority.get(row[1]["key"], 99)))
     return candidates
@@ -289,7 +322,15 @@ def _build_operations_trend(team, devices):
             break
 
     if not selected:
-        trend = {"title": "Recent Telemetry Activity", "subtitle": "No numeric trend is available yet.", "key": "", "unit": "", "labels": [], "values": [], "empty": True}
+        trend = {
+            "title": "Recent Telemetry Activity",
+            "subtitle": "No numeric trend is available yet.",
+            "key": "",
+            "unit": "",
+            "labels": [],
+            "values": [],
+            "empty": True,
+        }
         cache.set(cache_key, trend, 60)
         return trend
 
@@ -300,14 +341,23 @@ def _build_operations_trend(team, devices):
         hour_start = now - datetime.timedelta(hours=i + 1)
         hour_end = now - datetime.timedelta(hours=i)
         value = (
-            TelemetryData.objects.filter(device__team=team, key=item["key"], timestamp__gte=hour_start, timestamp__lt=hour_end)
-            .aggregate(Sum("value_numeric"))["value_numeric__sum"]
+            TelemetryData.objects.filter(
+                device__team=team, key=item["key"], timestamp__gte=hour_start, timestamp__lt=hour_end
+            ).aggregate(Sum("value_numeric"))["value_numeric__sum"]
             or 0
         )
         labels.append(hour_end.strftime("%H:%M"))
         values.append(round(float(value), 2))
 
-    trend = {"title": "Operations Trend", "subtitle": f"{item['label']} across {classification['label']} assets", "key": item["key"], "unit": item.get("unit", ""), "labels": labels, "values": values, "empty": False}
+    trend = {
+        "title": "Operations Trend",
+        "subtitle": f"{item['label']} across {classification['label']} assets",
+        "key": item["key"],
+        "unit": item.get("unit", ""),
+        "labels": labels,
+        "values": values,
+        "empty": False,
+    }
     cache.set(cache_key, trend, 60)
     return trend
 
@@ -318,19 +368,60 @@ def _build_attention_items(devices, gateways, active_alerts, open_tickets, overd
         state = device.freshness
         gateway_state = device.gateway.freshness if device.gateway else None
         if state.status == "alarm":
-            items.append({"tone": "red", "title": device.name, "message": state.display, "kind": "Device alarm", "device": device})
+            items.append(
+                {
+                    "tone": "red",
+                    "title": device.name,
+                    "message": state.display,
+                    "kind": "Device alarm",
+                    "device": device,
+                }
+            )
         elif state.status == "offline" and gateway_state and gateway_state.status == "live":
-            items.append({"tone": "amber", "title": device.name, "message": "Gateway online - device offline", "kind": "Field device", "device": device})
+            items.append(
+                {
+                    "tone": "amber",
+                    "title": device.name,
+                    "message": "Gateway online - device offline",
+                    "kind": "Field device",
+                    "device": device,
+                }
+            )
     for gateway in gateways:
         state = gateway.freshness
         if state.status == "offline":
-            items.append({"tone": "gray", "title": gateway.name, "message": state.display, "kind": "Gateway", "gateway": gateway})
+            items.append(
+                {"tone": "gray", "title": gateway.name, "message": state.display, "kind": "Gateway", "gateway": gateway}
+            )
     for alert in active_alerts[:5]:
-        items.append({"tone": "red", "title": alert.rule.name, "message": f"{alert.device.name} triggered {alert.trigger_value:g}", "kind": "Alert", "alert": alert, "device": alert.device})
+        items.append(
+            {
+                "tone": "red",
+                "title": alert.rule.name,
+                "message": f"{alert.device.name} triggered {alert.trigger_value:g}",
+                "kind": "Alert",
+                "alert": alert,
+                "device": alert.device,
+            }
+        )
     if overdue_pms:
-        items.append({"tone": "amber", "title": "Preventive maintenance overdue", "message": f"{overdue_pms} schedule needs attention", "kind": "Maintenance"})
+        items.append(
+            {
+                "tone": "amber",
+                "title": "Preventive maintenance overdue",
+                "message": f"{overdue_pms} schedule needs attention",
+                "kind": "Maintenance",
+            }
+        )
     if open_tickets:
-        items.append({"tone": "blue", "title": "Open maintenance work", "message": f"{open_tickets} ticket(s) in progress", "kind": "Maintenance"})
+        items.append(
+            {
+                "tone": "blue",
+                "title": "Open maintenance work",
+                "message": f"{open_tickets} ticket(s) in progress",
+                "kind": "Maintenance",
+            }
+        )
     return items[:8]
 
 
@@ -342,7 +433,11 @@ def build_team_operations_dashboard(team):
     from apps.maintenance.models import MaintenanceTicket, PreventiveSchedule
 
     sites = list(Site.objects.filter(team=team).order_by("name"))
-    devices = list(Device.objects.filter(team=team).select_related("site", "gateway", "template").order_by("-last_telemetry_at", "name"))
+    devices = list(
+        Device.objects.filter(team=team)
+        .select_related("site", "gateway", "template")
+        .order_by("-last_telemetry_at", "name")
+    )
     gateways = list(Gateway.objects.filter(team=team).select_related("site"))
 
     device_health = {"live": 0, "delayed": 0, "offline": 0, "alarm": 0}
@@ -352,10 +447,16 @@ def build_team_operations_dashboard(team):
     for gateway in gateways:
         gateway_health[gateway.freshness.status] = gateway_health.get(gateway.freshness.status, 0) + 1
 
-    active_alerts_qs = Alert.objects.filter(device__team=team, status="active").select_related("device", "rule").order_by("-triggered_at")
+    active_alerts_qs = (
+        Alert.objects.filter(device__team=team, status="active")
+        .select_related("device", "rule")
+        .order_by("-triggered_at")
+    )
     active_alerts_count = active_alerts_qs.count()
     active_alerts = list(active_alerts_qs[:10])
-    recent_alerts = list(Alert.objects.filter(device__team=team).select_related("device", "rule").order_by("-triggered_at")[:5])
+    recent_alerts = list(
+        Alert.objects.filter(device__team=team).select_related("device", "rule").order_by("-triggered_at")[:5]
+    )
     open_tickets = MaintenanceTicket.objects.filter(team=team, status__in=["open", "in_progress", "waiting"]).count()
     overdue_pms = PreventiveSchedule.objects.filter(team=team, is_active=True, next_due_at__lt=timezone.now()).count()
     active_automations = Automation.objects.filter(team=team, is_active=True).count()
@@ -371,13 +472,15 @@ def build_team_operations_dashboard(team):
     top_devices = []
     for device in devices[:8]:
         readings = _latest_readings_for_device(device, limit=2)
-        top_devices.append({
-            "device": device,
-            "classification": classifications[device.id],
-            "freshness": device.freshness,
-            "gateway_context": device.gateway_context_display,
-            "latest_reading": readings[0] if readings else None,
-        })
+        top_devices.append(
+            {
+                "device": device,
+                "classification": classifications[device.id],
+                "freshness": device.freshness,
+                "gateway_context": device.gateway_context_display,
+                "latest_reading": readings[0] if readings else None,
+            }
+        )
 
     return {
         "sites": sites,
@@ -387,7 +490,9 @@ def build_team_operations_dashboard(team):
         "device_health": device_health,
         "gateway_health": gateway_health,
         "devices_live": device_health.get("live", 0),
-        "devices_attention": device_health.get("delayed", 0) + device_health.get("offline", 0) + device_health.get("alarm", 0),
+        "devices_attention": device_health.get("delayed", 0)
+        + device_health.get("offline", 0)
+        + device_health.get("alarm", 0),
         "gateways_online": gateway_health.get("live", 0),
         "gateways_offline": gateway_health.get("offline", 0),
         "active_alerts_count": active_alerts_count,

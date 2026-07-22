@@ -10,7 +10,7 @@ def project_meta(request):
     # modify these values as needed and add whatever else you want globally available here
     project_data = copy(settings.PROJECT_METADATA)
     project_data["TITLE"] = "{} | {}".format(project_data["NAME"], project_data["DESCRIPTION"])
-    
+
     # Dynamic login/signup URLs for subdomain separation in production
     app_domain = getattr(settings, "APP_DOMAIN", None)
     if app_domain and not settings.DEBUG:
@@ -39,6 +39,13 @@ def project_meta(request):
         "login_url": login_url,
         "signup_url": signup_url,
         "active_products": ACTIVE_PRODUCTS,
+        "public_mqtt_broker": {
+            "scheme": settings.PUBLIC_MQTT_BROKER_SCHEME,
+            "host": settings.PUBLIC_MQTT_BROKER_HOST,
+            "port": settings.PUBLIC_MQTT_BROKER_PORT,
+            "url": f"{settings.PUBLIC_MQTT_BROKER_SCHEME}://"
+            f"{settings.PUBLIC_MQTT_BROKER_HOST}:{settings.PUBLIC_MQTT_BROKER_PORT}",
+        },
     }
 
 

@@ -1,8 +1,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth.hashers import check_password
-from django.test import override_settings
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from apps.devices.activation import encrypt_activation_secret
 from apps.devices.config_generator import generate_connector_config
@@ -97,6 +96,7 @@ class GatewayClaimWorkflowTest(TestCase):
 
     def test_activation_acknowledgement_clears_secret_and_is_idempotent(self):
         from django.utils import timezone
+
         from apps.telemetry.management.commands.mqtt_consumer import Command
 
         gateway = Gateway.objects.create(
@@ -137,7 +137,9 @@ class GatewayClaimWorkflowTest(TestCase):
 
     def test_stale_activation_ack_does_not_acknowledge_current_activation(self):
         from uuid import uuid4
+
         from django.utils import timezone
+
         from apps.telemetry.management.commands.mqtt_consumer import Command
 
         gateway = Gateway.objects.create(
@@ -157,14 +159,16 @@ class GatewayClaimWorkflowTest(TestCase):
             encrypted_mqtt_password=encrypt_activation_secret("secret-password"),
         )
 
-        Command()._handle_attributes({
-            "serial_number": gateway.serial_number,
-            "attributes": {
-                "credential_update_status": "success",
-                "credential_update_action": "activate",
-                "credential_update_request_id": str(uuid4()),
-            },
-        })
+        Command()._handle_attributes(
+            {
+                "serial_number": gateway.serial_number,
+                "attributes": {
+                    "credential_update_status": "success",
+                    "credential_update_action": "activate",
+                    "credential_update_request_id": str(uuid4()),
+                },
+            }
+        )
 
         activation.refresh_from_db()
         self.assertEqual(activation.status, "delivered")
@@ -172,6 +176,7 @@ class GatewayClaimWorkflowTest(TestCase):
 
     def test_expiry_task_clears_unacknowledged_activation_secret(self):
         from django.utils import timezone
+
         from apps.devices.tasks import expire_and_retry_gateway_activations
 
         gateway = Gateway.objects.create(
@@ -218,11 +223,7 @@ class GatewayMqttProvisioningAclTest(TestCase):
 
         commands = [call.args[0] for call in mock_publish.call_args_list]
         role_command = next(command for command in commands if command.get("roleName") == "gw-NF-ACL-001")
-        send_topics = {
-            acl["topic"]
-            for acl in role_command["acls"]
-            if acl["acltype"] == "publishClientSend"
-        }
+        send_topics = {acl["topic"] for acl in role_command["acls"] if acl["acltype"] == "publishClientSend"}
         self.assertEqual(
             send_topics,
             {
@@ -443,7 +444,6 @@ class GatewayDeleteReleaseViewTest(TestCase):
         mock_provision.assert_called_once()
 
 
-
 class CommissioningContextTest(TestCase):
     def setUp(self):
         from django.utils import timezone
@@ -478,6 +478,7 @@ class CommissioningContextTest(TestCase):
 
     def test_online_gateway_with_discovery_splits_ready_and_needs_template(self):
         from django.utils import timezone
+
         from apps.devices.services import build_commissioning_context
 
         self.gateway.status = "online"
@@ -499,7 +500,9 @@ class CommissioningContextTest(TestCase):
 
     def test_config_push_and_first_telemetry_make_dashboard_ready(self):
         import uuid
+
         from django.utils import timezone
+
         from apps.devices.models import GatewayConfig
         from apps.devices.services import build_commissioning_context
 

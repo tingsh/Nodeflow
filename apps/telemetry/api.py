@@ -86,13 +86,15 @@ def device_telemetry_history_api(request, team_slug, device_id):
         labels_local.append(format_site_datetime(dp.timestamp, device.site, "%H:%M:%S"))
         values.append(dp.value_numeric)
 
-    return JsonResponse({
-        "key": key,
-        "labels": labels,
-        "labels_local": labels_local,
-        "values": values,
-        **site_timezone_metadata(device.site),
-    })
+    return JsonResponse(
+        {
+            "key": key,
+            "labels": labels,
+            "labels_local": labels_local,
+            "values": values,
+            **site_timezone_metadata(device.site),
+        }
+    )
 
 
 class Echo:
@@ -108,7 +110,7 @@ def export_telemetry_csv(request, team_slug, device_id):
     """
     device = get_object_or_404(Device, id=device_id, team__slug=team_slug)
     days = int(request.GET.get("days", 7))
-    
+
     plan_days = get_retention_limit_days(request.team)
     if days > plan_days:
         days = plan_days

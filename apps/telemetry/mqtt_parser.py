@@ -1,8 +1,6 @@
 import json
 import logging
-from datetime import datetime, timezone as dt_timezone
-
-from django.utils import timezone
+from datetime import UTC, datetime
 
 logger = logging.getLogger("novena_hub")
 
@@ -21,7 +19,7 @@ def parse_mqtt_payload(topic, payload, trusted_gateway_sn=None):
     events = []
 
     # Ensure payload is a dict
-    if isinstance(payload, (bytes, str)):
+    if isinstance(payload, bytes | str):
         try:
             payload = json.loads(payload)
         except Exception as e:
@@ -39,11 +37,7 @@ def parse_mqtt_payload(topic, payload, trusted_gateway_sn=None):
 
         # Parse edge-provided timestamp (ms epoch); fall back to server time
         ts = payload.get("ts")
-        dt = (
-            datetime.fromtimestamp(ts / 1000.0, tz=dt_timezone.utc)
-            if ts
-            else None
-        )
+        dt = datetime.fromtimestamp(ts / 1000.0, tz=UTC) if ts else None
 
         events.append(
             {
@@ -68,7 +62,7 @@ def parse_mqtt_payload(topic, payload, trusted_gateway_sn=None):
                         dt = None
                         if ts:
                             # TB timestamps are usually milliseconds
-                            dt = datetime.fromtimestamp(ts / 1000.0, tz=dt_timezone.utc)
+                            dt = datetime.fromtimestamp(ts / 1000.0, tz=UTC)
 
                         events.append(
                             {

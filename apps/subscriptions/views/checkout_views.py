@@ -54,8 +54,9 @@ def checkout_canceled(request, team_slug):
 @login_required
 def checkout(request, plan_slug):
     from django.urls import reverse
-    from apps.subscriptions.metadata import get_active_products_with_metadata
+
     from apps.subscriptions.helpers import create_stripe_checkout_session
+    from apps.subscriptions.metadata import get_active_products_with_metadata
 
     subscription_holder = request.team
     if not subscription_holder:
@@ -90,21 +91,20 @@ def checkout(request, plan_slug):
 
         if not subscription_holder.customer:
             from djstripe.models import Customer
-            customer = Customer.objects.create(
-                subscriber=subscription_holder,
-                id=f"cus_mock_{subscription_holder.id}"
-            )
+
+            customer = Customer.objects.create(subscriber=subscription_holder, id=f"cus_mock_{subscription_holder.id}")
             subscription_holder.customer = customer
             subscription_holder.save()
 
-        from djstripe.models import Subscription, Product as StripeProduct, Price as StripePrice
+        from djstripe.models import Price as StripePrice
+        from djstripe.models import Product as StripeProduct
+        from djstripe.models import Subscription
+
         prod, _ = StripeProduct.objects.get_or_create(
-            id=target_product.metadata.stripe_id,
-            defaults={"name": target_product.metadata.name}
+            id=target_product.metadata.stripe_id, defaults={"name": target_product.metadata.name}
         )
         pr, _ = StripePrice.objects.get_or_create(
-            id=f"price_mock_{plan_slug}",
-            defaults={"product": prod, "unit_amount": 9900, "currency": "usd"}
+            id=f"price_mock_{plan_slug}", defaults={"product": prod, "unit_amount": 9900, "currency": "usd"}
         )
 
         sub, _ = Subscription.objects.get_or_create(
@@ -113,7 +113,7 @@ def checkout(request, plan_slug):
                 "customer": subscription_holder.customer,
                 "price": pr,
                 "status": "active",
-            }
+            },
         )
         subscription_holder.subscription = sub
         subscription_holder.save()
@@ -131,4 +131,3 @@ def checkout(request, plan_slug):
     except Exception as e:
         messages.error(request, f"Failed to start checkout session: {e}")
         return HttpResponseRedirect(reverse("web_team:home", args=[subscription_holder.slug]))
-

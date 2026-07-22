@@ -8,8 +8,14 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import PermissionRequiredMixin
 
-from .forms import MaintenanceTicketForm, PreventiveScheduleForm, TicketCommentForm, TicketTemplateForm, SharedTicketLinkForm
-from .models import MaintenanceTicket, PreventiveSchedule, TicketTemplate, SharedTicketLink
+from .forms import (
+    MaintenanceTicketForm,
+    PreventiveScheduleForm,
+    SharedTicketLinkForm,
+    TicketCommentForm,
+    TicketTemplateForm,
+)
+from .models import MaintenanceTicket, PreventiveSchedule, SharedTicketLink, TicketTemplate
 
 # --- Tickets ---
 
@@ -39,15 +45,16 @@ class TicketListView(PermissionRequiredMixin, ListView):
         context["open_tickets"] = all_tickets.filter(status=MaintenanceTicket.StatusChoices.OPEN)
         context["in_progress_tickets"] = all_tickets.filter(status=MaintenanceTicket.StatusChoices.IN_PROGRESS)
         context["waiting_tickets"] = all_tickets.filter(status=MaintenanceTicket.StatusChoices.WAITING)
-        context["completed_tickets"] = all_tickets.filter(status__in=[
-            MaintenanceTicket.StatusChoices.RESOLVED,
-            MaintenanceTicket.StatusChoices.CLOSED
-        ])
+        context["completed_tickets"] = all_tickets.filter(
+            status__in=[MaintenanceTicket.StatusChoices.RESOLVED, MaintenanceTicket.StatusChoices.CLOSED]
+        )
 
         # Calculate banner stats
         context["stats"] = {
             "total": all_tickets.count(),
-            "critical_count": all_tickets.filter(priority=MaintenanceTicket.PriorityChoices.CRITICAL).exclude(status__in=["resolved", "closed"]).count(),
+            "critical_count": all_tickets.filter(priority=MaintenanceTicket.PriorityChoices.CRITICAL)
+            .exclude(status__in=["resolved", "closed"])
+            .count(),
             "open_count": all_tickets.filter(status=MaintenanceTicket.StatusChoices.OPEN).count(),
             "in_progress_count": all_tickets.filter(status=MaintenanceTicket.StatusChoices.IN_PROGRESS).count(),
             "waiting_count": all_tickets.filter(status=MaintenanceTicket.StatusChoices.WAITING).count(),
@@ -69,7 +76,9 @@ class TicketDetailView(PermissionRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "maintenance"
         context["comment_form"] = TicketCommentForm()
-        context["shared_links"] = SharedTicketLink.objects.filter(ticket=self.object, is_active=True).order_by("-created_at")
+        context["shared_links"] = SharedTicketLink.objects.filter(ticket=self.object, is_active=True).order_by(
+            "-created_at"
+        )
         context["share_form"] = SharedTicketLinkForm()
         return context
 
@@ -162,8 +171,10 @@ class ScheduleListView(PermissionRequiredMixin, ListView):
         return PreventiveSchedule.objects.filter(team=self.request.team).order_by("next_due_at")
 
     def get_context_data(self, **kwargs):
-        from django.utils import timezone
         from datetime import timedelta
+
+        from django.utils import timezone
+
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "maintenance"
         context["now"] = timezone.now()
@@ -263,6 +274,7 @@ class TemplateCreateView(PermissionRequiredMixin, CreateView):
 def update_ticket_status(request, team_slug, pk):
     """Update maintenance ticket status, log a system comment, and return the Kanban partial."""
     from apps.teams.roles import has_permission
+
     if not has_permission(request.user, request.team, "manage_maintenance"):
         return HttpResponse("Forbidden", status=403)
 
@@ -276,12 +288,13 @@ def update_ticket_status(request, team_slug, pk):
 
         # Generate audit/activity feed comment
         from .models import TicketComment
+
         TicketComment.objects.create(
             team=request.team,
             ticket=ticket,
             author=request.user,
             content=f"Changed status from '{old_status}' to '{ticket.get_status_display()}'.",
-            is_system_generated=True
+            is_system_generated=True,
         )
 
         if request.headers.get("HX-Request"):
@@ -293,18 +306,19 @@ def update_ticket_status(request, team_slug, pk):
                 "open_tickets": all_tickets.filter(status=MaintenanceTicket.StatusChoices.OPEN),
                 "in_progress_tickets": all_tickets.filter(status=MaintenanceTicket.StatusChoices.IN_PROGRESS),
                 "waiting_tickets": all_tickets.filter(status=MaintenanceTicket.StatusChoices.WAITING),
-                "completed_tickets": all_tickets.filter(status__in=[
-                    MaintenanceTicket.StatusChoices.RESOLVED,
-                    MaintenanceTicket.StatusChoices.CLOSED
-                ]),
+                "completed_tickets": all_tickets.filter(
+                    status__in=[MaintenanceTicket.StatusChoices.RESOLVED, MaintenanceTicket.StatusChoices.CLOSED]
+                ),
                 "stats": {
                     "total": all_tickets.count(),
-                    "critical_count": all_tickets.filter(priority=MaintenanceTicket.PriorityChoices.CRITICAL).exclude(status__in=["resolved", "closed"]).count(),
+                    "critical_count": all_tickets.filter(priority=MaintenanceTicket.PriorityChoices.CRITICAL)
+                    .exclude(status__in=["resolved", "closed"])
+                    .count(),
                     "open_count": all_tickets.filter(status=MaintenanceTicket.StatusChoices.OPEN).count(),
                     "in_progress_count": all_tickets.filter(status=MaintenanceTicket.StatusChoices.IN_PROGRESS).count(),
                     "waiting_count": all_tickets.filter(status=MaintenanceTicket.StatusChoices.WAITING).count(),
                     "completed_count": all_tickets.filter(status__in=["resolved", "closed"]).count(),
-                }
+                },
             }
             return render(request, "maintenance/partials/kanban_board.html", context)
 
@@ -318,6 +332,7 @@ def update_ticket_status(request, team_slug, pk):
 def toggle_checklist_item(request, team_slug, pk, item_index):
     """Toggle a specific checklist item's completion state and log audit trail."""
     from apps.teams.roles import has_permission
+
     if not has_permission(request.user, request.team, "manage_maintenance"):
         return HttpResponse("Forbidden", status=403)
 
@@ -333,13 +348,14 @@ def toggle_checklist_item(request, team_slug, pk, item_index):
 
             # Create system comment for audit log
             from .models import TicketComment
+
             state_label = "completed" if item["done"] else "incomplete"
             TicketComment.objects.create(
                 team=request.team,
                 ticket=ticket,
                 author=request.user,
                 content=f"Marked task '{item['task']}' as {state_label}.",
-                is_system_generated=True
+                is_system_generated=True,
             )
 
             if request.headers.get("HX-Request"):
@@ -355,6 +371,7 @@ def toggle_checklist_item(request, team_slug, pk, item_index):
 def generate_shared_link(request, team_slug, pk):
     """Generate a public shared compliance link for a ticket."""
     from apps.teams.roles import has_permission
+
     if not has_permission(request.user, request.team, "manage_maintenance"):
         return HttpResponse("Forbidden", status=403)
 
@@ -371,7 +388,7 @@ def generate_shared_link(request, team_slug, pk):
         for error_list in form.errors.values():
             for error in error_list:
                 messages.error(request, error)
-                
+
     return redirect("web_team:maintenance:ticket_detail", team_slug=request.team.slug, pk=ticket.id)
 
 
@@ -380,6 +397,7 @@ def generate_shared_link(request, team_slug, pk):
 def revoke_shared_link(request, team_slug, pk, link_pk):
     """Deactivate/Revoke a shared compliance link."""
     from apps.teams.roles import has_permission
+
     if not has_permission(request.user, request.team, "manage_maintenance"):
         return HttpResponse("Forbidden", status=403)
 
@@ -398,8 +416,10 @@ def trigger_preventive_schedule(request, team_slug, pk):
     and advances its next due date by one interval.
     """
     from apps.teams.roles import has_permission
+
     if not has_permission(request.user, request.team, "manage_maintenance"):
         from django.http import HttpResponseForbidden
+
         return HttpResponseForbidden()
 
     schedule = get_object_or_404(PreventiveSchedule, team=request.team, pk=pk)
@@ -407,6 +427,7 @@ def trigger_preventive_schedule(request, team_slug, pk):
     current_val = None
     if schedule.is_usage_based:
         from apps.telemetry.services import get_latest_telemetry_value
+
         current_val = get_latest_telemetry_value(schedule.device, schedule.usage_telemetry_key)
         if current_val is not None:
             try:
@@ -415,7 +436,8 @@ def trigger_preventive_schedule(request, team_slug, pk):
             except (ValueError, TypeError):
                 pass
 
-    from .services import create_pm_ticket, advance_schedule_due_date
+    from .services import advance_schedule_due_date, create_pm_ticket
+
     ticket = create_pm_ticket(schedule, current_usage=current_val)
     advance_schedule_due_date(schedule)
 

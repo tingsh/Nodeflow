@@ -149,6 +149,7 @@ def execute_automation(automation, trigger_device=None):
                 log_details.append(f"Email sent to {action.notify_emails}")
             elif action.action_type == "create_ticket":
                 from apps.maintenance.models import MaintenanceTicket
+
                 t_device = action.target_device or trigger_device
                 if t_device:
                     ticket = MaintenanceTicket.objects.create(

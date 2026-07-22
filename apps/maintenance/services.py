@@ -18,7 +18,6 @@ def auto_create_ticket(alert, force=False):
     if not rule.create_maintenance_ticket and not force:
         return None
 
-
     # Map alert severity to ticket priority
     priority = MaintenanceTicket.PriorityChoices.MEDIUM
     if rule.severity == "critical":
@@ -47,11 +46,9 @@ def auto_create_ticket(alert, force=False):
     if rule.maintenance_template:
         description += f"\n\nTemplate Instructions:\n{rule.maintenance_template.description}"
         for item in rule.maintenance_template.checklist:
-            checklist_state.append({
-                "task": item.get("task", ""),
-                "required": item.get("required", False),
-                "done": False
-            })
+            checklist_state.append(
+                {"task": item.get("task", ""), "required": item.get("required", False), "done": False}
+            )
 
     ticket = MaintenanceTicket.objects.create(
         team=alert.team,
@@ -187,12 +184,9 @@ def process_incoming_whatsapp(sender_phone, text_body):
     command = text_body.upper().strip()
 
     # Get active/assigned tickets
-    active_tickets = MaintenanceTicket.objects.filter(
-        assigned_to=user
-    ).exclude(status__in=[
-        MaintenanceTicket.StatusChoices.RESOLVED,
-        MaintenanceTicket.StatusChoices.CLOSED
-    ])
+    active_tickets = MaintenanceTicket.objects.filter(assigned_to=user).exclude(
+        status__in=[MaintenanceTicket.StatusChoices.RESOLVED, MaintenanceTicket.StatusChoices.CLOSED]
+    )
 
     if command == "LIST":
         if not active_tickets.exists():
@@ -311,9 +305,7 @@ def process_incoming_whatsapp(sender_phone, text_body):
         author=user,
         content=action_text,
     )
-    send_whatsapp_message_task.delay(
-        sender_phone, f"💬 Added comment to TKT-{ticket.id}: \"{action_text[:30]}...\""
-    )
+    send_whatsapp_message_task.delay(sender_phone, f'💬 Added comment to TKT-{ticket.id}: "{action_text[:30]}..."')
 
 
 def create_pm_ticket(schedule, current_usage=None):
@@ -339,11 +331,9 @@ def create_pm_ticket(schedule, current_usage=None):
         description += f"\n\nTemplate Instructions:\n{schedule.template.description}"
         # Copy template checklist
         for item in schedule.template.checklist:
-            checklist_state.append({
-                "task": item.get("task", ""),
-                "required": item.get("required", False),
-                "done": False
-            })
+            checklist_state.append(
+                {"task": item.get("task", ""), "required": item.get("required", False), "done": False}
+            )
 
     ticket = MaintenanceTicket.objects.create(
         team=schedule.team,

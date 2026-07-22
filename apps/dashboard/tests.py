@@ -99,10 +99,11 @@ class SharedDashboardTests(TestCase):
 
 class AutoDashboardTests(TestCase):
     def setUp(self):
-        from apps.devices.models import Site, DeviceTemplate
+        from apps.devices.models import DeviceTemplate, Site
+
         self.team = Team.objects.create(name="IoT Team", slug="iot-team")
         self.site = Site.objects.create(team=self.team, name="Main Factory")
-        
+
         # Create a mock template
         self.template = DeviceTemplate.objects.create(
             name="Test Meter",
@@ -114,13 +115,13 @@ class AutoDashboardTests(TestCase):
                 "voltage": {"address": 100, "type": "float32", "unit": "V", "label": "Voltage"},
                 "active_power": {"address": 102, "type": "float32", "unit": "kW", "label": "Active Power"},
                 "status_bit": {"address": 104, "type": "bool", "label": "Status Coil"},
-                "raw_val": {"address": 105, "type": "uint16", "label": "Raw Register"}
-            }
+                "raw_val": {"address": 105, "type": "uint16", "label": "Raw Register"},
+            },
         )
 
     def test_dashboard_and_widgets_generated_on_save(self):
-        from apps.devices.models import Device
         from apps.dashboard.models import Dashboard, Widget
+        from apps.devices.models import Device
 
         # Provision a device matching the template
         device = Device.objects.create(
@@ -129,7 +130,7 @@ class AutoDashboardTests(TestCase):
             name="Main Meter 1",
             template=self.template,
             device_type=self.template.device_type,
-            protocol=self.template.protocol
+            protocol=self.template.protocol,
         )
 
         # Check that dashboard was auto-generated
@@ -162,11 +163,10 @@ class AutoDashboardTests(TestCase):
         self.assertEqual(Widget.objects.filter(dashboard=dashboard).count(), 4)
 
 
-
-
 class AdaptiveOperationsDashboardTests(TestCase):
     def setUp(self):
         from django.core.cache import cache
+
         from apps.devices.models import Site
 
         cache.clear()
@@ -199,6 +199,7 @@ class AdaptiveOperationsDashboardTests(TestCase):
 
     def test_energy_device_produces_energy_widgets_and_trend(self):
         from django.utils import timezone
+
         from apps.dashboard.services import build_team_operations_dashboard
         from apps.telemetry.models import TelemetryData
 
@@ -249,6 +250,7 @@ class AdaptiveOperationsDashboardTests(TestCase):
 
     def test_unknown_device_falls_back_to_latest_telemetry(self):
         from django.utils import timezone
+
         from apps.dashboard.services import build_team_operations_dashboard
         from apps.devices.models import Device
         from apps.telemetry.models import TelemetryData
@@ -269,6 +271,7 @@ class AdaptiveOperationsDashboardTests(TestCase):
 
     def test_mixed_fleet_prioritizes_gateway_online_device_offline_attention(self):
         from django.utils import timezone
+
         from apps.dashboard.services import build_team_operations_dashboard
         from apps.devices.models import Device, Gateway
 

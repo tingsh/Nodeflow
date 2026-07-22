@@ -289,6 +289,7 @@ class GatewayDeleteView(PermissionRequiredMixin, DeleteView):
     def get_success_url(self):
         return reverse_lazy("web_team:devices:gateway_list", args=[self.request.team.slug])
 
+
 # ── Gateway Management Views (Cloud ↔ Edge) ────────────────────────────
 
 
@@ -305,9 +306,7 @@ def gateway_rotate_password(request, team_slug, pk):
     gateway = Gateway.objects.get(pk=pk, team=request.team)
 
     if gateway.status != "online":
-        return JsonResponse(
-            {"error": "Gateway must be online to rotate password."}, status=400
-        )
+        return JsonResponse({"error": "Gateway must be online to rotate password."}, status=400)
 
     new_password = secrets.token_urlsafe(32)
 
@@ -346,9 +345,7 @@ def gateway_send_rpc(request, team_slug, pk):
 
     rpc = publish_rpc_command(gateway, method, params)
 
-    return JsonResponse(
-        {"request_id": str(rpc.request_id), "method": method, "status": "sent"}
-    )
+    return JsonResponse({"request_id": str(rpc.request_id), "method": method, "status": "sent"})
 
 
 @require_permission("manage_devices")
@@ -366,9 +363,7 @@ def gateway_push_config(request, team_slug, pk):
 
     config_record = publish_config_update(gateway, action, config)
 
-    return JsonResponse(
-        {"request_id": str(config_record.request_id), "action": action, "status": "sent"}
-    )
+    return JsonResponse({"request_id": str(config_record.request_id), "action": action, "status": "sent"})
 
 
 @require_permission("view_devices")
@@ -478,7 +473,6 @@ def gateway_rpc_status(request, team_slug, gateway_pk, request_id):
             "error": rpc.error_message or None,
         }
     )
-
 
 
 class DeviceListView(PermissionRequiredMixin, ListView):
@@ -759,9 +753,7 @@ def htmx_device_create(request, team_slug):
         template_id = request.POST.get("template_id")
 
         with transaction.atomic():
-            gateway, site = _resolve_quick_add_gateway_and_site(
-                request.team, gateway_id, site_id, lock_gateway=True
-            )
+            gateway, site = _resolve_quick_add_gateway_and_site(request.team, gateway_id, site_id, lock_gateway=True)
             if provision == "true" or resolve == "true":
                 discovery_entry = _discovery_entry_for_port(gateway, port)
             template = get_object_or_404(visible_templates_for_team(request.team), id=template_id)
@@ -807,10 +799,14 @@ def htmx_device_create(request, team_slug):
 
         test_register = _first_readable_register(template)
 
-        response = render(request, "devices/partials/device_quick_add_success.html", {
-            "device": device,
-            "test_register": test_register,
-        })
+        response = render(
+            request,
+            "devices/partials/device_quick_add_success.html",
+            {
+                "device": device,
+                "test_register": test_register,
+            },
+        )
         response["HX-Trigger"] = "infrastructureChanged"
         return response
 
@@ -885,6 +881,7 @@ def gateway_discovery_api(request, team_slug):
     except Exception as e:
         return HttpResponse(str(e), status=400)
 
+
 @require_permission("manage_devices")
 @require_POST
 def ai_template_generate(request, team_slug):
@@ -893,10 +890,11 @@ def ai_template_generate(request, team_slug):
     doc_url = request.POST.get("doc_url", "").strip() or None
 
     if not manufacturer or not model_number:
-        return render(request, "devices/partials/ai_template_result.html", {
-            "status": "error",
-            "error": "Both Manufacturer and Model Number are required."
-        })
+        return render(
+            request,
+            "devices/partials/ai_template_result.html",
+            {"status": "error", "error": "Both Manufacturer and Model Number are required."},
+        )
 
     # Check for existing template first (case-insensitive)
     existing = DeviceTemplate.objects.filter(
@@ -904,10 +902,9 @@ def ai_template_generate(request, team_slug):
         model_number__iexact=model_number,
     ).first()
     if existing:
-        return render(request, "devices/partials/ai_template_result.html", {
-            "status": "found_existing",
-            "template": existing
-        })
+        return render(
+            request, "devices/partials/ai_template_result.html", {"status": "found_existing", "template": existing}
+        )
 
     # Kick off async task
     task_id = str(uuid.uuid4())
@@ -924,16 +921,17 @@ def ai_template_status(request, team_slug, task_id):
         # HTMX will poll this again
         return render(request, "devices/partials/ai_template_loading.html", {"task_id": task_id})
     elif result.get("status") == "complete":
-        return render(request, "devices/partials/ai_template_result.html", {
-            "status": "draft",
-            "draft": result["draft"],
-            "task_id": task_id
-        })
+        return render(
+            request,
+            "devices/partials/ai_template_result.html",
+            {"status": "draft", "draft": result["draft"], "task_id": task_id},
+        )
     else:
-        return render(request, "devices/partials/ai_template_result.html", {
-            "status": "error",
-            "error": result.get("error", "AI template generation failed or timed out.")
-        })
+        return render(
+            request,
+            "devices/partials/ai_template_result.html",
+            {"status": "error", "error": result.get("error", "AI template generation failed or timed out.")},
+        )
 
 
 @require_permission("manage_devices")
@@ -942,29 +940,28 @@ def ai_template_approve(request, team_slug):
     task_id = request.POST.get("task_id")
     result = cache.get(f"ai_template:{task_id}")
     if not result or result.get("status") != "complete" or "draft" not in result:
-        return render(request, "devices/partials/ai_template_result.html", {
-            "status": "error",
-            "error": "Template draft expired or not found. Please try generating again."
-        })
+        return render(
+            request,
+            "devices/partials/ai_template_result.html",
+            {"status": "error", "error": "Template draft expired or not found. Please try generating again."},
+        )
 
     try:
         # Get team context from request
         team = getattr(request, "team", None)
         template = save_approved_template(result["draft"], team=team)
-        
+
         # Clear cache
         cache.delete(f"ai_template:{task_id}")
-        
-        return render(request, "devices/partials/ai_template_result.html", {
-            "status": "approved",
-            "template": template
-        })
+
+        return render(request, "devices/partials/ai_template_result.html", {"status": "approved", "template": template})
     except Exception as e:
         logger.exception("Failed to save approved template")
-        return render(request, "devices/partials/ai_template_result.html", {
-            "status": "error",
-            "error": f"Failed to save template: {e}"
-        })
+        return render(
+            request,
+            "devices/partials/ai_template_result.html",
+            {"status": "error", "error": f"Failed to save template: {e}"},
+        )
 
 
 class TemplateLibraryView(PermissionRequiredMixin, ListView):
@@ -1057,9 +1054,9 @@ def gateway_ota_update(request, team_slug, pk):
         f'<div class="p-4 bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-xl '
         f'flex items-center gap-3">'
         f'<i class="fa fa-spinner fa-spin"></i>'
-        f'<div>'
+        f"<div>"
         f'<p class="font-bold">Update Initiated</p>'
         f'<p class="text-sm opacity-90">Sending v{release.version} to gateway. Do not disconnect power.</p>'
-        f'</div>'
-        f'</div>'
+        f"</div>"
+        f"</div>"
     )

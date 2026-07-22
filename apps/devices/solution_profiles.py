@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 
-
 GENERAL_IOT = "general_iot"
 COLD_CHAIN = "cold_chain"
 FACTORY_ENERGY = "factory_energy"
@@ -65,11 +64,21 @@ PROFILES = {
         short_name="Cold Chain",
         icon="fa-snowflake",
         promise="Track temperatures, door events, and compressor health before spoilage happens.",
-        setup_copy="Novena will prioritize temperature sensors, door states, compressor status, excursion alerts, and audit-ready exports.",
+        setup_copy=(
+            "Novena will prioritize temperature sensors, door states, compressor status, "
+            "excursion alerts, and audit-ready exports."
+        ),
         site_placeholder="Jurong Cold Room A",
         recommended_device_types=("temp_sensor", "chiller"),
         recommended_categories=("cold_chain",),
-        key_priority=("temperature", "humidity", "door_open", "door_status", "compressor_status", "active_power"),
+        key_priority=(
+            "temperature",
+            "humidity",
+            "door_open",
+            "door_status",
+            "compressor_status",
+            "active_power",
+        ),
         alert_presets=(
             AlertPreset("High Temperature", "temperature", "gt", 4.0, "critical", 60, True),
             AlertPreset("Door Open Too Long", "door_open", "eq", 1.0, "warning", 300, False),
@@ -90,7 +99,9 @@ PROFILES = {
         short_name="Factory Energy",
         icon="fa-bolt",
         promise="See demand, kWh, spikes, and abnormal loads across machines and meters.",
-        setup_copy="Novena will prioritize power meters, VFDs, energy dashboards, spike alerts, and savings review exports.",
+        setup_copy=(
+            "Novena will prioritize power meters, VFDs, energy dashboards, spike alerts, and savings review exports."
+        ),
         site_placeholder="Tuas Assembly Line",
         recommended_device_types=("power_meter", "solar_inverter", "vfd", "plc"),
         recommended_categories=("energy", "factory"),
@@ -124,7 +135,10 @@ PROFILES = {
         short_name="Facilities",
         icon="fa-building",
         promise="Monitor AC, chillers, runtime, energy use, and maintenance work across your facility.",
-        setup_copy="Novena will prioritize HVAC drift, runtime, power draw, maintenance tickets, and contractor-ready workflows.",
+        setup_copy=(
+            "Novena will prioritize HVAC drift, runtime, power draw, maintenance tickets, "
+            "and contractor-ready workflows."
+        ),
         site_placeholder="Orchard Boutique Hotel",
         recommended_device_types=("chiller", "temp_sensor", "power_meter", "plc", "vfd"),
         recommended_categories=("factory", "energy", "cold_chain"),
@@ -218,7 +232,9 @@ def rank_templates_for_profile(templates, profile):
 
 def recommended_alerts_for_device(device, profile=None):
     profile = get_site_profile(device.site) if profile is None else get_profile(profile)
-    register_map = device.template.register_map if device.template and isinstance(device.template.register_map, dict) else {}
+    register_map = (
+        device.template.register_map if device.template and isinstance(device.template.register_map, dict) else {}
+    )
     presets = []
     for preset in profile.alert_presets:
         if preset.key in register_map:
@@ -311,7 +327,11 @@ def apply_solution_profile_presets(site, user=None):
             if device.device_type not in preset.device_types:
                 continue
             if preset.usage_telemetry_key:
-                register_map = device.template.register_map if device.template and isinstance(device.template.register_map, dict) else {}
+                register_map = (
+                    device.template.register_map
+                    if device.template and isinstance(device.template.register_map, dict)
+                    else {}
+                )
                 if preset.usage_telemetry_key not in register_map:
                     continue
             _schedule, was_created = PreventiveSchedule.objects.get_or_create(

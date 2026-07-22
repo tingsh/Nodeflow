@@ -1,7 +1,7 @@
 from django import forms
-
 from django.core.validators import FileExtensionValidator
-from .models import MaintenanceTicket, PreventiveSchedule, TicketComment, TicketTemplate, SharedTicketLink
+
+from .models import MaintenanceTicket, PreventiveSchedule, SharedTicketLink, TicketComment, TicketTemplate
 
 
 class MaintenanceTicketForm(forms.ModelForm):
@@ -9,15 +9,22 @@ class MaintenanceTicketForm(forms.ModelForm):
         queryset=TicketTemplate.objects.none(),
         required=False,
         label="Checklist Template",
-        help_text="Optionally load standard checklist tasks."
+        help_text="Optionally load standard checklist tasks.",
     )
 
     class Meta:
         model = MaintenanceTicket
         fields = [
-            "device", "template", "title", "description", "priority", 
-            "status", "assigned_to", "due_date", 
-            "send_email_notification", "send_whatsapp_notification"
+            "device",
+            "template",
+            "title",
+            "description",
+            "priority",
+            "status",
+            "assigned_to",
+            "due_date",
+            "send_email_notification",
+            "send_whatsapp_notification",
         ]
         widgets = {
             "due_date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
@@ -28,7 +35,7 @@ class MaintenanceTicketForm(forms.ModelForm):
         cleaned_data = super().clean()
         send_email = cleaned_data.get("send_email_notification")
         send_whatsapp = cleaned_data.get("send_whatsapp_notification")
-        
+
         if not send_email and not send_whatsapp:
             raise forms.ValidationError("You must select at least one notification channel (Email or WhatsApp).")
         return cleaned_data
@@ -51,11 +58,9 @@ class MaintenanceTicketForm(forms.ModelForm):
         if template and not instance.checklist_state:
             checklist_state = []
             for item in template.checklist:
-                checklist_state.append({
-                    "task": item.get("task", ""),
-                    "required": item.get("required", False),
-                    "done": False
-                })
+                checklist_state.append(
+                    {"task": item.get("task", ""), "required": item.get("required", False), "done": False}
+                )
             instance.checklist_state = checklist_state
         if commit:
             instance.save()
@@ -66,33 +71,38 @@ class TicketCommentForm(forms.ModelForm):
     attachment = forms.FileField(
         required=False,
         validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "png", "pdf"])],
-        widget=forms.FileInput(attrs={
-            "accept": ".jpg,.jpeg,.png,.pdf", 
-            "class": "file-input file-input-bordered file-input-primary w-full"
-        }),
-        help_text="Optional document or photo (JPG, PNG, PDF up to 10MB)"
+        widget=forms.FileInput(
+            attrs={
+                "accept": ".jpg,.jpeg,.png,.pdf",
+                "class": "file-input file-input-bordered file-input-primary w-full",
+            }
+        ),
+        help_text="Optional document or photo (JPG, PNG, PDF up to 10MB)",
     )
 
     class Meta:
         model = TicketComment
         fields = ["content", "attachment", "guest_name"]
         widgets = {
-            "content": forms.Textarea(attrs={
-                "rows": 2, 
-                "placeholder": "Add a comment, upload certificates or signed checksheets...",
-                "class": "textarea textarea-bordered textarea-primary w-full bg-gray-900 text-white"
-            }),
-            "guest_name": forms.TextInput(attrs={
-                "placeholder": "Enter your name (Required for guests)",
-                "class": "input input-bordered input-primary w-full bg-gray-900 text-white"
-            }),
+            "content": forms.Textarea(
+                attrs={
+                    "rows": 2,
+                    "placeholder": "Add a comment, upload certificates or signed checksheets...",
+                    "class": "textarea textarea-bordered textarea-primary w-full bg-gray-900 text-white",
+                }
+            ),
+            "guest_name": forms.TextInput(
+                attrs={
+                    "placeholder": "Enter your name (Required for guests)",
+                    "class": "input input-bordered input-primary w-full bg-gray-900 text-white",
+                }
+            ),
         }
 
     def clean_attachment(self):
         attachment = self.cleaned_data.get("attachment")
-        if attachment:
-            if attachment.size > 10 * 1024 * 1024:  # 10MB limit
-                raise forms.ValidationError("Files must be under 10MB.")
+        if attachment and attachment.size > 10 * 1024 * 1024:  # 10MB limit
+            raise forms.ValidationError("Files must be under 10MB.")
         return attachment
 
 
@@ -106,12 +116,23 @@ class PreventiveScheduleForm(forms.ModelForm):
     class Meta:
         model = PreventiveSchedule
         fields = [
-            "device", "template", "title", "interval", "next_due_at", 
-            "is_active", "is_usage_based", "usage_telemetry_key", "usage_threshold",
-            "assigned_to", "send_email_notification", "send_whatsapp_notification"
+            "device",
+            "template",
+            "title",
+            "interval",
+            "next_due_at",
+            "is_active",
+            "is_usage_based",
+            "usage_telemetry_key",
+            "usage_threshold",
+            "assigned_to",
+            "send_email_notification",
+            "send_whatsapp_notification",
         ]
         widgets = {
-            "next_due_at": forms.DateInput(attrs={"type": "date", "class": "input input-bordered w-full bg-white dark:bg-gray-900"}),
+            "next_due_at": forms.DateInput(
+                attrs={"type": "date", "class": "input input-bordered w-full bg-white dark:bg-gray-900"}
+            ),
         }
         labels = {
             "next_due_at": "Next Due Date",
@@ -125,6 +146,7 @@ class PreventiveScheduleForm(forms.ModelForm):
             self.fields["template"].queryset = self.fields["template"].queryset.filter(team=team)
             # Filter assigned_to to only team members
             from apps.users.models import CustomUser
+
             self.fields["assigned_to"].queryset = CustomUser.objects.filter(membership__team=team)
 
     def clean(self):
@@ -132,9 +154,11 @@ class PreventiveScheduleForm(forms.ModelForm):
         assigned_to = cleaned_data.get("assigned_to")
         send_email = cleaned_data.get("send_email_notification")
         send_whatsapp = cleaned_data.get("send_whatsapp_notification")
-        
+
         if assigned_to and not send_email and not send_whatsapp:
-            raise forms.ValidationError("You must select at least one notification channel (Email or WhatsApp) if assigning a user.")
+            raise forms.ValidationError(
+                "You must select at least one notification channel (Email or WhatsApp) if assigning a user."
+            )
         return cleaned_data
 
 
@@ -145,4 +169,3 @@ class SharedTicketLinkForm(forms.ModelForm):
         widgets = {
             "expires_at": forms.DateTimeInput(attrs={"type": "datetime-local"}),
         }
-

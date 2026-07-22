@@ -48,8 +48,8 @@
                 <div class="relative z-10">
                     <h4 class="text-xs font-black uppercase tracking-widest text-white/40 mb-4">Immediate Next Step</h4>
                     <p class="text-sm text-white/70 mb-6">Point your physical gateway to our MQTT broker using your unique access token.</p>
-                    <div class="bg-white/10 p-4 rounded-xl border border-white/10 font-mono text-xs break-all cursor-pointer hover:bg-white/20 transition-colors" onclick="navigator.clipboard.writeText('mqtt://{{ request.get_host }}')">
-                        Broker: mqtt://{{ request.get_host }}
+                    <div class="bg-white/10 p-4 rounded-xl border border-white/10 font-mono text-xs break-all cursor-pointer hover:bg-white/20 transition-colors" onclick="navigator.clipboard.writeText('{{ public_mqtt_broker.url }}')">
+                        Broker: {{ public_mqtt_broker.url }}
                     </div>
                 </div>
             </div>

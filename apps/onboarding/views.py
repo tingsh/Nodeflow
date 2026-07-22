@@ -62,7 +62,9 @@ def step_1_site(request, team_slug):
         address = request.POST.get("address", "")
         timezone = request.POST.get("timezone", "Asia/Singapore")
         site_type = request.POST.get("site_type", "")
-        solution_profile = request.POST.get("solution_profile") or request.session.get("solution_profile", "general_iot")
+        solution_profile = request.POST.get("solution_profile") or request.session.get(
+            "solution_profile", "general_iot"
+        )
         if name:
             if site:
                 site.name = name
@@ -180,11 +182,15 @@ def gateway_status_poll(request, team_slug):
         return render(request, "onboarding/partials/gateway_status_badge.html", {"status": "unknown"})
     gateway = Gateway.objects.filter(id=gateway_id, team=request.team).first()
     status = gateway.status if gateway else "unknown"
-    return render(request, "onboarding/partials/gateway_status_badge.html", {
-        "status": status,
-        "gateway": gateway,
-        "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
-    })
+    return render(
+        request,
+        "onboarding/partials/gateway_status_badge.html",
+        {
+            "status": status,
+            "gateway": gateway,
+            "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
+        },
+    )
 
 
 @require_permission("manage_devices")
@@ -294,13 +300,17 @@ def discovery_poll(request, team_slug):
     discovered_devices = (gateway.discovery_data or {}).get("devices", []) if gateway else []
     profile = get_site_profile(gateway.site) if gateway else profile_for_request(request)
     templates = rank_templates_for_profile(DeviceTemplate.objects.all(), profile)
-    return render(request, "onboarding/partials/discovery_devices.html", {
-        "discovered_devices": discovered_devices,
-        "templates": templates,
-        "gateway": gateway,
-        "profile": profile,
-        "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
-    })
+    return render(
+        request,
+        "onboarding/partials/discovery_devices.html",
+        {
+            "discovered_devices": discovered_devices,
+            "templates": templates,
+            "gateway": gateway,
+            "profile": profile,
+            "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
+        },
+    )
 
 
 @require_permission("manage_devices")
@@ -344,7 +354,13 @@ def step_3_device(request, team_slug):
             request.session["onboarding_device_id"] = device.id
             return redirect("web_team:onboarding:step_4_alert", team_slug=team_slug)
 
-    context = {"steps": ONBOARDING_STEPS, "current_step": 4, "templates": templates, "device": device, "profile": profile}
+    context = {
+        "steps": ONBOARDING_STEPS,
+        "current_step": 4,
+        "templates": templates,
+        "device": device,
+        "profile": profile,
+    }
     return render(request, "onboarding/step_3_device.html", context)
 
 

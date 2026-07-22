@@ -41,7 +41,7 @@ class TeamSignupForm(TurnstileSignupForm):
     def _clean_team_name(self, cleaned_data):
         team_name = cleaned_data.get("team_name")
         invitation_id = cleaned_data.get("invitation_id")
-        
+
         # if invitation is not set then team name is required
         if not invitation_id and not team_name:
             self.add_error("team_name", _("Please provide a Company or Team Name."))
@@ -149,7 +149,7 @@ class MembershipForm(forms.ModelForm):
         max_length=20,
         required=False,
         help_text=_("Format: +65XXXXXXXX for Singapore numbers."),
-        widget=forms.TextInput(attrs={"placeholder": "+65XXXXXXXX"})
+        widget=forms.TextInput(attrs={"placeholder": "+65XXXXXXXX"}),
     )
 
     class Meta:

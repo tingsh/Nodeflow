@@ -26,8 +26,8 @@ class OnboardingConnectionTest(TestCase):
             category="energy",
             register_map={
                 "voltage": {"address": 3028, "type": "float32", "functionCode": 3, "unit": "V"},
-                "active_power": {"address": 3054, "type": "float32", "functionCode": 3, "unit": "W", "writable": True}
-            }
+                "active_power": {"address": 3054, "type": "float32", "functionCode": 3, "unit": "W", "writable": True},
+            },
         )
         self.client = Client()
         self.client.force_login(self.user)
@@ -47,30 +47,27 @@ class OnboardingConnectionTest(TestCase):
     def test_htmx_device_create_post_success(self):
         url = reverse("web_team:devices:htmx_device_create", args=[self.team.slug])
         url = f"{url}?site_id={self.site.id}&gateway_id={self.gateway.id}&port=1"
-        
-        response = self.client.post(url, {
-            "name": "New Test Device",
-            "template_id": self.template.id
-        })
-        
+
+        response = self.client.post(url, {"name": "New Test Device", "template_id": self.template.id})
+
         # Check HTTP response code is 200 OK (replaces legacy 204)
         self.assertEqual(response.status_code, 200)
-        
+
         # Check HX-Trigger header exists
         self.assertEqual(response.headers.get("HX-Trigger"), "infrastructureChanged")
-        
+
         # Check that success view content is rendered
         self.assertContains(response, "Device Registered!")
         self.assertContains(response, "New Test Device")
         self.assertContains(response, "Live Connection Test")
-        
+
         # Check that first readable register is identified and details shown
         self.assertContains(response, "voltage")
         self.assertContains(response, "(Address: 3028, FC: 3)")
-        
+
         # Check that writable active_power is NOT chosen as test_register
         self.assertNotContains(response, "active_power")
-        
+
         # Check device was created in DB
         device = Device.objects.get(name="New Test Device")
         self.assertEqual(device.gateway, self.gateway)
@@ -85,19 +82,14 @@ class OnboardingConnectionTest(TestCase):
             model_number="VLT",
             device_type="vfd",
             protocol="modbus_rtu",
-            register_map={
-                "speed_setpoint": {"address": 10, "type": "uint16", "functionCode": 6, "writable": True}
-            }
+            register_map={"speed_setpoint": {"address": 10, "type": "uint16", "functionCode": 6, "writable": True}},
         )
-        
+
         url = reverse("web_team:devices:htmx_device_create", args=[self.team.slug])
         url = f"{url}?site_id={self.site.id}&gateway_id={self.gateway.id}&port=2"
-        
-        response = self.client.post(url, {
-            "name": "Write Only Test Device",
-            "template_id": write_only_template.id
-        })
-        
+
+        response = self.client.post(url, {"name": "Write Only Test Device", "template_id": write_only_template.id})
+
         self.assertEqual(response.status_code, 200)
         # Renders success page cleanly, saying no readable registers
         self.assertContains(response, "No readable registers found in this template to test")
@@ -247,16 +239,19 @@ class OnboardingConnectionTest(TestCase):
         _, victim_site, victim_gateway = self._victim_infrastructure()
         url = reverse("web_team:devices:device_create", args=[self.team.slug])
 
-        response = self.client.post(url, {
-            "gateway": victim_gateway.id,
-            "site": victim_site.id,
-            "template": self.template.id,
-            "name": "Forged Form Device",
-            "device_type": "power_meter",
-            "protocol": "modbus_tcp",
-            "energy_category": "none",
-            "connection_config": "{}",
-        })
+        response = self.client.post(
+            url,
+            {
+                "gateway": victim_gateway.id,
+                "site": victim_site.id,
+                "template": self.template.id,
+                "name": "Forged Form Device",
+                "device_type": "power_meter",
+                "protocol": "modbus_tcp",
+                "energy_category": "none",
+                "connection_config": "{}",
+            },
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Device.objects.filter(name="Forged Form Device").exists())
@@ -273,16 +268,19 @@ class OnboardingConnectionTest(TestCase):
         )
         url = reverse("web_team:devices:device_create", args=[self.team.slug])
 
-        response = self.client.post(url, {
-            "gateway": self.gateway.id,
-            "site": self.site.id,
-            "template": private_template.id,
-            "name": "Private Form Attack",
-            "device_type": "power_meter",
-            "protocol": "modbus_tcp",
-            "energy_category": "none",
-            "connection_config": "{}",
-        })
+        response = self.client.post(
+            url,
+            {
+                "gateway": self.gateway.id,
+                "site": self.site.id,
+                "template": private_template.id,
+                "name": "Private Form Attack",
+                "device_type": "power_meter",
+                "protocol": "modbus_tcp",
+                "energy_category": "none",
+                "connection_config": "{}",
+            },
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Device.objects.filter(name="Private Form Attack").exists())
@@ -291,12 +289,15 @@ class OnboardingConnectionTest(TestCase):
         _, victim_site, _ = self._victim_infrastructure()
         url = reverse("web_team:devices:gateway_edit", args=[self.team.slug, self.gateway.pk])
 
-        response = self.client.post(url, {
-            "site": victim_site.id,
-            "name": self.gateway.name,
-            "serial_number": self.gateway.serial_number,
-            "status": self.gateway.status,
-        })
+        response = self.client.post(
+            url,
+            {
+                "site": victim_site.id,
+                "name": self.gateway.name,
+                "serial_number": self.gateway.serial_number,
+                "status": self.gateway.status,
+            },
+        )
 
         self.assertEqual(response.status_code, 200)
         self.gateway.refresh_from_db()
@@ -318,13 +319,16 @@ class SolutionProfileOnboardingTest(TestCase):
         response = self.client.post(profile_url, {"solution_profile": "facilities_hvac"})
         self.assertRedirects(response, site_url)
 
-        response = self.client.post(site_url, {
-            "name": "Boutique Hotel",
-            "address": "Orchard",
-            "timezone": "Asia/Singapore",
-            "site_type": "small_hotel",
-            "solution_profile": "facilities_hvac",
-        })
+        response = self.client.post(
+            site_url,
+            {
+                "name": "Boutique Hotel",
+                "address": "Orchard",
+                "timezone": "Asia/Singapore",
+                "site_type": "small_hotel",
+                "solution_profile": "facilities_hvac",
+            },
+        )
 
         site = Site.objects.get(team=self.team, name="Boutique Hotel")
         self.assertEqual(site.solution_profile, "facilities_hvac")

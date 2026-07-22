@@ -1,14 +1,16 @@
 import os
-import django
-import sys
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'novena_hub.settings')
+import django
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "novena_hub.settings")
 django.setup()
 
-from django.test import Client
-from django.urls import reverse
-from apps.users.models import CustomUser
-from apps.teams.models import Team
+from django.test import Client  # noqa: E402
+from django.urls import reverse  # noqa: E402
+
+from apps.teams.models import Team  # noqa: E402
+from apps.users.models import CustomUser  # noqa: E402
+
 
 def run_tests():
     try:
@@ -28,15 +30,15 @@ def run_tests():
         client.force_login(user)
 
         urls_to_test = [
-            ("Dashboard", reverse('web:home')),
-            ("Setup", reverse('web_team:onboarding:setup_start', args=[team.slug])),
-            ("Sites", reverse('web_team:devices:site_list', args=[team.slug])),
-            ("Devices", reverse('web_team:devices:device_list', args=[team.slug])),
-            ("Gateways", reverse('web_team:devices:gateway_list', args=[team.slug])),
-            ("Alerts", reverse('web_team:alerts:alert_list', args=[team.slug])),
-            ("Shared Links", reverse('web_team:dashboard_team:list', args=[team.slug])),
-            ("Maintenance", reverse('web_team:maintenance:ticket_list', args=[team.slug])),
-            ("Automations", reverse('web_team:automations:list', args=[team.slug])),
+            ("Dashboard", reverse("web:home")),
+            ("Setup", reverse("web_team:onboarding:setup_start", args=[team.slug])),
+            ("Sites", reverse("web_team:devices:site_list", args=[team.slug])),
+            ("Devices", reverse("web_team:devices:device_list", args=[team.slug])),
+            ("Gateways", reverse("web_team:devices:gateway_list", args=[team.slug])),
+            ("Alerts", reverse("web_team:alerts:alert_list", args=[team.slug])),
+            ("Shared Links", reverse("web_team:dashboard_team:list", args=[team.slug])),
+            ("Maintenance", reverse("web_team:maintenance:ticket_list", args=[team.slug])),
+            ("Automations", reverse("web_team:automations:list", args=[team.slug])),
         ]
 
         success = True
@@ -63,5 +65,6 @@ def run_tests():
     except Exception as e:
         print(f"Test script error: {e}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     run_tests()

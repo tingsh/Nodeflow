@@ -131,7 +131,7 @@ def escalate_alert_to_ticket(request, team_slug, alert_id):
     from apps.maintenance.services import auto_create_ticket
 
     alert = get_object_or_404(Alert, id=alert_id, team=request.team)
-    
+
     ticket = alert.ticket
     if not ticket:
         auto_create_ticket(alert, force=True)

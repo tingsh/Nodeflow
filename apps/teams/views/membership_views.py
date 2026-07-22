@@ -23,7 +23,7 @@ def team_membership_details(request, team_slug, membership_id):
     if request.method == "POST":
         post_data = request.POST.copy()
         role_change_rejected = False
-        
+
         # If editing self, lock the role to its current value
         if editing_self:
             post_data["role"] = membership.role
@@ -44,10 +44,10 @@ def team_membership_details(request, team_slug, membership_id):
             )
     else:
         membership_form = MembershipForm(instance=membership)
-    
+
     if editing_self:
         # Only disable the role field, not the phone_number field
-        membership_form.fields['role'].disabled = True
+        membership_form.fields["role"].disabled = True
     return render(
         request,
         "teams/team_membership_details.html",

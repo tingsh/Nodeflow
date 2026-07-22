@@ -83,20 +83,11 @@ def test_check_alerts_for_payload_triggers_alert_and_email():
 
     # 3. Create a Device
     device = Device.objects.create(
-        team=team,
-        site=site,
-        name="Test Device",
-        device_type="plc",
-        protocol="modbus_tcp",
-        status="online"
+        team=team, site=site, name="Test Device", device_type="plc", protocol="modbus_tcp", status="online"
     )
 
     # 4. Create a user to receive the alert email
-    user = CustomUser.objects.create_user(
-        username="admin_test",
-        email="admin@test.com",
-        password="testpassword123"
-    )
+    user = CustomUser.objects.create_user(username="admin_test", email="admin@test.com", password="testpassword123")
     # Associate user with team
     team.members.add(user)
 
@@ -110,7 +101,7 @@ def test_check_alerts_for_payload_triggers_alert_and_email():
         threshold=100.0,
         is_active=True,
         notify_email=True,
-        cooldown_minutes=15
+        cooldown_minutes=15,
     )
     rule.recipients.add(user)
 
@@ -159,7 +150,7 @@ def test_targeted_recipients_email_dispatch():
         threshold=50.0,
         is_active=True,
         notify_email=True,
-        cooldown_minutes=15
+        cooldown_minutes=15,
     )
     rule.recipients.add(user1)  # Only user1 is recipient
 
@@ -202,13 +193,11 @@ def test_targeted_whatsapp_dispatch(mock_post):
         threshold=50.0,
         is_active=True,
         notify_whatsapp=True,
-        cooldown_minutes=15
+        cooldown_minutes=15,
     )
     rule.recipients.add(user)
 
-    alert = Alert.objects.create(
-        team=team, rule=rule, device=device, trigger_value=55.0, status="active"
-    )
+    alert = Alert.objects.create(team=team, rule=rule, device=device, trigger_value=55.0, status="active")
     Alert.objects.filter(id=alert.id).update(triggered_at=datetime(2026, 7, 13, 2, 42, 25, tzinfo=UTC))
 
     dispatch_alert_whatsapp_task(alert.id)
@@ -279,7 +268,7 @@ def test_alert_auto_resolution():
         threshold=100.0,
         is_active=True,
         notify_email=True,
-        cooldown_minutes=15
+        cooldown_minutes=15,
     )
     rule.recipients.add(user)
 
@@ -289,7 +278,7 @@ def test_alert_auto_resolution():
     assert alerts.count() == 1
     alert = alerts.first()
     assert alert.status == "active"
-    
+
     # 2. Reset outbox
     mail.outbox.clear()
 
@@ -364,7 +353,7 @@ def test_cooldown_hardening():
         threshold=240.0,
         is_active=True,
         notify_email=True,
-        cooldown_minutes=15
+        cooldown_minutes=15,
     )
     rule.recipients.add(user)
 
@@ -391,7 +380,7 @@ def test_duration_seconds_evaluation():
     from django.utils import timezone
 
     from apps.telemetry.models import TelemetryData
-    
+
     team = Team.objects.create(name="Test Team", slug="test-team")
     site = Site.objects.create(team=team, name="Test Site")
     device = Device.objects.create(
@@ -410,7 +399,7 @@ def test_duration_seconds_evaluation():
         is_active=True,
         notify_email=True,
         cooldown_minutes=15,
-        duration_seconds=30  # Needs to exceed for 30s
+        duration_seconds=30,  # Needs to exceed for 30s
     )
     rule.recipients.add(user)
 
@@ -436,7 +425,7 @@ def test_duration_seconds_evaluation():
 @patch("apps.alerts.tasks.requests.post")
 def test_async_webhook_dispatch(mock_post):
     from apps.alerts.tasks import dispatch_alert_webhook_task
-    
+
     team = Team.objects.create(name="Test Team", slug="test-team")
     site = Site.objects.create(team=team, name="Test Site")
     device = Device.objects.create(
@@ -452,12 +441,10 @@ def test_async_webhook_dispatch(mock_post):
         threshold=50.0,
         is_active=True,
         notify_webhook="https://mywebhooks.com/receiver",
-        cooldown_minutes=15
+        cooldown_minutes=15,
     )
 
-    alert = Alert.objects.create(
-        team=team, rule=rule, device=device, trigger_value=55.0, status="active"
-    )
+    alert = Alert.objects.create(team=team, rule=rule, device=device, trigger_value=55.0, status="active")
 
     dispatch_alert_webhook_task(alert.id, is_resolved=False)
 
@@ -488,11 +475,9 @@ def test_manual_escalate_alert_success():
         condition="gt",
         threshold=50.0,
         create_maintenance_ticket=False,
-        is_active=True
+        is_active=True,
     )
-    alert = Alert.objects.create(
-        team=team, rule=rule, device=device, trigger_value=55.0, status="active"
-    )
+    alert = Alert.objects.create(team=team, rule=rule, device=device, trigger_value=55.0, status="active")
 
     client.force_login(user)
     url = reverse("web_team:alerts:escalate_alert", args=[team.slug, alert.id])
@@ -517,6 +502,7 @@ def test_manual_escalate_alert_permission_denied():
     )
     user = CustomUser.objects.create_user(username="v", email="v@test.com", password="pwd")
     from apps.teams.roles import ROLE_VIEWER
+
     Membership.objects.create(team=team, user=user, role=ROLE_VIEWER)
 
     rule = AlertRule.objects.create(
@@ -527,11 +513,9 @@ def test_manual_escalate_alert_permission_denied():
         condition="gt",
         threshold=50.0,
         create_maintenance_ticket=False,
-        is_active=True
+        is_active=True,
     )
-    alert = Alert.objects.create(
-        team=team, rule=rule, device=device, trigger_value=55.0, status="active"
-    )
+    alert = Alert.objects.create(team=team, rule=rule, device=device, trigger_value=55.0, status="active")
 
     client.force_login(user)
     url = reverse("web_team:alerts:escalate_alert", args=[team.slug, alert.id])

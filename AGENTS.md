@@ -12,6 +12,19 @@ Use the relevant repo-local Codex skills in .agents/skills/ when the task matche
 ## Development Mode
 We are currently developing and testing locally. Use local PostgreSQL and Redis. Docker is reserved for deployment only.
 
+## Production Readiness Discipline
+The Production Readiness Kit is part of the product baseline, not a one-time deployment artifact. When making product, UI/UX, onboarding, telemetry, gateway, MQTT, email, WhatsApp, payment, Celery, database, or external-service changes, always check whether production deployment is affected.
+
+Before finishing any change that alters production behavior, review whether these need updates:
+
+1. `deploy/env/production.env.example` for new or changed environment variables.
+2. `Dockerfile.prod`, `docker-compose.prod.yml`, `deploy/nginx/`, or `deploy/mosquitto/` for runtime, port, proxy, MQTT, or service changes.
+3. `apps/web/management/commands/production_readiness_check.py` for new production blockers or warnings.
+4. `docs/production_readiness_kit.md` and `docs/production_backup_restore.md` for operator guidance.
+5. Backup, restore, health check, and rollback instructions if migrations or data handling change.
+
+If the change introduces a new required production dependency, update the readiness kit in the same branch as the product change. Run the relevant checks before handoff, especially `python manage.py production_readiness_check`, Django checks/tests, `npm run build`, and `docker compose -f docker-compose.prod.yml config` when Docker is available.
+
 ### Local Shell / Runtime Default
 On this Windows development machine, default to WSL for Novena development and testing. The active Hub project is stored in WSL-native storage at:
 

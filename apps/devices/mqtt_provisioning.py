@@ -94,9 +94,7 @@ def provision_gateway_mqtt(gateway, password):
         "password": password,
         "textName": f"Edge Gateway {sn}",
         "textDescription": f"Auto-provisioned for gateway {gateway.name}",
-        "roles": [
-            {"roleName": "gateway", "priority": -1}
-        ],
+        "roles": [{"roleName": "gateway", "priority": -1}],
     }
     _publish_dynsec_command(create_cmd)
 
@@ -152,9 +150,7 @@ def provision_gateway_mqtt(gateway, password):
         "password": compute_claim_code(sn),
         "textName": f"Bootstrap Gateway {sn}",
         "textDescription": f"Claim-time activation client for gateway {gateway.name}",
-        "roles": [
-            {"roleName": bootstrap_role_name, "priority": -1}
-        ],
+        "roles": [{"roleName": bootstrap_role_name, "priority": -1}],
     }
     _publish_dynsec_command(bootstrap_client_cmd)
 
