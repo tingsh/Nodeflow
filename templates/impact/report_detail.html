@@ -1,0 +1,17 @@
+{% extends "web/app/app_base.html" %}
+{% block app %}
+<div class="px-4 py-6 sm:px-6 lg:px-8">
+  <div class="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div>
+      <a href="{% url 'web_team:impact:report_list' request.team.slug %}" class="text-xs font-bold text-primary">← Monthly reviews</a>
+      <h1 class="mt-2 text-2xl font-bold">{{ impact_report.period_start|date:"F Y" }} Business Impact Review</h1>
+    </div>
+    {% if impact_report.status == "ready" %}
+    <a href="{% url 'web_team:impact:report_download' request.team.slug impact_report.id %}" class="btn btn-primary btn-sm"><i class="fa fa-file-pdf mr-2"></i>Download private PDF</a>
+    {% endif %}
+  </div>
+  <div class="overflow-hidden rounded-lg border border-base-content/10 bg-white shadow-sm">
+    {{ report_html|safe }}
+  </div>
+</div>
+{% endblock %}

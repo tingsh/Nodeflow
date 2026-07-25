@@ -66,6 +66,7 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./media:/code/media
+      - ./private_media:/code/private_media
       - ./static_root:/code/static_root
     depends_on:
       postgres:
@@ -88,6 +89,7 @@ services:
     command: ["celery", "-A", "novena_hub", "worker", "-l", "INFO", "--concurrency", "2"]
     volumes:
       - ./media:/code/media
+      - ./private_media:/code/private_media
     depends_on:
       postgres:
         condition: service_healthy

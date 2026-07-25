@@ -21,6 +21,11 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
     apt-get install -y --no-install-recommends \
       curl \
       gettext \
+      fonts-dejavu-core \
+      libcairo2 \
+      libglib2.0-0 \
+      libpango-1.0-0 \
+      libpangoft2-1.0-0 \
       libpq5 \
       postgresql-client \
       netcat-openbsd && \
@@ -34,7 +39,7 @@ RUN uv sync --frozen --group prod --no-dev
 
 RUN groupadd -r django && \
     useradd -r -g django -m -d /home/django django && \
-    mkdir -p /code/static_root /code/media && \
+    mkdir -p /code/static_root /code/media /code/private_media && \
     chown -R django:django /code /usr/local/venv
 
 COPY --chown=django:django . .

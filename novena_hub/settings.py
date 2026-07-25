@@ -115,6 +115,7 @@ PROJECT_APPS = [
     "apps.events",
     "apps.maintenance",
     "apps.automations",
+    "apps.impact.apps.ImpactConfig",
 ]
 
 # MQTT Settings
@@ -437,6 +438,14 @@ STORAGES = {
 
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
+PRIVATE_MEDIA_ROOT = BASE_DIR / "private_media"
+STORAGES["impact_reports"] = {
+    "BACKEND": "django.core.files.storage.FileSystemStorage",
+    "OPTIONS": {
+        "location": PRIVATE_MEDIA_ROOT,
+        "base_url": None,
+    },
+}
 
 USE_S3_MEDIA = env.bool("USE_S3_MEDIA", default=False)
 if USE_S3_MEDIA:
@@ -451,6 +460,9 @@ if USE_S3_MEDIA:
     MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/{PUBLIC_MEDIA_LOCATION}/"
     STORAGES["default"] = {
         "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
+    }
+    STORAGES["impact_reports"] = {
+        "BACKEND": "apps.web.storage_backends.PrivateMediaStorage",
     }
 
 # Vite Integration
@@ -615,6 +627,22 @@ CELERY_BEAT_SCHEDULE = {
     "expire-control-activations": {
         "task": "apps.devices.tasks.expire_control_activations",
         "schedule": 3600.0,
+    },
+    "refresh-business-impact": {
+        "task": "apps.impact.tasks.dispatch_impact_refreshes",
+        "schedule": 3600.0,
+    },
+    "finalize-daily-business-impact": {
+        "task": "apps.impact.tasks.dispatch_daily_impact_finalization",
+        "schedule": 3600.0,
+    },
+    "generate-monthly-business-impact-reports": {
+        "task": "apps.impact.tasks.dispatch_monthly_impact_reports",
+        "schedule": 21600.0,
+    },
+    "cleanup-business-impact-history": {
+        "task": "apps.impact.tasks.cleanup_impact_history",
+        "schedule": 86400.0,
     },
 }
 

@@ -15,6 +15,10 @@ OK_EXTERNAL_CHECKS = [
     readiness.CheckResult("Data", "TimescaleDB hypertable", "OK", "patched"),
     readiness.CheckResult("Services", "Redis", "OK", "patched"),
     readiness.CheckResult("Services", "MQTT broker", "OK", "patched"),
+    [
+        readiness.CheckResult("Business impact", "Private report storage", "OK", "patched"),
+        readiness.CheckResult("Business impact", "PDF rendering", "OK", "patched"),
+    ],
 ]
 
 
@@ -57,6 +61,7 @@ def _patch_external_checks():
         _check_timescale=lambda: OK_EXTERNAL_CHECKS[1],
         _check_redis=lambda: OK_EXTERNAL_CHECKS[2],
         _check_mqtt=lambda: OK_EXTERNAL_CHECKS[3],
+        _check_business_impact_reporting=lambda: OK_EXTERNAL_CHECKS[4],
     )
 
 
