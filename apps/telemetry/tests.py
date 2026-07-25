@@ -44,6 +44,14 @@ def test_gateway_attribute_ingest_persists_edge_diagnostics():
             "serial_number": "GW-DIAG-001",
             "attributes": {
                 "status": "online",
+                "remote_control_protocol_version": 1,
+                "remote_control_capabilities": [
+                    "governed_commands_v1",
+                    "local_writeback_v1",
+                    "lifecycle_stages_v1",
+                    "idempotent_replay_v1",
+                ],
+                "remote_control_local_writeback_enabled": True,
                 "internet_reachable": False,
                 "dns_ok": True,
                 "broker_tcp_ok": False,
@@ -69,6 +77,9 @@ def test_gateway_attribute_ingest_persists_edge_diagnostics():
     config_record.refresh_from_db()
 
     assert gateway.internet_reachable is False
+    assert gateway.remote_control_protocol_version == 1
+    assert "local_writeback_v1" in gateway.remote_control_capabilities
+    assert gateway.remote_control_local_writeback_enabled is True
     assert gateway.dns_ok is True
     assert gateway.broker_tcp_ok is False
     assert gateway.broker_tcp_error == "timed out"

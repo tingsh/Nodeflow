@@ -1,5 +1,7 @@
 # Novena Production Backup And Restore Guide
 
+> For remote-control deployments, keep command workers stopped after restore and run the governed-control recovery reset in `docs/governed_remote_control_operations.md`. Restored approvals, outbox rows and commands must never execute.
+
 This guide is for the first low-cost production deployment where Novena runs Postgres/TimescaleDB on the same VPS as the app.
 
 ## Mental Model

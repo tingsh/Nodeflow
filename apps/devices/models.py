@@ -99,12 +99,15 @@ class Gateway(BaseTeamModel):
     active_connectors = models.JSONField(default=list, blank=True)
     connected_devices = models.JSONField(default=list, blank=True)
     remote_control_protocol_version = models.PositiveIntegerField(default=0)
+    remote_control_capabilities = models.JSONField(default=list, blank=True)
     remote_control_local_writeback_enabled = models.BooleanField(default=False)
     remote_control_policy_loaded = models.BooleanField(default=False)
     remote_control_policy_revision = models.PositiveIntegerField(default=0)
     remote_control_epoch = models.PositiveBigIntegerField(default=0)
     remote_control_clock_ready = models.BooleanField(default=False)
     remote_control_journal_ready = models.BooleanField(default=False)
+    remote_control_event_spool_count = models.PositiveIntegerField(default=0)
+    remote_control_storage_healthy = models.BooleanField(default=False)
 
     # Network Watchdog fields
     active_interface = models.CharField(max_length=20, blank=True, default="eth0")
@@ -375,6 +378,7 @@ class RpcCommand(BaseTeamModel):
     params = models.JSONField(default=dict)
     sent_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    response_stage = models.CharField(max_length=40, blank=True)
     result = models.JSONField(null=True, blank=True)
     error_message = models.TextField(blank=True)
     responded_at = models.DateTimeField(null=True, blank=True)
@@ -403,6 +407,7 @@ class DeviceCommand(BaseTeamModel):
     STATUS_CHOICES = (
         ("pending", _("Pending")),
         ("sent", _("Sent to Gateway")),
+        ("accepted", _("Accepted by Field Protocol")),
         ("executed", _("Executed Successfully")),
         ("failed", _("Failed")),
         ("timed_out", _("Timed Out")),
@@ -548,6 +553,111 @@ class CommandPolicy(BaseTeamModel):
         ]
 
 
+class SiteMembershipAccess(BaseTeamModel):
+    """Optional site boundary for a team membership; no rows means all team sites."""
+
+    membership = models.ForeignKey(
+        "teams.Membership",
+        on_delete=models.CASCADE,
+        related_name="site_access",
+    )
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="membership_access")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["membership", "site"],
+                name="unique_membership_site_access",
+            )
+        ]
+
+
+class ControlReadinessAssessment(BaseTeamModel):
+    class State(models.TextChoices):
+        MONITORING_ONLY = "monitoring_only", _("Monitoring only")
+        EVIDENCE_COLLECTING = "evidence_collecting", _("Evidence collecting")
+        READY_FOR_COMMISSIONING = "ready_for_commissioning", _("Ready for commissioning")
+        COMMISSIONING = "commissioning", _("Commissioning")
+        READY_FOR_ACTIVATION = "ready_for_activation", _("Ready for activation")
+        ACTIVE = "active", _("Active")
+        SUSPENDED = "suspended", _("Suspended")
+        RECOMMISSIONING_REQUIRED = "recommissioning_required", _("Recommissioning required")
+
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="control_readiness_assessments")
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="control_readiness_assessments")
+    state = models.CharField(max_length=32, choices=State.choices, default=State.MONITORING_ONLY)
+    observation_days = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    telemetry_coverage_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    evidence = models.JSONField(default=dict)
+    blockers = models.JSONField(default=list, blank=True)
+    waiver_reason = models.TextField(blank=True)
+    waiver_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="approved_control_readiness_waivers",
+    )
+    assessed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="control_readiness_assessments",
+    )
+    assessed_at = models.DateTimeField(default=timezone.now)
+
+
+class ControlCommissioningSession(BaseTeamModel):
+    class Status(models.TextChoices):
+        OPEN = "open", _("Open")
+        COMPLETED = "completed", _("Completed")
+        EXPIRED = "expired", _("Expired")
+        CANCELLED = "cancelled", _("Cancelled")
+
+    site = models.ForeignKey(Site, on_delete=models.CASCADE)
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE)
+    commissioner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="control_commissioning_sessions",
+    )
+    scope = models.JSONField(default=dict)
+    evidence = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.OPEN)
+    expires_at = models.DateTimeField()
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+
+class ControlActivation(BaseTeamModel):
+    class Status(models.TextChoices):
+        ACTIVE = "active", _("Active")
+        SUSPENDED = "suspended", _("Suspended")
+        EXPIRED = "expired", _("Expired")
+        REVOKED = "revoked", _("Revoked")
+
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name="control_activations")
+    command_key = models.CharField(max_length=100)
+    readiness_assessment = models.ForeignKey(ControlReadinessAssessment, on_delete=models.PROTECT)
+    commissioning_session = models.ForeignKey(ControlCommissioningSession, on_delete=models.PROTECT)
+    activated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="control_activations",
+    )
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    control_epoch = models.PositiveBigIntegerField()
+    activated_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField()
+    suspended_reason = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["device", "command_key", "control_epoch"],
+                name="unique_control_activation_epoch",
+            )
+        ]
+
+
 class RemoteCommand(BaseTeamModel):
     """Canonical governed command intent, separate from MQTT transport attempts."""
 
@@ -577,6 +687,8 @@ class RemoteCommand(BaseTeamModel):
         FIELD_PROTOCOL_ACCEPTED = "field_protocol_accepted", _("Field protocol accepted")
         VERIFICATION_PENDING = "verification_pending", _("Verification pending")
         VERIFIED = "verified", _("Verified")
+        ACTION_INITIATED = "action_initiated", _("Action initiated")
+        ACTION_COMPLETED = "action_completed", _("Action completed")
         REJECTED = "rejected", _("Rejected")
         FAILED = "failed", _("Failed")
         EXPIRED = "expired", _("Expired")
@@ -611,6 +723,8 @@ class RemoteCommand(BaseTeamModel):
     reason = models.TextField(blank=True)
     risk = models.CharField(max_length=16, choices=Risk.choices)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.REQUESTED)
+    transport_status = models.CharField(max_length=32, default="request_accepted")
+    execution_status = models.CharField(max_length=32, default="not_started")
     actor_snapshot = models.JSONField(default=dict, blank=True)
     policy_snapshot = models.JSONField(default=dict, blank=True)
     request_payload = models.JSONField(default=dict, blank=True)
@@ -645,23 +759,79 @@ class RemoteCommand(BaseTeamModel):
         return f"{self.operation} -> {target} ({self.status})"
 
 
+class CommandEventQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise TypeError("CommandEvent rows are append-only.")
+
+    def delete(self):
+        raise TypeError("CommandEvent rows are append-only.")
+
+
 class CommandEvent(models.Model):
     """Append-only evidence for a governed command lifecycle transition."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    command = models.ForeignKey(RemoteCommand, on_delete=models.CASCADE, related_name="events")
+    command = models.ForeignKey(RemoteCommand, on_delete=models.PROTECT, related_name="events")
+    sequence_number = models.PositiveBigIntegerField(default=0)
     event_type = models.CharField(max_length=80)
     from_status = models.CharField(max_length=32, blank=True)
     to_status = models.CharField(max_length=32, blank=True)
-    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True)
     actor_snapshot = models.JSONField(default=dict, blank=True)
     evidence = models.JSONField(default=dict, blank=True)
     checksum = models.CharField(max_length=64, blank=True)
     happened_at = models.DateTimeField(auto_now_add=True)
+    objects = CommandEventQuerySet.as_manager()
 
     class Meta:
-        ordering = ["happened_at", "id"]
-        indexes = [models.Index(fields=["command", "happened_at"])]
+        ordering = ["sequence_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["command", "sequence_number"],
+                name="unique_command_event_sequence",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["command", "sequence_number"],
+                name="devices_com_command_5dc736_idx",
+            )
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise TypeError("CommandEvent rows are append-only.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise TypeError("CommandEvent rows are append-only.")
+
+
+class RemoteCommandApproval(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", _("Pending")
+        APPROVED = "approved", _("Approved")
+        REJECTED = "rejected", _("Rejected")
+        EXPIRED = "expired", _("Expired")
+        INVALIDATED = "invalidated", _("Invalidated")
+
+    command = models.OneToOneField(RemoteCommand, on_delete=models.CASCADE, related_name="approval")
+    requested_by_snapshot = models.JSONField(default=dict)
+    approver = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="remote_command_approvals",
+    )
+    approver_snapshot = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    binding_checksum = models.CharField(max_length=64)
+    expires_at = models.DateTimeField()
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_reason = models.TextField(blank=True)
+    mfa_verified = models.BooleanField(default=False)
+    recent_auth_at = models.DateTimeField(null=True, blank=True)
 
 
 class CommandOutbox(models.Model):
@@ -671,21 +841,31 @@ class CommandOutbox(models.Model):
         PENDING = "pending", _("Pending")
         CLAIMED = "claimed", _("Claimed")
         PUBLISHED = "published", _("Published")
+        RETRY = "retry", _("Retry scheduled")
         FAILED = "failed", _("Failed")
+        DEAD_LETTER = "dead_letter", _("Dead letter")
         CANCELLED = "cancelled", _("Cancelled")
 
     command = models.OneToOneField(RemoteCommand, on_delete=models.CASCADE, related_name="outbox")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
     attempt_count = models.PositiveIntegerField(default=0)
     available_at = models.DateTimeField(default=timezone.now)
+    next_attempt_at = models.DateTimeField(default=timezone.now)
     claimed_at = models.DateTimeField(null=True, blank=True)
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
     published_at = models.DateTimeField(null=True, blank=True)
+    dead_lettered_at = models.DateTimeField(null=True, blank=True)
     last_error = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        indexes = [models.Index(fields=["status", "available_at"])]
+        indexes = [
+            models.Index(
+                fields=["status", "next_attempt_at"],
+                name="devices_com_status_797fed_idx",
+            )
+        ]
 
 
 class CommandTransportAttempt(models.Model):
@@ -731,6 +911,38 @@ class GatewayControlPolicyBundle(BaseTeamModel):
                 name="unique_gateway_policy_bundle_revision",
             )
         ]
+
+
+class RemoteControlSigningKey(models.Model):
+    class Status(models.TextChoices):
+        ACTIVE = "active", _("Active")
+        NEXT = "next", _("Next")
+        RETIRED = "retired", _("Retired")
+        REVOKED = "revoked", _("Revoked")
+
+    key_id = models.CharField(max_length=64, unique=True)
+    public_key = models.TextField()
+    status = models.CharField(max_length=16, choices=Status.choices)
+    private_key_reference = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Reference to a managed secret; private key material is never stored here."),
+    )
+    activated_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class CommandAuditLegalHold(BaseTeamModel):
+    command = models.ForeignKey(RemoteCommand, on_delete=models.PROTECT, related_name="legal_holds")
+    reason = models.TextField()
+    placed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="command_audit_legal_holds",
+    )
+    placed_at = models.DateTimeField(default=timezone.now)
+    released_at = models.DateTimeField(null=True, blank=True)
 
 
 class FirmwareRelease(models.Model):

@@ -320,21 +320,26 @@ def send_device_command(device, user, key, value=None, *, command_type="write", 
     Sends a customer-facing command to a device via the associated gateway.
     DeviceCommand is the customer audit record; RpcCommand is the transport record.
     """
-    from .remote_control import request_remote_command
+    from .remote_control import request_remote_command, resolve_device_params
+    from .remote_control_protocol import canonical_device_operation
 
     if not device.gateway:
         raise ValueError("Device is not assigned to a gateway.")
-    if command_type not in {"read", "write"}:
-        raise ValueError("Command type must be 'read' or 'write'.")
+    operation = canonical_device_operation(command_type)
 
-    command_key = key or f"manual_{command_type}"
+    if not key:
+        raise ValueError("A mapped canonical device command key is required.")
+    command_key = key
     if params:
         raise ValueError("Raw register parameters are not accepted; select a mapped device key.")
     value = _normalize_command_value(value)
+    # Reject unknown/unmapped keys before building any transport target.
+    resolve_device_params(device, command_key, operation, value)
+    command_type = "write" if operation == "write_device" else "read"
     transaction_id = str(uuid.uuid4())
     remote_command = request_remote_command(
         gateway=device.gateway,
-        operation=f"{command_type}_device",
+        operation=operation,
         requested_by=user,
         device=device,
         command_key=command_key,
@@ -375,58 +380,77 @@ def sync_device_command_from_rpc(rpc_record):
 
     if rpc_record.remote_command_id:
         from .models import RemoteCommand
-        from .remote_control import append_command_event
+        from .remote_control import transition_command
+        from .remote_control_protocol import GATEWAY_STAGE_TO_COMMAND_STATUS
 
         governed = rpc_record.remote_command
-        previous = governed.status
-        governed.response_payload = {
+        response_payload = {
             "status": rpc_record.status,
+            "stage": rpc_record.response_stage,
             "result": rpc_record.result,
             "error": rpc_record.error_message or "",
         }
-        governed.completed_at = rpc_record.responded_at or timezone.now()
-        if rpc_record.status == "success":
-            governed.status = RemoteCommand.Status.FIELD_PROTOCOL_ACCEPTED
-            governed.error_code = ""
-            governed.error_message = ""
-        elif rpc_record.status == "timeout":
-            governed.status = RemoteCommand.Status.OUTCOME_UNKNOWN
-            governed.error_code = "gateway_timeout"
-            governed.error_message = rpc_record.error_message or "Timed out waiting for Gateway response."
+        target_status = GATEWAY_STAGE_TO_COMMAND_STATUS.get(rpc_record.response_stage)
+        error_code = ""
+        error_message = ""
+        if rpc_record.status == "timeout":
+            target_status = RemoteCommand.Status.OUTCOME_UNKNOWN
+            error_code = "gateway_timeout"
+            error_message = rpc_record.error_message or "Timed out waiting for Gateway response."
+        elif rpc_record.status == "error" and not target_status:
+            target_status = RemoteCommand.Status.FAILED
+            error_code = "gateway_failed"
+            error_message = rpc_record.error_message or "Gateway command failed."
+        elif target_status in {RemoteCommand.Status.REJECTED, RemoteCommand.Status.FAILED}:
+            error_code = "gateway_rejected" if target_status == RemoteCommand.Status.REJECTED else "gateway_failed"
+            error_message = rpc_record.error_message or "Gateway command failed."
+        updates = {
+            "response_payload": response_payload,
+            "error_code": error_code,
+            "error_message": error_message,
+        }
+        if target_status in {
+            RemoteCommand.Status.VERIFIED,
+            RemoteCommand.Status.ACTION_COMPLETED,
+            RemoteCommand.Status.REJECTED,
+            RemoteCommand.Status.FAILED,
+        }:
+            updates["completed_at"] = rpc_record.responded_at or timezone.now()
+        if target_status:
+            transition_command(
+                governed,
+                target_status,
+                f"gateway_{rpc_record.response_stage or rpc_record.status}",
+                evidence=response_payload,
+                updates=updates,
+            )
         else:
-            governed.status = RemoteCommand.Status.FAILED
-            governed.error_code = "gateway_rejected"
-            governed.error_message = rpc_record.error_message or "Gateway command failed."
-        governed.save(
-            update_fields=[
-                "status",
-                "response_payload",
-                "completed_at",
-                "error_code",
-                "error_message",
-                "updated_at",
-            ]
-        )
-        append_command_event(
-            governed,
-            "gateway_result",
-            from_status=previous,
-            to_status=governed.status,
-            evidence=governed.response_payload,
-        )
+            RemoteCommand.objects.filter(pk=governed.pk).update(**updates)
+        governed.response_payload = response_payload
 
     if not command:
         return None
 
     command.response_payload = {
         "status": rpc_record.status,
+        "stage": rpc_record.response_stage,
         "result": rpc_record.result,
         "error": rpc_record.error_message or "",
     }
-    if rpc_record.status == "success":
+    if rpc_record.status == "success" and rpc_record.response_stage in {
+        "field_execution_verified",
+        "gateway_action_completed",
+        "diagnostic_completed",
+    }:
         command.status = "executed"
         command.error_message = ""
         command.executed_at = rpc_record.responded_at or timezone.now()
+    elif rpc_record.status == "success" and rpc_record.response_stage in {
+        "field_protocol_accepted",
+        "ota_initiated",
+    }:
+        command.status = "accepted"
+        command.error_message = ""
     elif rpc_record.status == "timeout":
         command.status = "timed_out"
         command.error_message = rpc_record.error_message or "Timed out waiting for gateway response."
@@ -456,10 +480,23 @@ def process_command_response(payload_str):
             if not rpc:
                 return
             rpc.status = payload.get("status", "error")
+            from .remote_control_protocol import GATEWAY_STAGE_TO_COMMAND_STATUS
+
+            stage = payload.get("stage", "")
+            rpc.response_stage = stage if stage in GATEWAY_STAGE_TO_COMMAND_STATUS else ""
             rpc.result = payload.get("result")
             rpc.error_message = payload.get("error", "") or ""
             rpc.responded_at = timezone.now()
-            rpc.save(update_fields=["status", "result", "error_message", "responded_at", "updated_at"])
+            rpc.save(
+                update_fields=[
+                    "status",
+                    "response_stage",
+                    "result",
+                    "error_message",
+                    "responded_at",
+                    "updated_at",
+                ]
+            )
             sync_device_command_from_rpc(rpc)
             return
 

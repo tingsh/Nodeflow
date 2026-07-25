@@ -1,5 +1,7 @@
 # Novena Production Readiness Kit
 
+Governed control adds mandatory signing-key, current-policy acknowledgement, audit-retention, Gateway clock/journal/storage, emergency-disable and restore-reset gates. See `docs/governed_remote_control_operations.md`.
+
 This guide documents the repo-backed assets that help deploy Novena Hub safely on a low-cost single VPS.
 
 It does not replace the production deployment plan. Use that plan for the cloud/vendor setup. Use this kit for the concrete files, checks, and operational guardrails that live in the codebase.
@@ -17,6 +19,7 @@ The first production target is a lean VPS deployment:
 - PostgreSQL with TimescaleDB for relational and time-series data.
 - Redis for cache, Celery, and Channels.
 - Celery worker and Celery Beat for background and scheduled jobs.
+- Celery Beat must include `apps.devices.tasks.dispatch_due_remote_command_outboxes`; alert on dead-lettered command outbox rows and repeatedly expired leases.
 - MQTT consumer for gateway telemetry ingestion.
 - Mosquitto with Dynamic Security for gateway credentials.
 - Host Nginx for HTTPS and WebSocket reverse proxy.
