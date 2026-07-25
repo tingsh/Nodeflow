@@ -1,5 +1,7 @@
 # Novena Production Readiness Kit
 
+Governed control adds mandatory signing-key, current-policy acknowledgement, audit-retention, Gateway clock/journal/storage, emergency-disable and restore-reset gates. See `docs/governed_remote_control_operations.md`.
+
 This guide documents the repo-backed assets that help deploy Novena Hub safely on a low-cost single VPS.
 
 It does not replace the production deployment plan. Use that plan for the cloud/vendor setup. Use this kit for the concrete files, checks, and operational guardrails that live in the codebase.

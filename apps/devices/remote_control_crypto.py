@@ -21,7 +21,11 @@ def payload_checksum(payload: dict) -> str:
 
 
 def _private_key() -> Ed25519PrivateKey:
-    encoded = settings.REMOTE_CONTROL_SIGNING_PRIVATE_KEY
+    key_id = settings.REMOTE_CONTROL_ACTIVE_SIGNING_KEY_ID
+    encoded = settings.REMOTE_CONTROL_SIGNING_KEYS.get(
+        key_id,
+        settings.REMOTE_CONTROL_SIGNING_PRIVATE_KEY,
+    )
     if not encoded:
         raise CommandSigningUnavailable("REMOTE_CONTROL_SIGNING_PRIVATE_KEY is not configured")
     try:
@@ -33,7 +37,7 @@ def _private_key() -> Ed25519PrivateKey:
 
 def sign_payload(payload: dict) -> tuple[str, str]:
     signature = _private_key().sign(canonical_bytes(payload))
-    return settings.REMOTE_CONTROL_SIGNING_KEY_ID, base64.b64encode(signature).decode()
+    return settings.REMOTE_CONTROL_ACTIVE_SIGNING_KEY_ID, base64.b64encode(signature).decode()
 
 
 def build_signed_command_envelope(command) -> dict:

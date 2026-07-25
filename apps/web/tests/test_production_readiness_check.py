@@ -43,6 +43,10 @@ PRODUCTION_SETTINGS = {
     "STRIPE_LIVE_MODE": False,
     "DJSTRIPE_WEBHOOK_SECRET": "",
     "SENTRY_DSN": "",
+    "REMOTE_CONTROL_ACTIVE_SIGNING_KEY_ID": "production-key",
+    "REMOTE_CONTROL_SIGNING_KEYS": {"production-key": "base64-seed"},
+    "REMOTE_CONTROL_SIGNING_PRIVATE_KEY": "",
+    "REMOTE_CONTROL_AUDIT_RETENTION_DAYS": 2555,
 }
 
 
@@ -179,6 +183,9 @@ def test_production_env_example_contains_readiness_variables():
         "WHATSAPP_PHONE_NUMBER_ID",
         "WHATSAPP_ACCESS_TOKEN",
         "WHATSAPP_VERIFY_TOKEN",
+        "REMOTE_CONTROL_ACTIVE_SIGNING_KEY_ID",
+        "REMOTE_CONTROL_SIGNING_KEYS",
+        "REMOTE_CONTROL_AUDIT_RETENTION_DAYS",
         "HEALTH_CHECK_TOKENS",
         "DJSTRIPE_WEBHOOK_SECRET",
         "SENTRY_DSN",

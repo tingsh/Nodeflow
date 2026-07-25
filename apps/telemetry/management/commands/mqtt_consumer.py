@@ -307,6 +307,8 @@ class Command(BaseCommand):
             "remote_control_epoch": "remote_control_epoch",
             "remote_control_clock_ready": "remote_control_clock_ready",
             "remote_control_journal_ready": "remote_control_journal_ready",
+            "remote_control_event_spool_count": "remote_control_event_spool_count",
+            "remote_control_storage_healthy": "remote_control_storage_healthy",
             "active_interface": "active_interface",
             "failover_count": "failover_count",
             "ethernet_status": "ethernet_status",
@@ -365,6 +367,39 @@ class Command(BaseCommand):
                 acknowledged.acknowledged_at = timezone.now()
                 acknowledged.is_active = True
                 acknowledged.save(update_fields=["acknowledged_at", "is_active", "updated_at"])
+
+        reconciliation = attrs.get("remote_control_reconciliation")
+        if isinstance(reconciliation, list):
+            from apps.devices.models import RemoteCommand
+            from apps.devices.remote_control import append_command_event
+
+            for edge_event in reconciliation:
+                command = RemoteCommand.objects.filter(
+                    pk=edge_event.get("command_id"),
+                    gateway=gateway,
+                ).first()
+                if not command:
+                    continue
+                if command.events.filter(
+                    event_type="gateway_journal_reconciled",
+                    evidence=edge_event,
+                ).exists():
+                    continue
+                previous = command.status
+                if edge_event.get("status") == "success" and edge_event.get("stage") == "verified":
+                    command.status = RemoteCommand.Status.RECONCILED_VERIFIED
+                elif edge_event.get("stage") == "rejected":
+                    command.status = RemoteCommand.Status.RECONCILED_NOT_APPLIED
+                else:
+                    command.status = RemoteCommand.Status.RECONCILED_UNRESOLVED
+                command.save(update_fields=["status", "updated_at"])
+                append_command_event(
+                    command,
+                    "gateway_journal_reconciled",
+                    from_status=previous,
+                    to_status=command.status,
+                    evidence=edge_event,
+                )
 
         # Handle discovery report from Edge auto-scan
         discovery_report = attrs.get("discovery_report")

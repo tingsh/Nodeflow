@@ -75,8 +75,7 @@ class AutomationsEngineTests(TestCase):
         mock_get.return_value = {"is_met": True, "met_since": timezone.now().timestamp() - 65}
         self.assertTrue(evaluate_condition(condition, 5))
 
-    @patch("apps.automations.engine.send_device_command")
-    def test_evaluate_automations_full_flow(self, mock_send_rpc):
+    def test_evaluate_automations_full_flow(self):
         # Condition: Temp > 100
         AutomationCondition.objects.create(
             team=self.team,
@@ -100,9 +99,8 @@ class AutomationsEngineTests(TestCase):
         # Test 1: Condition not met
         evaluate_automations(self.device, {"temp": 90.0, "humidity": 50.0})
         self.assertEqual(AutomationLog.objects.count(), 0)
-        mock_send_rpc.assert_not_called()
 
         # Test 2: Condition met
         evaluate_automations(self.device, {"temp": 110.0, "humidity": 55.0})
         self.assertEqual(AutomationLog.objects.count(), 1)
-        mock_send_rpc.assert_called_once_with(device=self.device, key="turn_off", value=True, user=None)
+        self.assertIn("Command proposal created", AutomationLog.objects.get().details)

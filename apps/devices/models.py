@@ -105,6 +105,8 @@ class Gateway(BaseTeamModel):
     remote_control_epoch = models.PositiveBigIntegerField(default=0)
     remote_control_clock_ready = models.BooleanField(default=False)
     remote_control_journal_ready = models.BooleanField(default=False)
+    remote_control_event_spool_count = models.PositiveIntegerField(default=0)
+    remote_control_storage_healthy = models.BooleanField(default=False)
 
     # Network Watchdog fields
     active_interface = models.CharField(max_length=20, blank=True, default="eth0")
@@ -863,6 +865,38 @@ class GatewayControlPolicyBundle(BaseTeamModel):
                 name="unique_gateway_policy_bundle_revision",
             )
         ]
+
+
+class RemoteControlSigningKey(models.Model):
+    class Status(models.TextChoices):
+        ACTIVE = "active", _("Active")
+        NEXT = "next", _("Next")
+        RETIRED = "retired", _("Retired")
+        REVOKED = "revoked", _("Revoked")
+
+    key_id = models.CharField(max_length=64, unique=True)
+    public_key = models.TextField()
+    status = models.CharField(max_length=16, choices=Status.choices)
+    private_key_reference = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Reference to a managed secret; private key material is never stored here."),
+    )
+    activated_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class CommandAuditLegalHold(BaseTeamModel):
+    command = models.ForeignKey(RemoteCommand, on_delete=models.PROTECT, related_name="legal_holds")
+    reason = models.TextField()
+    placed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="command_audit_legal_holds",
+    )
+    placed_at = models.DateTimeField(default=timezone.now)
+    released_at = models.DateTimeField(null=True, blank=True)
 
 
 class FirmwareRelease(models.Model):

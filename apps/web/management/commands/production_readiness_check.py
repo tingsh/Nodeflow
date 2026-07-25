@@ -25,6 +25,7 @@ REQUIRED_CELERY_TASKS = {
     "apps.devices.tasks.check_device_heartbeats",
     "apps.devices.tasks.check_gateway_heartbeats",
     "apps.devices.tasks.expire_and_retry_gateway_activations",
+    "apps.devices.tasks.expire_control_activations",
 }
 SHARED_GATEWAY_INBOUND_TOPICS = {
     "v1/gateway/telemetry",
@@ -156,6 +157,48 @@ def _check_gateway_shared_inbound_acls() -> CheckResult:
         "OK",
         f"No shared Gateway inbound publish ACLs found in {checked or 'available dynsec files'}.",
     )
+
+
+def _check_remote_control_configuration() -> list[CheckResult]:
+    key_id = getattr(settings, "REMOTE_CONTROL_ACTIVE_SIGNING_KEY_ID", "")
+    key_map = getattr(settings, "REMOTE_CONTROL_SIGNING_KEYS", {})
+    legacy_key = getattr(settings, "REMOTE_CONTROL_SIGNING_PRIVATE_KEY", "")
+    signing_ready = _has_value(key_id) and key_id != "unconfigured" and (
+        _has_value(key_map.get(key_id)) or _has_value(legacy_key)
+    )
+    retention = int(getattr(settings, "REMOTE_CONTROL_AUDIT_RETENTION_DAYS", 0))
+    from apps.devices.models import GatewayControlPolicyBundle
+    from apps.teams.models import Team
+
+    unsafe_teams = []
+    for team in Team.objects.filter(remote_control_mode=Team.RemoteControlMode.CONTROLLED):
+        if not GatewayControlPolicyBundle.objects.filter(
+            team=team,
+            is_active=True,
+            acknowledged_at__isnull=False,
+            control_epoch=team.remote_control_epoch,
+        ).exists():
+            unsafe_teams.append(team.slug)
+    return [
+        CheckResult(
+            "Remote control",
+            "Managed command signing key",
+            "OK" if signing_ready else "FAIL",
+            f"active_key_id={key_id}; key material is {'configured' if signing_ready else 'missing/placeholder'}",
+        ),
+        CheckResult(
+            "Remote control",
+            "Audit retention",
+            "OK" if retention >= 2555 else "FAIL",
+            f"REMOTE_CONTROL_AUDIT_RETENTION_DAYS={retention}; minimum is 2555 (seven years).",
+        ),
+        CheckResult(
+            "Remote control",
+            "Controlled-team policy acknowledgement",
+            "OK" if not unsafe_teams else "FAIL",
+            f"unsafe teams={unsafe_teams or 'none'}",
+        ),
+    ]
 
 
 def build_checks() -> list[CheckResult]:
@@ -313,6 +356,7 @@ def build_checks() -> list[CheckResult]:
     ]
     checks.extend([_check_database(), _check_timescale(), _check_redis(), _check_mqtt()])
     checks.extend([_check_legacy_shared_inbound_disabled(), _check_gateway_shared_inbound_acls()])
+    checks.extend(_check_remote_control_configuration())
     return checks
 
 

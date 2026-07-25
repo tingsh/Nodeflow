@@ -131,6 +131,12 @@ MQTT_PROVISIONING_REQUIRED = env.bool("MQTT_PROVISIONING_REQUIRED", default=Fals
 MQTT_ACCEPT_LEGACY_SHARED_INBOUND = env.bool("MQTT_ACCEPT_LEGACY_SHARED_INBOUND", default=False)
 REMOTE_CONTROL_SIGNING_KEY_ID = env("REMOTE_CONTROL_SIGNING_KEY_ID", default="unconfigured")
 REMOTE_CONTROL_SIGNING_PRIVATE_KEY = env("REMOTE_CONTROL_SIGNING_PRIVATE_KEY", default="")
+REMOTE_CONTROL_ACTIVE_SIGNING_KEY_ID = env(
+    "REMOTE_CONTROL_ACTIVE_SIGNING_KEY_ID",
+    default=REMOTE_CONTROL_SIGNING_KEY_ID,
+)
+REMOTE_CONTROL_SIGNING_KEYS = env.json("REMOTE_CONTROL_SIGNING_KEYS", default={})
+REMOTE_CONTROL_AUDIT_RETENTION_DAYS = env.int("REMOTE_CONTROL_AUDIT_RETENTION_DAYS", default=2555)
 NOVENA_DEPLOYMENT_MODE = env("NOVENA_DEPLOYMENT_MODE", default="local")
 PUBLIC_MQTT_BROKER_SCHEME = env("PUBLIC_MQTT_BROKER_SCHEME", default="mqtt")
 PUBLIC_MQTT_BROKER_HOST = env("PUBLIC_MQTT_BROKER_HOST", default=MQTT_BROKER_HOST)
@@ -597,6 +603,10 @@ CELERY_BEAT_SCHEDULE = {
     "expire-and-retry-gateway-activations": {
         "task": "apps.devices.tasks.expire_and_retry_gateway_activations",
         "schedule": 60.0,
+    },
+    "expire-control-activations": {
+        "task": "apps.devices.tasks.expire_control_activations",
+        "schedule": 3600.0,
     },
 }
 
