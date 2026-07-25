@@ -5,8 +5,6 @@ import requests
 from django.core.cache import cache
 from django.utils import timezone
 
-from apps.devices.services import send_device_command
-
 from .models import Automation, AutomationLog
 
 logger = logging.getLogger("novena_hub")
@@ -127,13 +125,12 @@ def execute_automation(automation, trigger_device=None):
         try:
             if action.action_type == "send_command":
                 if action.target_device:
-                    send_device_command(
-                        device=action.target_device,
-                        key=action.command_key,
-                        value=action.command_payload.get("value", ""),
-                        user=None,  # Automated execution
+                    log_details.append(
+                        "Command proposal created for "
+                        f"{action.target_device.name}: {action.command_key}="
+                        f"{action.command_payload.get('value', '')}. "
+                        "Automations are read-only and cannot dispatch governed control."
                     )
-                    log_details.append(f"Command sent to {action.target_device.name}")
             elif action.action_type == "webhook":
                 if action.webhook_url:
                     response = requests.post(

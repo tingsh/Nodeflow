@@ -129,6 +129,14 @@ MQTT_DYNSEC_ADMIN_USER = env("MQTT_DYNSEC_ADMIN_USER", default="dynsec-admin")
 MQTT_DYNSEC_ADMIN_PASS = env("MQTT_DYNSEC_ADMIN_PASS", default="dynsec-password")
 MQTT_PROVISIONING_REQUIRED = env.bool("MQTT_PROVISIONING_REQUIRED", default=False)
 MQTT_ACCEPT_LEGACY_SHARED_INBOUND = env.bool("MQTT_ACCEPT_LEGACY_SHARED_INBOUND", default=False)
+REMOTE_CONTROL_SIGNING_KEY_ID = env("REMOTE_CONTROL_SIGNING_KEY_ID", default="unconfigured")
+REMOTE_CONTROL_SIGNING_PRIVATE_KEY = env("REMOTE_CONTROL_SIGNING_PRIVATE_KEY", default="")
+REMOTE_CONTROL_ACTIVE_SIGNING_KEY_ID = env(
+    "REMOTE_CONTROL_ACTIVE_SIGNING_KEY_ID",
+    default=REMOTE_CONTROL_SIGNING_KEY_ID,
+)
+REMOTE_CONTROL_SIGNING_KEYS = env.json("REMOTE_CONTROL_SIGNING_KEYS", default={})
+REMOTE_CONTROL_AUDIT_RETENTION_DAYS = env.int("REMOTE_CONTROL_AUDIT_RETENTION_DAYS", default=2555)
 NOVENA_DEPLOYMENT_MODE = env("NOVENA_DEPLOYMENT_MODE", default="local")
 PUBLIC_MQTT_BROKER_SCHEME = env("PUBLIC_MQTT_BROKER_SCHEME", default="mqtt")
 PUBLIC_MQTT_BROKER_HOST = env("PUBLIC_MQTT_BROKER_HOST", default=MQTT_BROKER_HOST)
@@ -572,6 +580,10 @@ CACHES = {
 CELERY_BROKER_URL = CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_BEAT_SCHEDULE = {
+    "dispatch-due-remote-command-outboxes": {
+        "task": "apps.devices.tasks.dispatch_due_remote_command_outboxes",
+        "schedule": 5.0,
+    },
     "generate-preventive-tickets": {
         "task": "apps.maintenance.tasks.generate_preventive_tickets",
         "schedule": 86400.0,  # Run daily
@@ -596,7 +608,22 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.devices.tasks.expire_and_retry_gateway_activations",
         "schedule": 60.0,
     },
+    "expire-control-activations": {
+        "task": "apps.devices.tasks.expire_control_activations",
+        "schedule": 3600.0,
+    },
 }
+
+REMOTE_CONTROL_OUTBOX_LEASE_SECONDS = env.int("REMOTE_CONTROL_OUTBOX_LEASE_SECONDS", default=60)
+REMOTE_CONTROL_OUTBOX_MAX_ATTEMPTS = env.int("REMOTE_CONTROL_OUTBOX_MAX_ATTEMPTS", default=5)
+REMOTE_CONTROL_OUTBOX_RETRY_BASE_SECONDS = env.int(
+    "REMOTE_CONTROL_OUTBOX_RETRY_BASE_SECONDS",
+    default=5,
+)
+REMOTE_CONTROL_OUTBOX_RETRY_MAX_SECONDS = env.int(
+    "REMOTE_CONTROL_OUTBOX_RETRY_MAX_SECONDS",
+    default=300,
+)
 
 # Channels / Daphne setup
 

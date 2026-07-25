@@ -12,6 +12,14 @@ _client = None
 _connected = False
 
 
+class MqttPublishOutcomeUnknown(RuntimeError):
+    """The broker acknowledgement was not observed; callers must not repeat a write."""
+
+    def __init__(self, message, *, rpc_record):
+        super().__init__(message)
+        self.rpc_record = rpc_record
+
+
 def get_mqtt_client():
     """Get or create the singleton MQTT publish client."""
     global _client, _connected
@@ -94,7 +102,15 @@ def publish_config_update(gateway, action, config):
     return config_record
 
 
-def publish_rpc_command(gateway, method, params=None, *, remote_command=None, request_id=None):
+def publish_rpc_command(
+    gateway,
+    method,
+    params=None,
+    *,
+    remote_command=None,
+    request_id=None,
+    governed_envelope=None,
+):
     """
     Send an RPC command to a gateway.
 
@@ -110,11 +126,20 @@ def publish_rpc_command(gateway, method, params=None, *, remote_command=None, re
 
     request_id = request_id or uuid.uuid4()
     topic = f"v1/gateway/{gateway.serial_number}/rpc/request"
-    payload = {
-        "request_id": str(request_id),
-        "method": method,
-        "params": params or {},
-    }
+    if governed_envelope:
+        if (
+            str(governed_envelope.get("request_id")) != str(request_id)
+            or governed_envelope.get("method") != method
+            or governed_envelope.get("params") != (params or {})
+        ):
+            raise ValueError("Governed envelope does not match the persisted RPC transport record.")
+        payload = governed_envelope
+    else:
+        payload = {
+            "request_id": str(request_id),
+            "method": method,
+            "params": params or {},
+        }
 
     # Store in DB
     rpc_record = RpcCommand.objects.create(
@@ -134,6 +159,18 @@ def publish_rpc_command(gateway, method, params=None, *, remote_command=None, re
         rpc_record.error_message = f"MQTT publish rejected locally (rc={result.rc})."
         rpc_record.save(update_fields=["status", "error_message", "updated_at"])
         raise RuntimeError(rpc_record.error_message)
+    try:
+        result.wait_for_publish(timeout=5)
+    except (RuntimeError, ValueError) as exc:
+        raise MqttPublishOutcomeUnknown(
+            "MQTT publish acknowledgement was not observed; delivery outcome is unknown.",
+            rpc_record=rpc_record,
+        ) from exc
+    if not result.is_published():
+        raise MqttPublishOutcomeUnknown(
+            "MQTT publish acknowledgement timed out; delivery outcome is unknown.",
+            rpc_record=rpc_record,
+        )
     logger.info(
         "Published RPC command '%s' to %s (request_id=%s, rc=%s)",
         method,
@@ -221,3 +258,27 @@ def publish_attribute_push(gateway, attributes):
         request_id,
         result.rc,
     )
+
+
+def publish_control_policy_bundle(bundle):
+    """Publish a signed retained policy so the edge can independently default-deny."""
+    topic = f"v1/gateway/{bundle.gateway.serial_number}/control/policy"
+    wire_payload = {
+        "payload": bundle.payload,
+        "checksum": bundle.checksum,
+        "signing_key_id": bundle.signing_key_id,
+        "signature": bundle.signature,
+    }
+    client = get_mqtt_client()
+    result = client.publish(topic, json.dumps(wire_payload), qos=1, retain=True)
+    if result.rc != mqtt.MQTT_ERR_SUCCESS:
+        raise RuntimeError(f"MQTT policy publish rejected locally (rc={result.rc}).")
+    result.wait_for_publish(timeout=5)
+    if not result.is_published():
+        raise RuntimeError("Policy publish acknowledgement timed out.")
+
+    from django.utils import timezone
+
+    bundle.published_at = timezone.now()
+    bundle.save(update_fields=["published_at", "updated_at"])
+    return bundle
