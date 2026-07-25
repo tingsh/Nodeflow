@@ -123,7 +123,10 @@ def effective_control_envelope(*, device, command_key: str, user) -> EffectiveCo
         )
     )
     if not template:
-        raise GovernanceDenied("No verified technical control definition is enabled.", code="technical_definition_missing")
+        raise GovernanceDenied(
+            "No verified technical control definition is enabled.",
+            code="technical_definition_missing",
+        )
     if not commissioned or (commissioned.expires_at and commissioned.expires_at <= timezone.now()):
         raise GovernanceDenied("The control key is not actively commissioned.", code="commissioning_missing")
     if not policy:
@@ -170,11 +173,13 @@ def validate_control_value(*, envelope: EffectiveControlEnvelope, value, device)
         raise GovernanceDenied("Value is above the effective safe maximum.", code="value_above_maximum")
 
     current = (device.metadata or {}).get("last_values", {}).get(envelope.template.command_key)
-    if current is not None and limits.get("max_delta") is not None:
-        if abs(_number(normalized, "Value") - _number(current, "Current value")) > _number(
-            limits["max_delta"], "Maximum delta"
-        ):
-            raise GovernanceDenied("Requested change exceeds the effective delta limit.", code="delta_exceeded")
+    if (
+        current is not None
+        and limits.get("max_delta") is not None
+        and abs(_number(normalized, "Value") - _number(current, "Current value"))
+        > _number(limits["max_delta"], "Maximum delta")
+    ):
+        raise GovernanceDenied("Requested change exceeds the effective delta limit.", code="delta_exceeded")
     if limits.get("cooldown_seconds"):
         recent = (
             RemoteCommand.objects.filter(

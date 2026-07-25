@@ -33,12 +33,8 @@ class CommandDefinition:
 
 COMMAND_CATALOG = {
     "ping": CommandDefinition("ping", RemoteCommand.Risk.DIAGNOSTIC, False, "request_low_risk_commands"),
-    "get_status": CommandDefinition(
-        "get_status", RemoteCommand.Risk.DIAGNOSTIC, False, "request_low_risk_commands"
-    ),
-    "get_devices": CommandDefinition(
-        "get_devices", RemoteCommand.Risk.DIAGNOSTIC, False, "request_low_risk_commands"
-    ),
+    "get_status": CommandDefinition("get_status", RemoteCommand.Risk.DIAGNOSTIC, False, "request_low_risk_commands"),
+    "get_devices": CommandDefinition("get_devices", RemoteCommand.Risk.DIAGNOSTIC, False, "request_low_risk_commands"),
     "get_config_status": CommandDefinition(
         "get_config_status", RemoteCommand.Risk.DIAGNOSTIC, False, "request_low_risk_commands"
     ),
@@ -69,15 +65,9 @@ COMMAND_CATALOG = {
     "restart_connector": CommandDefinition(
         "restart_connector", RemoteCommand.Risk.HIGH, True, "request_high_risk_commands"
     ),
-    "restart_all": CommandDefinition(
-        "restart_all", RemoteCommand.Risk.HIGH, True, "request_high_risk_commands"
-    ),
-    "set_log_level": CommandDefinition(
-        "set_log_level", RemoteCommand.Risk.HIGH, True, "request_high_risk_commands"
-    ),
-    "reboot": CommandDefinition(
-        "reboot", RemoteCommand.Risk.CRITICAL, True, "request_critical_commands"
-    ),
+    "restart_all": CommandDefinition("restart_all", RemoteCommand.Risk.HIGH, True, "request_high_risk_commands"),
+    "set_log_level": CommandDefinition("set_log_level", RemoteCommand.Risk.HIGH, True, "request_high_risk_commands"),
+    "reboot": CommandDefinition("reboot", RemoteCommand.Risk.CRITICAL, True, "request_critical_commands"),
     "update_firmware": CommandDefinition(
         "update_firmware", RemoteCommand.Risk.CRITICAL, True, "request_critical_commands"
     ),
@@ -176,9 +166,9 @@ def resolve_device_params(device: Device, command_key: str, operation: str, valu
             raise CommandDenied("Value is not in the configured allowed set.", code="value_not_allowed")
         minimum = register.get("min")
         maximum = register.get("max")
-        if minimum is not None and (not isinstance(normalized, (int, float)) or normalized < minimum):
+        if minimum is not None and (not isinstance(normalized, int | float) or normalized < minimum):
             raise CommandDenied(f"Value must be at least {minimum}.", code="value_below_minimum")
-        if maximum is not None and (not isinstance(normalized, (int, float)) or normalized > maximum):
+        if maximum is not None and (not isinstance(normalized, int | float) or normalized > maximum):
             raise CommandDenied(f"Value must be at most {maximum}.", code="value_above_maximum")
 
     params = {
@@ -304,17 +294,11 @@ def _request_remote_command_atomic(
 
     previous = RemoteCommand.objects.filter(device=device).order_by("-sequence_number").first() if device else None
     sequence_number = (previous.sequence_number + 1) if previous else 1
-    approval_required = bool(
-        policy_snapshot.get("effective_envelope", {}).get("approval_required")
-    )
+    approval_required = bool(policy_snapshot.get("effective_envelope", {}).get("approval_required"))
     status = (
         RemoteCommand.Status.POLICY_DENIED
         if denial
-        else (
-            RemoteCommand.Status.AWAITING_APPROVAL
-            if approval_required
-            else RemoteCommand.Status.QUEUED
-        )
+        else (RemoteCommand.Status.AWAITING_APPROVAL if approval_required else RemoteCommand.Status.QUEUED)
     )
     command = RemoteCommand.objects.create(
         team=team,
@@ -379,6 +363,7 @@ def _schedule_outbox_dispatch(outbox_id: int) -> None:
 
 def dispatch_outbox(outbox_id: int) -> RemoteCommand | None:
     from apps.telemetry.mqtt_publisher import MqttPublishOutcomeUnknown, publish_rpc_command
+
     from .remote_control_crypto import build_signed_command_envelope
 
     with transaction.atomic():
@@ -436,18 +421,14 @@ def dispatch_outbox(outbox_id: int) -> RemoteCommand | None:
             attempt.state = "outcome_unknown"
             attempt.error = str(exc)
             attempt.completed_at = timezone.now()
-            attempt.save(
-                update_fields=["request_id", "state", "error", "completed_at"]
-            )
+            attempt.save(update_fields=["request_id", "state", "error", "completed_at"])
             outbox.status = CommandOutbox.Status.PUBLISHED
             outbox.last_error = str(exc)
             command.status = RemoteCommand.Status.OUTCOME_UNKNOWN
             command.error_code = "broker_ack_unknown"
             command.error_message = str(exc)
             outbox.save(update_fields=["status", "last_error", "updated_at"])
-            command.save(
-                update_fields=["status", "error_code", "error_message", "updated_at"]
-            )
+            command.save(update_fields=["status", "error_code", "error_message", "updated_at"])
             append_command_event(
                 command,
                 "broker_ack_unknown",

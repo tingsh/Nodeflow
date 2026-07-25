@@ -163,8 +163,8 @@ def _check_remote_control_configuration() -> list[CheckResult]:
     key_id = getattr(settings, "REMOTE_CONTROL_ACTIVE_SIGNING_KEY_ID", "")
     key_map = getattr(settings, "REMOTE_CONTROL_SIGNING_KEYS", {})
     legacy_key = getattr(settings, "REMOTE_CONTROL_SIGNING_PRIVATE_KEY", "")
-    signing_ready = _has_value(key_id) and key_id != "unconfigured" and (
-        _has_value(key_map.get(key_id)) or _has_value(legacy_key)
+    signing_ready = (
+        _has_value(key_id) and key_id != "unconfigured" and (_has_value(key_map.get(key_id)) or _has_value(legacy_key))
     )
     retention = int(getattr(settings, "REMOTE_CONTROL_AUDIT_RETENTION_DAYS", 0))
     from apps.devices.models import GatewayControlPolicyBundle

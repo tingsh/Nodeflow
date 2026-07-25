@@ -26,9 +26,9 @@ def disaster_recovery_control_reset(*, reason="Hub restore/recovery"):
         error_code="disaster_recovery_reset",
         error_message=reason,
     )
-    CommandOutbox.objects.filter(
-        status__in=[CommandOutbox.Status.PENDING, CommandOutbox.Status.CLAIMED]
-    ).update(status=CommandOutbox.Status.CANCELLED, last_error=reason)
+    CommandOutbox.objects.filter(status__in=[CommandOutbox.Status.PENDING, CommandOutbox.Status.CLAIMED]).update(
+        status=CommandOutbox.Status.CANCELLED, last_error=reason
+    )
     RemoteCommandApproval.objects.filter(status=RemoteCommandApproval.Status.PENDING).update(
         status=RemoteCommandApproval.Status.INVALIDATED,
         decision_reason=reason,

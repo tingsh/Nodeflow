@@ -8,7 +8,6 @@ from django.utils import timezone
 from apps.teams.models import Team
 from apps.teams.roles import has_permission
 
-from .control_governance import create_gateway_policy_bundle
 from .models import (
     CommandOutbox,
     ControlActivation,
@@ -153,7 +152,10 @@ def complete_commissioning_session(*, session, evidence) -> ControlCommissioning
 def activate_control_key(*, assessment, session, device, command_key, activated_by) -> ControlActivation:
     team = Team.objects.select_for_update().get(pk=device.team_id)
     if not has_permission(activated_by, team, "toggle_remote_control", site=device.site):
-        raise ReadinessDenied("Customer control administrator approval is required.", code="activation_permission_denied")
+        raise ReadinessDenied(
+            "Customer control administrator approval is required.",
+            code="activation_permission_denied",
+        )
     if assessment.state != ControlReadinessAssessment.State.READY_FOR_ACTIVATION:
         raise ReadinessDenied("Readiness is not ready for activation.", code="readiness_incomplete")
     if session.status != ControlCommissioningSession.Status.COMPLETED:
@@ -165,12 +167,16 @@ def activate_control_key(*, assessment, session, device, command_key, activated_
         raise ReadinessDenied("No active commissioned envelope exists.", code="commissioning_missing")
     if not device.commandpolicy_set.filter(command_key=command_key, is_enabled=True).exists():
         raise ReadinessDenied("No enabled customer command policy exists.", code="policy_missing")
-    bundle = GatewayControlPolicyBundle.objects.filter(
-        gateway=device.gateway,
-        control_epoch=team.remote_control_epoch,
-        is_active=True,
-        acknowledged_at__isnull=False,
-    ).order_by("-revision").first()
+    bundle = (
+        GatewayControlPolicyBundle.objects.filter(
+            gateway=device.gateway,
+            control_epoch=team.remote_control_epoch,
+            is_active=True,
+            acknowledged_at__isnull=False,
+        )
+        .order_by("-revision")
+        .first()
+    )
     if not bundle:
         raise ReadinessDenied("Gateway has not acknowledged the active policy.", code="policy_not_acknowledged")
 
@@ -219,9 +225,7 @@ def approve_command(*, command, approver, mfa_verified, recent_auth_at, reason="
     if command.requested_by_id == approver.pk:
         raise ReadinessDenied("The requester cannot approve their own command.", code="self_approval")
     permission = (
-        "approve_critical_commands"
-        if command.risk == RemoteCommand.Risk.CRITICAL
-        else "approve_high_risk_commands"
+        "approve_critical_commands" if command.risk == RemoteCommand.Risk.CRITICAL else "approve_high_risk_commands"
     )
     if not has_permission(approver, command.team, permission, site=command.gateway.site):
         raise ReadinessDenied("You cannot approve this command.", code="approval_permission_denied")
