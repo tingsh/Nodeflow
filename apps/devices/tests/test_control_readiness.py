@@ -44,12 +44,19 @@ class ControlReadinessWorkflowTest(TestCase):
             serial_number="GW-READY-001",
             access_token="ready-token",
             remote_control_protocol_version=1,
+            remote_control_capabilities=[
+                "governed_commands_v1",
+                "local_writeback_v1",
+                "lifecycle_stages_v1",
+                "idempotent_replay_v1",
+            ],
             remote_control_local_writeback_enabled=True,
             remote_control_policy_loaded=True,
             remote_control_policy_revision=1,
             remote_control_epoch=1,
             remote_control_clock_ready=True,
             remote_control_journal_ready=True,
+            remote_control_storage_healthy=True,
         )
         self.template = DeviceTemplate.objects.create(
             name="Chiller",

@@ -6,6 +6,14 @@ Remote control is supervisory, not a safety instrumented system. Novena never re
 
 Control is monitoring-only by default. Time in service does not activate it. Readiness requires representative monitoring evidence, exact identity, supported Gateway protocol, trusted time, durable journal storage, an acknowledged signed edge policy, commissioning evidence, MFA, and explicit exact-key activation by a customer administrator.
 
+## Protocol and dispatch contract
+
+State-changing dispatch requires schema version `1` and the Gateway-advertised capabilities `governed_commands_v1`, `local_writeback_v1`, `lifecycle_stages_v1`, and `idempotent_replay_v1`. The signed envelope carries one request ID, command ID, idempotency key, canonical Gateway serial, and—for field writes—one canonical device ID and command key. Gateways without that complete advertisement remain telemetry/diagnostic compatible but are command-ineligible.
+
+The transactional outbox is recovered independently by Celery Beat every five seconds. Workers lease rows before publishing; expired leases are recoverable, pre-ack failures use bounded exponential backoff, exhausted work moves to dead letter, and an ambiguous broker acknowledgement is recorded as outcome-unknown instead of blindly retried. Configure the lease and retry bounds with the `REMOTE_CONTROL_OUTBOX_*` settings in the production environment example.
+
+Lifecycle evidence keeps request acceptance, broker acknowledgement, Gateway receipt, execution start, field-protocol acceptance, verified field execution, and OTA initiation distinct. Only allowlisted Gateway stages advance execution state; OTA initiation is never recorded as verified execution.
+
 ## Threat model
 
 | Threat | Required control |

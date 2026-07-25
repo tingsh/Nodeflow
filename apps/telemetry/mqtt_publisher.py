@@ -126,11 +126,20 @@ def publish_rpc_command(
 
     request_id = request_id or uuid.uuid4()
     topic = f"v1/gateway/{gateway.serial_number}/rpc/request"
-    payload = governed_envelope or {
-        "request_id": str(request_id),
-        "method": method,
-        "params": params or {},
-    }
+    if governed_envelope:
+        if (
+            str(governed_envelope.get("request_id")) != str(request_id)
+            or governed_envelope.get("method") != method
+            or governed_envelope.get("params") != (params or {})
+        ):
+            raise ValueError("Governed envelope does not match the persisted RPC transport record.")
+        payload = governed_envelope
+    else:
+        payload = {
+            "request_id": str(request_id),
+            "method": method,
+            "params": params or {},
+        }
 
     # Store in DB
     rpc_record = RpcCommand.objects.create(

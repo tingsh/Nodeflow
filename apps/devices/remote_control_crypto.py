@@ -40,9 +40,11 @@ def sign_payload(payload: dict) -> tuple[str, str]:
     return settings.REMOTE_CONTROL_ACTIVE_SIGNING_KEY_ID, base64.b64encode(signature).decode()
 
 
-def build_signed_command_envelope(command) -> dict:
+def build_signed_command_envelope(command, *, request_id=None) -> dict:
+    request_id = request_id or command.idempotency_key
     body = {
         "schema_version": command.schema_version,
+        "request_id": str(request_id),
         "command_id": str(command.pk),
         "idempotency_key": str(command.idempotency_key),
         "target": {

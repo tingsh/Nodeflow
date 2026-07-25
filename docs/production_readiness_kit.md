@@ -19,6 +19,7 @@ The first production target is a lean VPS deployment:
 - PostgreSQL with TimescaleDB for relational and time-series data.
 - Redis for cache, Celery, and Channels.
 - Celery worker and Celery Beat for background and scheduled jobs.
+- Celery Beat must include `apps.devices.tasks.dispatch_due_remote_command_outboxes`; alert on dead-lettered command outbox rows and repeatedly expired leases.
 - MQTT consumer for gateway telemetry ingestion.
 - Mosquitto with Dynamic Security for gateway credentials.
 - Host Nginx for HTTPS and WebSocket reverse proxy.

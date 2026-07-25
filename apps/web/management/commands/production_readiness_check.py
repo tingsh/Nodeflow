@@ -19,6 +19,7 @@ DEFAULT_DYNSEC_USER = "dynsec-admin"
 DEFAULT_DYNSEC_PASS = "dynsec-password"
 REQUIRED_HOSTS = {"novenaplatform.com", "app.novenaplatform.com"}
 REQUIRED_CELERY_TASKS = {
+    "apps.devices.tasks.dispatch_due_remote_command_outboxes",
     "apps.maintenance.tasks.generate_preventive_tickets",
     "apps.telemetry.tasks.flush_telemetry_buffer_task",
     "apps.telemetry.tasks.flush_logs_buffer_task",

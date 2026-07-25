@@ -580,6 +580,10 @@ CACHES = {
 CELERY_BROKER_URL = CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_BEAT_SCHEDULE = {
+    "dispatch-due-remote-command-outboxes": {
+        "task": "apps.devices.tasks.dispatch_due_remote_command_outboxes",
+        "schedule": 5.0,
+    },
     "generate-preventive-tickets": {
         "task": "apps.maintenance.tasks.generate_preventive_tickets",
         "schedule": 86400.0,  # Run daily
@@ -609,6 +613,17 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 3600.0,
     },
 }
+
+REMOTE_CONTROL_OUTBOX_LEASE_SECONDS = env.int("REMOTE_CONTROL_OUTBOX_LEASE_SECONDS", default=60)
+REMOTE_CONTROL_OUTBOX_MAX_ATTEMPTS = env.int("REMOTE_CONTROL_OUTBOX_MAX_ATTEMPTS", default=5)
+REMOTE_CONTROL_OUTBOX_RETRY_BASE_SECONDS = env.int(
+    "REMOTE_CONTROL_OUTBOX_RETRY_BASE_SECONDS",
+    default=5,
+)
+REMOTE_CONTROL_OUTBOX_RETRY_MAX_SECONDS = env.int(
+    "REMOTE_CONTROL_OUTBOX_RETRY_MAX_SECONDS",
+    default=300,
+)
 
 # Channels / Daphne setup
 
