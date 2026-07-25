@@ -580,6 +580,10 @@ CACHES = {
 CELERY_BROKER_URL = CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_BEAT_SCHEDULE = {
+    "dispatch-due-gateway-config-outboxes": {
+        "task": "apps.devices.tasks.dispatch_due_gateway_config_outboxes",
+        "schedule": 30.0,
+    },
     "dispatch-due-remote-command-outboxes": {
         "task": "apps.devices.tasks.dispatch_due_remote_command_outboxes",
         "schedule": 5.0,
@@ -623,6 +627,13 @@ REMOTE_CONTROL_OUTBOX_RETRY_BASE_SECONDS = env.int(
 REMOTE_CONTROL_OUTBOX_RETRY_MAX_SECONDS = env.int(
     "REMOTE_CONTROL_OUTBOX_RETRY_MAX_SECONDS",
     default=300,
+)
+GATEWAY_CONFIG_ENVELOPE_TTL_SECONDS = env.int("GATEWAY_CONFIG_ENVELOPE_TTL_SECONDS", default=300)
+GATEWAY_CONFIG_OUTBOX_LEASE_SECONDS = env.int("GATEWAY_CONFIG_OUTBOX_LEASE_SECONDS", default=60)
+GATEWAY_CONFIG_OUTBOX_MAX_ATTEMPTS = env.int("GATEWAY_CONFIG_OUTBOX_MAX_ATTEMPTS", default=5)
+GUIDED_SETUP_FIRST_TELEMETRY_TIMEOUT_SECONDS = env.int(
+    "GUIDED_SETUP_FIRST_TELEMETRY_TIMEOUT_SECONDS",
+    default=180,
 )
 
 # Channels / Daphne setup

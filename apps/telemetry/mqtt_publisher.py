@@ -4,6 +4,7 @@ import uuid
 
 import paho.mqtt.client as mqtt
 from django.conf import settings
+from django.utils import timezone
 
 logger = logging.getLogger("novena_hub")
 
@@ -89,8 +90,10 @@ def publish_config_update(gateway, action, config):
     )
 
     # Publish
-    client = get_mqtt_client()
-    result = client.publish(topic, json.dumps(payload), qos=1)
+    result = _publish_qos1(topic, payload)
+    config_record.status = "delivered"
+    config_record.delivered_at = timezone.now()
+    config_record.save(update_fields=["status", "delivered_at", "updated_at"])
     logger.info(
         "Published config update to %s (action=%s, request_id=%s, rc=%s)",
         gateway.serial_number,
@@ -100,6 +103,34 @@ def publish_config_update(gateway, action, config):
     )
 
     return config_record
+
+
+def _publish_qos1(topic: str, payload: dict):
+    client = get_mqtt_client()
+    result = client.publish(topic, json.dumps(payload), qos=1)
+    if result.rc != mqtt.MQTT_ERR_SUCCESS:
+        raise RuntimeError(f"MQTT publish rejected locally (rc={result.rc}).")
+    try:
+        result.wait_for_publish(timeout=5)
+    except (RuntimeError, ValueError) as exc:
+        raise RuntimeError("MQTT broker acknowledgement was not observed.") from exc
+    if not result.is_published():
+        raise RuntimeError("MQTT broker acknowledgement timed out.")
+    return result
+
+
+def publish_config_envelope(gateway, envelope: dict):
+    """Publish an already persisted, signed config envelope."""
+    topic = f"v1/gateway/{gateway.serial_number}/config"
+    result = _publish_qos1(topic, envelope)
+    logger.info(
+        "Published signed config to %s (request_id=%s, revision=%s, rc=%s)",
+        gateway.serial_number,
+        envelope.get("request_id"),
+        envelope.get("revision"),
+        result.rc,
+    )
+    return result
 
 
 def publish_rpc_command(

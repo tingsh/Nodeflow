@@ -1,8 +1,23 @@
+import ipaddress
+import json
+import re
+
+from django.contrib import messages
+from django.core.serializers.json import DjangoJSONEncoder
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from apps.alerts.models import AlertRule
-from apps.devices.models import Device, DeviceTemplate, Gateway, Site
-from apps.devices.services import build_commissioning_context
+from apps.devices.models import (
+    DeploymentSetupItem,
+    DeploymentSetupRun,
+    Device,
+    DeviceTemplate,
+    EquipmentTemplateRequest,
+    Gateway,
+    Site,
+)
+from apps.devices.services import build_commissioning_context, visible_templates_for_team
 from apps.devices.solution_profiles import (
     apply_solution_profile_presets,
     get_profile,
@@ -14,12 +29,28 @@ from apps.devices.solution_profiles import (
 from apps.teams.decorators import require_permission
 
 ONBOARDING_STEPS = [
-    {"num": 1, "label": "Profile"},
-    {"num": 2, "label": "Site"},
-    {"num": 3, "label": "Gateway"},
-    {"num": 4, "label": "Devices"},
-    {"num": 5, "label": "Review"},
+    {"num": 1, "label": "Location"},
+    {"num": 2, "label": "Gateway"},
+    {"num": 3, "label": "Equipment"},
+    {"num": 4, "label": "Verify"},
+    {"num": 5, "label": "Go live"},
 ]
+
+
+def _bounded_int(value, default, minimum, maximum):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return min(maximum, max(minimum, parsed))
+
+
+def _bounded_float(value, default, minimum, maximum):
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    return min(maximum, max(minimum, parsed))
 
 
 @require_permission("manage_devices")
@@ -90,7 +121,7 @@ def step_1_site(request, team_slug):
 
     context = {
         "steps": ONBOARDING_STEPS,
-        "current_step": 2,
+        "current_step": 1,
         "site": site,
         "profile": get_site_profile(site) if site else profile,
         "site_types": profile.site_types,
@@ -131,7 +162,7 @@ def step_2_gateway(request, team_slug):
         if error:
             context = {
                 "steps": ONBOARDING_STEPS,
-                "current_step": 3,
+                "current_step": 2,
                 "site": site,
                 "gateway": gateway,
                 "profile": get_site_profile(site),
@@ -144,7 +175,7 @@ def step_2_gateway(request, team_slug):
 
     context = {
         "steps": ONBOARDING_STEPS,
-        "current_step": 3,
+        "current_step": 2,
         "site": site,
         "gateway": gateway,
         "profile": get_site_profile(site),
@@ -164,12 +195,61 @@ def step_2b_wait(request, team_slug):
         gateway.lifecycle_status = "online"
         gateway.save(update_fields=["lifecycle_status"])
 
+    from apps.devices.deployment_setup import (
+        append_setup_event,
+        gateway_readiness,
+        get_or_create_setup_run,
+        sync_setup_run,
+    )
+    from apps.devices.gateway_config_delivery import gateway_supports_guided_setup
+
+    run = get_or_create_setup_run(team=request.team, gateway=gateway, initiated_by=request.user)
+    run = sync_setup_run(run)
+    readiness = gateway_readiness(gateway)
+    if not run.readiness or not run.events.filter(event_type="gateway_preflight_completed").exists():
+        run.readiness = readiness
+        run.save(update_fields=["readiness", "updated_at"])
+    else:
+        readiness = run.readiness
+    if (
+        gateway.status == "online"
+        and gateway_supports_guided_setup(gateway)
+        and not run.events.filter(event_type="gateway_preflight_started").exists()
+    ):
+        try:
+            from apps.devices.remote_control import request_remote_command
+
+            command = request_remote_command(
+                gateway=gateway,
+                operation="deployment_preflight",
+                requested_by=request.user,
+                reason="Guided Setup Gateway readiness",
+                ttl_seconds=120,
+            )
+            append_setup_event(
+                run,
+                "gateway_preflight_started",
+                "Gateway readiness checks started.",
+                actor=request.user,
+                evidence={"command_id": str(command.pk)},
+            )
+        except Exception as exc:
+            append_setup_event(
+                run,
+                "gateway_preflight_unavailable",
+                "Gateway readiness checks could not start.",
+                actor=request.user,
+                evidence={"error": str(exc)},
+            )
+
     context = {
         "steps": ONBOARDING_STEPS,
-        "current_step": 3,
+        "current_step": 2,
         "gateway": gateway,
         "profile": get_site_profile(gateway.site),
         "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
+        "setup_run": run,
+        "readiness": readiness,
     }
     return render(request, "onboarding/step_2b_wait.html", context)
 
@@ -195,102 +275,408 @@ def gateway_status_poll(request, team_slug):
 
 @require_permission("manage_devices")
 def step_3_discover(request, team_slug):
-    """Discovery-based bulk device provisioning step (gateway connectivity path)."""
-    from apps.devices.config_generator import generate_and_push_config
+    """Automatic-first equipment setup with guided manual fallback."""
+    from apps.devices.config_generator import (
+        generate_and_push_config,
+        human_config_preview,
+        normalized_datapoints,
+    )
+    from apps.devices.deployment_setup import (
+        append_setup_event,
+        connection_from_candidate,
+        create_or_update_candidate_item,
+        get_or_create_setup_run,
+        start_validation,
+        sync_setup_run,
+    )
+    from apps.devices.gateway_config_delivery import gateway_supports_guided_setup
 
     gateway_id = request.session.get("onboarding_gateway_id")
-    site_id = request.session.get("onboarding_site_id")
     if not gateway_id:
         return redirect("web_team:onboarding:step_2_gateway", team_slug=team_slug)
     gateway = get_object_or_404(Gateway, id=gateway_id, team=request.team)
+    run = get_or_create_setup_run(team=request.team, gateway=gateway, initiated_by=request.user)
+    run = sync_setup_run(run)
+    guided_capable = gateway_supports_guided_setup(gateway)
 
     discovery_data = gateway.discovery_data or {}
     discovered_devices = discovery_data.get("devices", [])
     profile = get_site_profile(gateway.site)
-    templates = rank_templates_for_profile(DeviceTemplate.objects.all(), profile)
-
-    if request.method != "POST" and gateway.status == "online":
-        try:
-            from apps.devices.remote_control import request_remote_command
-
-            request_remote_command(
-                gateway=gateway,
-                operation="scan_devices",
-                requested_by=request.user,
-                params={"scan_type": "manual"},
-                reason="Onboarding device discovery",
-            )
-            if gateway.lifecycle_status in ("claimed", "online"):
-                gateway.lifecycle_status = "commissioning"
-                gateway.save(update_fields=["lifecycle_status"])
-        except Exception:
-            pass
+    templates = rank_templates_for_profile(visible_templates_for_team(request.team), profile)
 
     if request.method == "POST":
-        # Bulk provision: process each selected discovered device
-        provisioned_count = 0
-        device_indices = request.POST.getlist("device_index")
+        action = request.POST.get("action", "validate_selected")
+        if action == "start_discovery":
+            if not gateway_supports_guided_setup(gateway):
+                messages.warning(
+                    request,
+                    "This Gateway cannot run the safe Guided Setup scan yet. "
+                    "Update its software or use the manual option.",
+                )
+            else:
+                raw_targets = request.POST.get("tcp_hosts", "")
+                tcp_hosts = [
+                    target.strip()
+                    for target in re.split(r"[\s,]+", raw_targets)
+                    if target.strip()
+                ][:64]
+                try:
+                    from apps.devices.remote_control import request_remote_command
 
-        for idx in device_indices:
-            name = request.POST.get(f"name_{idx}", "").strip()
-            template_id = request.POST.get(f"template_{idx}")
-            if not name or not template_id:
-                continue
+                    command = request_remote_command(
+                        gateway=gateway,
+                        operation="deployment_discover",
+                        requested_by=request.user,
+                        params={"tcp_hosts": tcp_hosts},
+                        reason="Customer-approved equipment discovery",
+                        ttl_seconds=300,
+                    )
+                    run.state = DeploymentSetupRun.State.DISCOVERING
+                    run.current_step = "equipment"
+                    run.save(update_fields=["state", "current_step", "updated_at"])
+                    append_setup_event(
+                        run,
+                        "discovery_started",
+                        "Equipment discovery started.",
+                        actor=request.user,
+                        evidence={"command_id": str(command.pk), "target_count": len(tcp_hosts)},
+                    )
+                    gateway.lifecycle_status = "commissioning"
+                    gateway.save(update_fields=["lifecycle_status"])
+                except Exception as exc:
+                    messages.error(request, f"Equipment discovery could not start: {exc}")
+            return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
 
+        if action == "cancel_discovery":
             try:
-                template = DeviceTemplate.objects.get(id=template_id)
-            except DeviceTemplate.DoesNotExist:
-                continue
+                from apps.devices.remote_control import request_remote_command
 
-            disc = discovered_devices[int(idx)] if int(idx) < len(discovered_devices) else {}
-            port_key = disc.get("interface") or disc.get("port", "")
+                command = request_remote_command(
+                    gateway=gateway,
+                    operation="deployment_discover",
+                    requested_by=request.user,
+                    params={"cancel": True},
+                    reason="Customer cancelled equipment discovery",
+                    ttl_seconds=60,
+                )
+                append_setup_event(
+                    run,
+                    "discovery_cancel_requested",
+                    "Equipment discovery cancellation was requested.",
+                    actor=request.user,
+                    evidence={"command_id": str(command.pk)},
+                )
+                messages.info(request, "Cancelling equipment discovery…")
+            except Exception as exc:
+                messages.error(request, f"Discovery cancellation could not be sent: {exc}")
+            return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
 
-            disc_meta = {
-                "interface": disc.get("interface"),
-                "connection": disc.get("connection"),
-                "slave_id": disc.get("slave_id"),
-                "baud_rate": disc.get("baud_rate"),
-                "signature": disc.get("signature"),
-                "identification": disc.get("identification"),
+        if action == "validate_selected":
+            selected = request.POST.getlist("device_index")
+            if not selected:
+                messages.warning(request, "Select at least one equipment candidate to validate.")
+                return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+            for raw_index in selected:
+                try:
+                    index = int(raw_index)
+                    candidate = discovered_devices[index]
+                    template = get_object_or_404(
+                        visible_templates_for_team(request.team),
+                        pk=request.POST.get(f"template_{index}"),
+                    )
+                    if not guided_capable and not template.is_verified:
+                        messages.error(
+                            request,
+                            "Compatibility mode only permits Novena-verified templates. "
+                            "Update the Gateway to validate private or AI draft templates.",
+                        )
+                        continue
+                    item = create_or_update_candidate_item(run=run, index=index, candidate=candidate)
+                    connection = connection_from_candidate(candidate)
+                    device = item.device or Device.objects.create(
+                        team=request.team,
+                        gateway=gateway,
+                        site=gateway.site,
+                        port=str(candidate.get("interface") or candidate.get("port") or ""),
+                        name=request.POST.get(f"name_{index}", "").strip()
+                        or candidate.get("signature")
+                        or template.name,
+                        template=template,
+                        device_type=template.device_type,
+                        protocol=template.protocol,
+                        connection_config=connection,
+                        discovery_meta=candidate,
+                        metadata={"guided_setup_validation": "pending"},
+                    )
+                    item.device = device
+                    item.connection = connection
+                    item.save(update_fields=["device", "connection", "updated_at"])
+                    if guided_capable:
+                        start_validation(item=item, template=template, requested_by=request.user)
+                    else:
+                        item.selected_template = template
+                        item.datapoints = normalized_datapoints(template)
+                        item.trust_level = DeploymentSetupItem.Trust.NOVENA_VERIFIED
+                        item.state = DeploymentSetupItem.State.VALIDATED
+                        item.validation_result = {
+                            "status": "compatibility",
+                            "message": (
+                                "The Novena-verified template matches saved discovery evidence. "
+                                "Secure live validation requires a Gateway update."
+                            ),
+                        }
+                        item.save()
+                        append_setup_event(
+                            run,
+                            "legacy_template_confirmed",
+                            "A Novena-verified template was confirmed from saved discovery evidence.",
+                            item=item,
+                            actor=request.user,
+                        )
+                    request.session["onboarding_device_id"] = device.pk
+                except (IndexError, TypeError, ValueError) as exc:
+                    messages.error(request, f"One equipment candidate could not be prepared: {exc}")
+            return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+
+        if action == "manual":
+            if not guided_capable:
+                messages.warning(
+                    request,
+                    "Guided manual validation requires a Gateway software/key update. "
+                    "Use a Novena-verified template from saved discovery results for now.",
+                )
+                return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+            protocol = request.POST.get("manual_protocol")
+            if protocol not in {"modbus_tcp", "modbus_rtu"}:
+                messages.error(request, "Choose Modbus TCP or Modbus RTU.")
+                return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+            register_map = {}
+            for index in range(1, 11):
+                key = re.sub(r"[^a-z0-9_]+", "_", request.POST.get(f"point_key_{index}", "").strip().lower())
+                address = request.POST.get(f"point_address_{index}", "").strip()
+                if not key or not address:
+                    continue
+                register_address = _bounded_int(address, None, 0, 65535)
+                if register_address is None:
+                    continue
+                function_code = _bounded_int(request.POST.get(f"point_function_{index}", 3), 3, 1, 4)
+                if function_code not in {1, 2, 3, 4}:
+                    function_code = 3
+                data_type = request.POST.get(f"point_type_{index}", "uint16")
+                if data_type not in {"uint16", "int16", "float32", "int32"}:
+                    data_type = "uint16"
+                default_count = 2 if data_type in {"float32", "int32"} else 1
+                register_map[key] = {
+                    "label": request.POST.get(f"point_label_{index}", "").strip()
+                    or key.replace("_", " ").title(),
+                    "address": register_address,
+                    "functionCode": function_code,
+                    "type": data_type,
+                    "objectsCount": _bounded_int(
+                        request.POST.get(f"point_count_{index}", default_count),
+                        default_count,
+                        1,
+                        4,
+                    ),
+                    "scale": _bounded_float(request.POST.get(f"point_scale_{index}", 1), 1, -100000, 100000),
+                    "unit": request.POST.get(f"point_unit_{index}", "").strip(),
+                }
+            if not register_map:
+                messages.error(request, "Add at least one signal to validate.")
+                return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+            byte_order = request.POST.get("manual_byte_order", "BIG")
+            word_order = request.POST.get("manual_word_order", "BIG")
+            connection = {
+                "slave_id": _bounded_int(request.POST.get("manual_slave_id", 1), 1, 1, 247),
+                "timeout": _bounded_float(request.POST.get("manual_timeout", 3), 3, 1, 10),
+                "byteOrder": byte_order if byte_order in {"BIG", "LITTLE"} else "BIG",
+                "wordOrder": word_order if word_order in {"BIG", "LITTLE"} else "BIG",
             }
-
-            Device.objects.create(
+            if protocol == "modbus_tcp":
+                host = request.POST.get("manual_host", "").strip()
+                try:
+                    ipaddress.ip_address(host)
+                except ValueError:
+                    messages.error(request, "Enter a valid equipment IP address.")
+                    return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+                connection.update(
+                    {
+                        "host": host,
+                        "port": _bounded_int(request.POST.get("manual_port", 502), 502, 1, 65535),
+                    }
+                )
+                port_key = f"{connection['host']}:{connection['port']}"
+            else:
+                serial_port = request.POST.get("manual_serial_port", "").strip()
+                if not serial_port:
+                    messages.error(request, "Select the connected RS485 interface.")
+                    return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+                parity = request.POST.get("manual_parity", "N")
+                connection.update(
+                    {
+                        "serial_port": serial_port,
+                        "baudrate": _bounded_int(request.POST.get("manual_baudrate", 9600), 9600, 300, 921600),
+                        "parity": parity if parity in {"N", "E", "O"} else "N",
+                        "stopbits": _bounded_int(request.POST.get("manual_stopbits", 1), 1, 1, 2),
+                    }
+                )
+                port_key = connection["serial_port"]
+            name = request.POST.get("manual_name", "").strip()
+            manufacturer = request.POST.get("manual_manufacturer", "").strip()
+            model_number = request.POST.get("manual_model", "").strip()
+            if not name:
+                messages.error(request, "Equipment name is required.")
+                return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+            device_type = request.POST.get("manual_device_type", "other")
+            if device_type not in {choice[0] for choice in DeviceTemplate.DEVICE_TYPE_CHOICES}:
+                device_type = "other"
+            template = DeviceTemplate.objects.create(
+                name=f"{manufacturer} {model_number}".strip() or f"{name} template",
+                manufacturer=manufacturer,
+                model_number=model_number,
+                device_type=device_type,
+                protocol=protocol,
+                register_map=register_map,
+                source="user_created",
+                created_by_team=request.team,
+                is_verified=False,
+            )
+            device = Device.objects.create(
                 team=request.team,
                 gateway=gateway,
-                site_id=site_id,
-                port=str(port_key),
+                site=gateway.site,
+                port=port_key,
                 name=name,
                 template=template,
                 device_type=template.device_type,
-                protocol=template.protocol,
-                connection_config=template.register_map,
-                discovery_meta=disc_meta,
+                protocol=protocol,
+                connection_config=connection,
+                discovery_meta={"connection": protocol, "interface": port_key},
+                metadata={"guided_setup_validation": "pending"},
             )
-            provisioned_count += 1
-
-        # Push connector config to Edge after bulk provisioning
-        if provisioned_count > 0:
+            item = DeploymentSetupItem.objects.create(
+                team=request.team,
+                run=run,
+                device=device,
+                candidate_data={"signature": name, "connection": protocol, "interface": port_key},
+                selected_template=template,
+                connection=connection,
+                confidence_score=0,
+                confidence_explanation="Configured manually by the customer.",
+            )
             try:
-                generate_and_push_config(gateway)
-                gateway.lifecycle_status = "commissioning"
-                gateway.save(update_fields=["lifecycle_status"])
-            except Exception:
-                pass
+                start_validation(item=item, template=template, requested_by=request.user)
+                request.session["onboarding_device_id"] = device.pk
+                messages.info(request, "Manual setup saved as a private draft. Novena is checking the live signals.")
+            except Exception as exc:
+                from apps.devices.deployment_setup import customer_safe_error
 
-        # Store first device for the alert step
-        first_device = gateway.devices.first()
-        if first_device:
-            request.session["onboarding_device_id"] = first_device.id
+                item.state = DeploymentSetupItem.State.NEEDS_ATTENTION
+                item.validation_result = {
+                    "error": customer_safe_error(str(exc), target=port_key),
+                    "technical_error": str(exc),
+                    "retryable": True,
+                }
+                item.save(update_fields=["state", "validation_result", "updated_at"])
+                messages.error(request, item.validation_result["error"])
+            return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
 
-        return redirect("web_team:onboarding:step_4_alert", team_slug=team_slug)
+        if action == "request_template":
+            documentation_file = request.FILES.get("documentation_file")
+            if documentation_file and (
+                not documentation_file.name.lower().endswith(".pdf")
+                or documentation_file.size > 10 * 1024 * 1024
+                or documentation_file.content_type not in {"application/pdf", "application/x-pdf"}
+            ):
+                messages.error(request, "Equipment documentation must be a PDF no larger than 10 MB.")
+                return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+            if documentation_file:
+                signature = documentation_file.read(5)
+                documentation_file.seek(0)
+                if signature != b"%PDF-":
+                    messages.error(request, "The uploaded file is not a valid PDF document.")
+                    return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+            request_manufacturer = request.POST.get("request_manufacturer", "").strip()
+            request_model = request.POST.get("request_model", "").strip()
+            request_protocol = request.POST.get("request_protocol", "modbus_tcp")
+            if not request_manufacturer or not request_model:
+                messages.error(request, "Manufacturer and model are required for a template request.")
+                return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+            if request_protocol not in {"modbus_tcp", "modbus_rtu"}:
+                messages.error(request, "Choose Modbus TCP or Modbus RTU.")
+                return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+            equipment_request = EquipmentTemplateRequest.objects.create(
+                team=request.team,
+                run=run,
+                manufacturer=request_manufacturer,
+                model_number=request_model,
+                protocol=request_protocol,
+                documentation_url=request.POST.get("request_documentation_url", "").strip(),
+                documentation_file=documentation_file,
+                discovery_evidence=gateway.discovery_data,
+            )
+            append_setup_event(
+                run,
+                "template_requested",
+                "A Novena equipment-template request was submitted.",
+                actor=request.user,
+                evidence={"support_reference": str(equipment_request.support_reference)},
+            )
+            messages.success(
+                request,
+                f"Template request submitted. Support reference: {equipment_request.support_reference}",
+            )
+            return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+
+        if action == "deploy":
+            run = sync_setup_run(run)
+            validated_items = list(
+                run.items.filter(
+                    state__in=[
+                        DeploymentSetupItem.State.VALIDATED,
+                        DeploymentSetupItem.State.TELEMETRY_CONFIRMED,
+                    ],
+                    device__isnull=False,
+                )
+            )
+            if not validated_items:
+                messages.warning(request, "Wait for at least one successful live validation before deploying.")
+                return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+            config_record = generate_and_push_config(gateway, setup_run=run)
+            if not config_record:
+                messages.error(request, "No validated equipment configuration was available to deploy.")
+                return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+            for item in validated_items:
+                item.state = DeploymentSetupItem.State.QUEUED
+                item.save(update_fields=["state", "updated_at"])
+            run.state = DeploymentSetupRun.State.DEPLOYING
+            run.current_step = "verify"
+            run.save(update_fields=["state", "current_step", "updated_at"])
+            append_setup_event(
+                run,
+                "configuration_queued",
+                "Validated equipment configuration was queued for the Gateway.",
+                actor=request.user,
+                evidence={
+                    "request_id": str(config_record.request_id),
+                    "revision": config_record.revision,
+                    "checksum": config_record.checksum,
+                },
+            )
+            request.session["onboarding_device_id"] = validated_items[0].device_id
+            return redirect("web_team:onboarding:step_4_alert", team_slug=team_slug)
 
     context = {
         "steps": ONBOARDING_STEPS,
-        "current_step": 4,
+        "current_step": 3,
         "gateway": gateway,
         "discovered_devices": discovered_devices,
         "templates": templates,
         "profile": profile,
+        "setup_run": run,
+        "setup_items": run.items.select_related("device", "selected_template", "validation_command"),
+        "config_preview": human_config_preview(gateway),
+        "guided_setup_available": guided_capable,
         "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
     }
     return render(request, "onboarding/step_3_discover.html", context)
@@ -305,7 +691,18 @@ def discovery_poll(request, team_slug):
     gateway = Gateway.objects.filter(id=gateway_id, team=request.team).first()
     discovered_devices = (gateway.discovery_data or {}).get("devices", []) if gateway else []
     profile = get_site_profile(gateway.site) if gateway else profile_for_request(request)
-    templates = rank_templates_for_profile(DeviceTemplate.objects.all(), profile)
+    templates = rank_templates_for_profile(visible_templates_for_team(request.team), profile)
+    setup_run = (
+        DeploymentSetupRun.objects.filter(team=request.team, gateway=gateway)
+        .order_by("-created_at")
+        .first()
+        if gateway
+        else None
+    )
+    if setup_run:
+        from apps.devices.deployment_setup import sync_setup_run
+
+        setup_run = sync_setup_run(setup_run)
     return render(
         request,
         "onboarding/partials/discovery_devices.html",
@@ -314,6 +711,10 @@ def discovery_poll(request, team_slug):
             "templates": templates,
             "gateway": gateway,
             "profile": profile,
+            "setup_run": setup_run,
+            "setup_items": setup_run.items.select_related("device", "selected_template")
+            if setup_run
+            else [],
             "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
         },
     )
@@ -321,56 +722,12 @@ def discovery_poll(request, team_slug):
 
 @require_permission("manage_devices")
 def step_3_device(request, team_slug):
-    gateway_id = request.session.get("onboarding_gateway_id")
-    site_id = request.session.get("onboarding_site_id")
-    if not gateway_id:
-        return redirect("web_team:onboarding:step_2_gateway", team_slug=team_slug)
-    gateway = get_object_or_404(Gateway, id=gateway_id, team=request.team)
-
-    device_id = request.session.get("onboarding_device_id")
-    device = Device.objects.filter(id=device_id, team=request.team).first() if device_id else None
-
-    profile = get_site_profile(gateway.site)
-    templates = rank_templates_for_profile(DeviceTemplate.objects.all(), profile)
-
-    if request.method == "POST":
-        name = request.POST.get("name")
-        template_id = request.POST.get("template")
-        if name:
-            template = None
-            if template_id:
-                template = DeviceTemplate.objects.get(id=template_id)
-
-            if device:
-                device.name = name
-                device.template = template
-                device.device_type = template.device_type if template else "sensor"
-                device.protocol = template.protocol if template else "modbus_tcp"
-                device.save()
-            else:
-                device = Device.objects.create(
-                    team=request.team,
-                    gateway=gateway,
-                    site_id=site_id,
-                    name=name,
-                    template=template,
-                    device_type=template.device_type if template else "sensor",
-                    protocol=template.protocol if template else "modbus_tcp",
-                )
-            request.session["onboarding_device_id"] = device.id
-            return redirect("web_team:onboarding:step_4_alert", team_slug=team_slug)
-
-    context = {
-        "steps": ONBOARDING_STEPS,
-        "current_step": 4,
-        "templates": templates,
-        "device": device,
-        "profile": profile,
-    }
-    return render(request, "onboarding/step_3_device.html", context)
+    """Compatibility redirect: equipment setup is consolidated in Guided Setup."""
+    messages.info(request, "Equipment templates and manual setup are now available in Guided Setup.")
+    return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
 
 
-@require_permission("manage_alerts")
+@require_permission("manage_devices")
 def step_4_alert(request, team_slug):
     device_id = request.session.get("onboarding_device_id")
     if not device_id:
@@ -393,42 +750,81 @@ def step_4_alert(request, team_slug):
 
     # Alert rules are often multiple, but the wizard still supports one manual fallback.
     existing_rule = AlertRule.objects.filter(device=device).first()
+    from apps.devices.config_generator import human_config_preview
+    from apps.devices.deployment_setup import deployment_progress, sync_setup_run
+
+    setup_run = (
+        DeploymentSetupRun.objects.filter(team=request.team, gateway=device.gateway)
+        .order_by("-created_at")
+        .first()
+    )
+    if setup_run:
+        setup_run = sync_setup_run(setup_run)
 
     if request.method == "POST":
+        alert_choice = ""
         if request.POST.get("accept_profile_presets", "1") == "1":
             apply_solution_profile_presets(device.site, request.user)
-            return redirect("web_team:onboarding:complete", team_slug=team_slug)
+            alert_choice = "recommended"
+        else:
+            key = request.POST.get("key", "active_power")
+            threshold = request.POST.get("threshold")
+            if threshold:
+                if existing_rule:
+                    existing_rule.telemetry_key = key
+                    existing_rule.threshold = float(threshold)
+                    existing_rule.name = f"{device.name} High {key.replace('_', ' ').title()}"
+                    existing_rule.save()
+                    if existing_rule.notify_email and not existing_rule.recipients.exists():
+                        existing_rule.recipients.add(request.user)
+                else:
+                    rule = AlertRule.objects.create(
+                        team=request.team,
+                        device=device,
+                        name=f"{device.name} High {key.replace('_', ' ').title()}",
+                        telemetry_key=key,
+                        condition="gt",
+                        threshold=float(threshold),
+                        severity="critical",
+                    )
+                    rule.recipients.add(request.user)
+                alert_choice = "manual"
+        if alert_choice and setup_run:
+            from apps.devices.deployment_setup import append_setup_event
 
-        key = request.POST.get("key", "active_power")
-        threshold = request.POST.get("threshold")
-        if threshold:
-            if existing_rule:
-                existing_rule.telemetry_key = key
-                existing_rule.threshold = float(threshold)
-                existing_rule.name = f"{device.name} High {key.replace('_', ' ').title()}"
-                existing_rule.save()
-                if existing_rule.notify_email and not existing_rule.recipients.exists():
-                    existing_rule.recipients.add(request.user)
-            else:
-                rule = AlertRule.objects.create(
-                    team=request.team,
-                    device=device,
-                    name=f"{device.name} High {key.replace('_', ' ').title()}",
-                    telemetry_key=key,
-                    condition="gt",
-                    threshold=float(threshold),
-                    severity="critical",
+            if not setup_run.events.filter(event_type="alerts_reviewed").exists():
+                append_setup_event(
+                    setup_run,
+                    "alerts_reviewed",
+                    "Recommended alert settings were reviewed.",
+                    actor=request.user,
+                    evidence={"choice": alert_choice},
                 )
-                rule.recipients.add(request.user)
+            setup_run = sync_setup_run(setup_run)
+            if setup_run.state == DeploymentSetupRun.State.VERIFYING:
+                setup_run = sync_setup_run(setup_run)
+            if setup_run.state not in {
+                DeploymentSetupRun.State.COMPLETED,
+                DeploymentSetupRun.State.COMPLETED_ATTENTION,
+            }:
+                messages.info(
+                    request,
+                    "Alert choices are saved. Novena is still waiting for the Gateway and first live data.",
+                )
+                return redirect("web_team:onboarding:step_4_alert", team_slug=team_slug)
+        if alert_choice:
             return redirect("web_team:onboarding:complete", team_slug=team_slug)
 
     context = {
         "steps": ONBOARDING_STEPS,
-        "current_step": 5,
+        "current_step": 4,
         "device": device,
         "rule": existing_rule,
         "profile": profile,
         "recommended_alerts": recommended_alerts,
+        "setup_run": setup_run,
+        "deployment_progress": deployment_progress(setup_run) if setup_run else [],
+        "config_preview": human_config_preview(device.gateway),
         "commissioning": build_commissioning_context(request.team, gateway=device.gateway, session=request.session),
     }
     return render(request, "onboarding/step_4_alert.html", context)
@@ -440,15 +836,16 @@ def complete(request, team_slug):
     device_id = request.session.get("onboarding_device_id")
     gateway = Gateway.objects.filter(id=gateway_id, team=request.team).first() if gateway_id else None
     commissioning = build_commissioning_context(request.team, gateway=gateway, session=request.session)
-    provisioned_devices = commissioning.get("provisioned_devices", [])
-    redirect_target = None
-
-    if device_id and len(provisioned_devices) == 1 and commissioning.get("first_live_device"):
-        redirect_target = redirect("web_team:devices:device_detail", team_slug=team_slug, pk=device_id)
-    elif gateway and len(provisioned_devices) > 1:
-        redirect_target = redirect("web_team:devices:site_detail", team_slug=team_slug, pk=gateway.site_id)
-    elif gateway and not commissioning.get("first_live_device"):
-        redirect_target = redirect("web_team:devices:gateway_detail", team_slug=team_slug, pk=gateway.pk)
+    setup_run = commissioning.get("setup_run")
+    if setup_run and setup_run.state not in {
+        DeploymentSetupRun.State.COMPLETED,
+        DeploymentSetupRun.State.COMPLETED_ATTENTION,
+    }:
+        messages.info(
+            request,
+            "Guided Setup is still verifying the Gateway and first live data.",
+        )
+        return redirect("web_team:onboarding:step_4_alert", team_slug=team_slug)
 
     for key in [
         "onboarding_site_id",
@@ -461,9 +858,35 @@ def complete(request, team_slug):
         if key in request.session:
             del request.session[key]
 
-    if redirect_target:
-        return redirect_target
-    return render(request, "onboarding/complete.html")
+    return render(
+        request,
+        "onboarding/complete.html",
+        {
+            "steps": ONBOARDING_STEPS,
+            "current_step": 5,
+            "gateway": gateway,
+            "device_id": device_id,
+            "commissioning": commissioning,
+            "setup_run": setup_run,
+        },
+    )
+
+
+@require_permission("view_devices")
+def support_bundle_download(request, team_slug, run_id):
+    from apps.devices.deployment_setup import support_bundle
+
+    run = get_object_or_404(
+        DeploymentSetupRun.objects.select_related("gateway", "site"),
+        run_id=run_id,
+        team=request.team,
+    )
+    response = HttpResponse(
+        json.dumps(support_bundle(run), cls=DjangoJSONEncoder, indent=2),
+        content_type="application/json",
+    )
+    response["Content-Disposition"] = f'attachment; filename="novena-setup-{run.run_id}.json"'
+    return response
 
 
 # Setup Wizard Views for Existing Customers
@@ -502,9 +925,11 @@ def setup_step_connectivity(request, team_slug):
         if connectivity == "gateway":
             return redirect("web_team:onboarding:step_2_gateway", team_slug=team_slug)
         else:
-            # Direct connection skips gateway step
-            request.session["onboarding_gateway_id"] = None
-            return redirect("web_team:onboarding:step_3_device", team_slug=team_slug)
+            messages.info(
+                request,
+                "Guided Setup uses a Novena Gateway so equipment can be discovered and validated safely.",
+            )
+            return redirect("web_team:onboarding:step_2_gateway", team_slug=team_slug)
 
     context = {"steps": ONBOARDING_STEPS, "current_step": 2}  # We'll reuse the progress bar
     return render(request, "onboarding/setup_step_connectivity.html", context)

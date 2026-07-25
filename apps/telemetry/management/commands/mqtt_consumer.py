@@ -300,6 +300,7 @@ class Command(BaseCommand):
             "platform": "platform_info",
             "connected_devices": "connected_devices",
             "active_connectors": "active_connectors",
+            "gateway_capabilities": "gateway_capabilities",
             "remote_control_protocol_version": "remote_control_protocol_version",
             "remote_control_capabilities": "remote_control_capabilities",
             "remote_control_local_writeback_enabled": "remote_control_local_writeback_enabled",
@@ -410,21 +411,60 @@ class Command(BaseCommand):
             try:
                 config_record = GatewayConfig.objects.get(request_id=config_request_id, gateway=gateway)
                 config_status = attrs.get("config_update_status", "unknown")
-                config_record.status = config_status
-                config_record.error_message = attrs.get("config_update_error", "") or ""
-                config_record.rollback_performed = bool(attrs.get("rollback_performed", False))
-                config_record.connector_results = attrs.get("connector_results", []) or []
+                acknowledged_revision = attrs.get("config_revision")
+                acknowledged_checksum = attrs.get("config_checksum")
+                acknowledged_idempotency = attrs.get("config_idempotency_key")
+                if acknowledged_revision is not None and int(acknowledged_revision) != config_record.revision:
+                    logger.warning("Rejected mismatched config revision for request %s", config_request_id)
+                    return
+                if acknowledged_checksum and acknowledged_checksum != config_record.checksum:
+                    logger.warning("Rejected mismatched config checksum for request %s", config_request_id)
+                    return
+                if acknowledged_idempotency and str(acknowledged_idempotency) != str(config_record.idempotency_key):
+                    logger.warning("Rejected mismatched config idempotency key for request %s", config_request_id)
+                    return
+                incoming_status = "active" if config_status == "success" else config_status
+                config_status_order = {
+                    "queued": 0,
+                    "delivered": 1,
+                    "accepted": 2,
+                    "active": 3,
+                    "failed": 3,
+                    "rolled_back": 3,
+                }
+                status_advanced = config_status_order.get(incoming_status, -1) >= config_status_order.get(
+                    config_record.status, -1
+                )
+                if status_advanced:
+                    from apps.devices.deployment_setup import customer_safe_error
+
+                    config_record.status = incoming_status
+                    config_record.technical_error = attrs.get("config_update_error", "") or ""
+                    config_record.error_message = (
+                        customer_safe_error(config_record.technical_error)
+                        if config_record.technical_error
+                        else ""
+                    )
+                    config_record.error_code = attrs.get("config_update_error_code", "") or ""
+                    config_record.rollback_performed = bool(attrs.get("rollback_performed", False))
+                    config_record.connector_results = attrs.get("connector_results", []) or []
+                    config_record.rollback_connector_results = (
+                        attrs.get("rollback_connector_results", []) or []
+                    )
                 config_record.acknowledged_at = timezone.now()
                 config_record.save(
                     update_fields=[
                         "status",
                         "error_message",
+                        "error_code",
+                        "technical_error",
                         "rollback_performed",
                         "connector_results",
+                        "rollback_connector_results",
                         "acknowledged_at",
                     ]
                 )
-                if config_status == "success":
+                if config_record.status == "active":
                     gateway.lifecycle_status = "active"
                     gateway.save(update_fields=["lifecycle_status"])
                 logger.info("Config update %s acknowledged: %s", config_request_id, config_record.status)
@@ -566,13 +606,14 @@ class Command(BaseCommand):
         discovered_devices = report.get("discovered_devices", [])
         from apps.devices.discovery_matching import enrich_discovered_device
 
-        discovered_devices = [enrich_discovered_device(device) for device in discovered_devices]
+        discovered_devices = [enrich_discovered_device(device, team=gateway.team) for device in discovered_devices]
 
         # Store enriched discovery data
         gateway.discovery_data = {
             "last_discovered_at": str(timezone.now()),
             "scan_ts": report.get("scan_ts"),
             "scan_type": report.get("scan_type", "unknown"),
+            "status": report.get("status", "complete"),
             "interfaces": report.get("interfaces", []),
             "devices": discovered_devices,
             "errors": report.get("errors", []),

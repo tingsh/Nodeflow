@@ -20,6 +20,7 @@ The first production target is a lean VPS deployment:
 - Redis for cache, Celery, and Channels.
 - Celery worker and Celery Beat for background and scheduled jobs.
 - Celery Beat must include `apps.devices.tasks.dispatch_due_remote_command_outboxes`; alert on dead-lettered command outbox rows and repeatedly expired leases.
+- Celery Beat must include `apps.devices.tasks.dispatch_due_gateway_config_outboxes`; alert on dead-lettered configuration rows and repeatedly expired leases.
 - MQTT consumer for gateway telemetry ingestion.
 - Mosquitto with Dynamic Security for gateway credentials.
 - Host Nginx for HTTPS and WebSocket reverse proxy.
@@ -73,6 +74,28 @@ Then fill real values for:
 - WhatsApp: Meta phone ID, access token, verify token, approved alert template.
 - Stripe: keep `STRIPE_LIVE_MODE=False` for unpaid pilots; configure live keys before paid launch.
 - Sentry: strongly recommended before pilots.
+
+### Guided Setup configuration delivery
+
+Guided Setup uses the same Ed25519 signing authority as governed remote commands. Set
+`GATEWAY_CONFIG_ENVELOPE_TTL_SECONDS` between 60 and 900 seconds and
+`GATEWAY_CONFIG_OUTBOX_MAX_ATTEMPTS` between 1 and 10. Celery Beat must run
+`apps.devices.tasks.dispatch_due_gateway_config_outboxes` so queued or abandoned
+delivery leases recover after worker restarts. Set
+`GUIDED_SETUP_FIRST_TELEMETRY_TIMEOUT_SECONDS` to the longest normal interval
+before a newly activated device should report data; the default is 180 seconds.
+
+Before enabling `guided_setup_v1` on a Gateway:
+
+1. Install the Hub signing public key under the Gateway RPC
+   `trusted_command_keys` setting.
+2. Confirm the Gateway reports a trusted clock and writable configuration journal.
+3. Prove a failed connector activation restores the last-known-good configuration.
+4. Confirm the Hub receives matching revision, checksum, and idempotency evidence.
+
+Until those checks pass, the Gateway does not advertise the capability and Hub keeps
+using the compatible legacy setup path. Never copy a Hub private signing key to a
+Gateway.
 
 ## First Server Build
 

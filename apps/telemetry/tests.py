@@ -276,7 +276,7 @@ def test_scoped_attribute_ack_cannot_update_another_gateway_config():
     )
 
     config_b.refresh_from_db()
-    assert config_b.status == "pending"
+    assert config_b.status == "queued"
 
 
 @pytest.mark.django_db

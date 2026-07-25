@@ -10,13 +10,68 @@
             <div class="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                     <p class="text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-300">{{ profile.name }}</p>
-                    <h2 class="mt-2 text-3xl font-black text-gray-900 dark:text-white">Review your recommended setup</h2>
-                    <p class="mt-2 text-gray-500 dark:text-gray-400 max-w-2xl">Novena will use these presets to make your first dashboard, alerts, reports, and maintenance workflow useful immediately. You can edit everything later.</p>
+                    <h2 class="mt-2 text-3xl font-black text-gray-900 dark:text-white">Verify deployment and review alerts</h2>
+                    <p class="mt-2 text-gray-500 dark:text-gray-400 max-w-2xl">Novena is applying the validated equipment setup. Review the recommended alerts now; they are enabled only after you confirm.</p>
                 </div>
                 <div class="rounded-2xl bg-indigo-50 px-5 py-4 text-sm text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">
                     <i class="fa {{ profile.icon }} mr-2"></i>
                     Monitoring {{ device.name }}
                 </div>
+            </div>
+
+            <div id="deployment-status"
+                 class="mb-8 space-y-8"
+                 hx-get="{% url 'web_team:onboarding:step_4_alert' request.team.slug %}"
+                 hx-trigger="every 4s"
+                 hx-select="#deployment-status"
+                 hx-swap="outerHTML">
+            <div class="rounded-2xl border border-base-content/10 bg-base-200/40 p-5">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <p class="text-xs font-black uppercase tracking-widest text-base-content/45">Configuration delivery</p>
+                        <h3 class="mt-1 font-black">{{ commissioning.latest_config.get_status_display|default:"Not queued" }}</h3>
+                        <p class="mt-1 text-sm text-base-content/55">
+                            {% if commissioning.latest_config.status == "active" %}The Gateway accepted the configuration and started its connectors.
+                            {% elif commissioning.latest_config.status == "rolled_back" %}The Gateway restored the last working configuration.
+                            {% elif commissioning.latest_config.status == "failed" %}The configuration could not be applied. No working configuration was overwritten.
+                            {% else %}Waiting for the Gateway to acknowledge and start the validated equipment connectors.{% endif %}
+                        </p>
+                    </div>
+                    {% if commissioning.latest_config %}
+                    <span class="badge {% if commissioning.latest_config.status == 'active' %}badge-success{% elif commissioning.latest_config.status == 'failed' or commissioning.latest_config.status == 'rolled_back' %}badge-error{% else %}badge-warning{% endif %}">
+                        {{ commissioning.latest_config.get_status_display }}
+                    </span>
+                    {% endif %}
+                </div>
+                {% if commissioning.latest_config.error_message %}
+                <div class="mt-4 rounded-lg bg-error/10 p-3 text-sm text-error">{{ commissioning.latest_config.error_message }}</div>
+                {% endif %}
+                <details class="mt-4">
+                    <summary class="cursor-pointer text-xs font-bold text-base-content/55">Configuration summary</summary>
+                    <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {% for equipment in config_preview.devices %}
+                        <div class="rounded-lg bg-base-100 p-3">
+                            <p class="font-bold text-sm">{{ equipment.name }}</p>
+                            <p class="mt-1 text-xs text-base-content/50">{{ equipment.protocol }} · {{ equipment.target }} · every {{ equipment.polling_interval }}s</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </details>
+            </div>
+
+            {% if deployment_progress %}
+            <div class="rounded-2xl border border-base-content/10 bg-base-100 p-5">
+                <p class="text-xs font-black uppercase tracking-widest text-base-content/45">Deployment progress</p>
+                <div class="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2">
+                    {% for step in deployment_progress %}
+                    <div class="flex items-center gap-3 rounded-xl bg-base-200/40 px-3 py-2 text-sm">
+                        <i class="fa {% if step.status == 'complete' %}fa-circle-check text-success{% elif step.status == 'attention' %}fa-circle-exclamation text-error{% else %}fa-clock text-base-content/30{% endif %}"></i>
+                        <span class="{% if step.status == 'complete' %}font-semibold{% else %}text-base-content/55{% endif %}">{{ step.label }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
@@ -105,7 +160,7 @@
                     </div>
 
                     <div class="pt-6 flex items-center justify-between space-x-6">
-                        <a href="{% url 'web_team:onboarding:step_3_device' request.team.slug %}" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 font-semibold transition flex items-center">
+                        <a href="{% url 'web_team:onboarding:step_3_discover' request.team.slug %}" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 font-semibold transition flex items-center">
                             <i class="fa fa-chevron-left mr-2 text-xs"></i>
                             Back
                         </a>

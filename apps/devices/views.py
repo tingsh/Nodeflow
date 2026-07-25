@@ -8,6 +8,7 @@ from django.conf import settings
 from django.contrib.auth.hashers import make_password
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
+from django.core.files.storage import default_storage
 from django.db import transaction
 from django.db.models import Q
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
@@ -995,9 +996,19 @@ def htmx_device_create(request, team_slug):
 def template_library_search(request, team_slug):
     query = request.GET.get("q", "")
     templates = visible_templates_for_team(request.team).filter(
-        Q(name__icontains=query) | Q(manufacturer__icontains=query)
+        Q(name__icontains=query)
+        | Q(manufacturer__icontains=query)
+        | Q(model_number__icontains=query)
+        | Q(device_type__icontains=query)
+        | Q(protocol__icontains=query)
+        | Q(category__icontains=query)
+    ).order_by("-is_verified", "created_by_team_id", "name")
+    template_name = (
+        "onboarding/partials/template_search_results.html"
+        if request.GET.get("context") == "guided_setup"
+        else "devices/partials/template_search_results.html"
     )
-    return render(request, "devices/partials/template_search_results.html", {"templates": templates[:10]})
+    return render(request, template_name, {"templates": templates[:10]})
 
 
 @csrf_exempt
@@ -1055,6 +1066,7 @@ def ai_template_generate(request, team_slug):
     manufacturer = request.POST.get("manufacturer", "").strip()
     model_number = request.POST.get("model_number", "").strip()
     doc_url = request.POST.get("doc_url", "").strip() or None
+    documentation_file = request.FILES.get("documentation_file")
 
     if not manufacturer or not model_number:
         return render(
@@ -1064,7 +1076,7 @@ def ai_template_generate(request, team_slug):
         )
 
     # Check for existing template first (case-insensitive)
-    existing = DeviceTemplate.objects.filter(
+    existing = visible_templates_for_team(request.team).filter(
         manufacturer__iexact=manufacturer,
         model_number__iexact=model_number,
     ).first()
@@ -1075,9 +1087,51 @@ def ai_template_generate(request, team_slug):
 
     # Kick off async task
     task_id = str(uuid.uuid4())
+    doc_storage_path = None
+    if documentation_file:
+        invalid_pdf = (
+            not documentation_file.name.lower().endswith(".pdf")
+            or documentation_file.size > 10 * 1024 * 1024
+            or documentation_file.content_type
+            not in {"application/pdf", "application/x-pdf"}
+        )
+        signature = documentation_file.read(5)
+        documentation_file.seek(0)
+        if invalid_pdf or signature != b"%PDF-":
+            return render(
+                request,
+                "devices/partials/ai_template_result.html",
+                {
+                    "status": "error",
+                    "error": "Equipment documentation must be a valid PDF no larger than 10 MB.",
+                },
+            )
+        doc_storage_path = default_storage.save(
+            f"equipment-ai-drafts/{request.team.pk}/{task_id}.pdf",
+            documentation_file,
+        )
     # Initialize cache status to processing
     cache.set(f"ai_template:{task_id}", {"status": "processing"}, timeout=300)
-    generate_template_ai_task.delay(task_id, manufacturer, model_number, doc_url=doc_url)
+    try:
+        generate_template_ai_task.delay(
+            task_id,
+            manufacturer,
+            model_number,
+            doc_url=doc_url,
+            doc_storage_path=doc_storage_path,
+        )
+    except Exception:
+        if doc_storage_path:
+            default_storage.delete(doc_storage_path)
+        cache.delete(f"ai_template:{task_id}")
+        return render(
+            request,
+            "devices/partials/ai_template_result.html",
+            {
+                "status": "error",
+                "error": "Novena could not queue the documentation review. Please retry.",
+            },
+        )
     return render(request, "devices/partials/ai_template_loading.html", {"task_id": task_id})
 
 

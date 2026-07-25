@@ -1,8 +1,12 @@
 import logging
+import os
+import shutil
+import tempfile
 from datetime import timedelta
 
 from celery import shared_task
 from django.conf import settings
+from django.core.files.storage import default_storage
 from django.utils import timezone
 
 logger = logging.getLogger("novena_hub")
@@ -27,6 +31,21 @@ def dispatch_due_remote_command_outboxes():
     from .remote_control import dispatch_due_outboxes
 
     return dispatch_due_outboxes()
+
+
+@shared_task(name="apps.devices.tasks.dispatch_gateway_config_outbox")
+def dispatch_gateway_config_outbox(outbox_id):
+    from .gateway_config_delivery import dispatch_gateway_config_outbox as dispatch
+
+    config = dispatch(outbox_id)
+    return str(config.request_id) if config else None
+
+
+@shared_task(name="apps.devices.tasks.dispatch_due_gateway_config_outboxes")
+def dispatch_due_gateway_config_outboxes():
+    from .gateway_config_delivery import dispatch_due_gateway_config_outboxes as dispatch_due
+
+    return dispatch_due()
 
 
 @shared_task
@@ -149,7 +168,13 @@ def expire_control_activations():
 
 
 @shared_task
-def generate_template_ai_task(task_id: str, manufacturer: str, model_number: str, doc_url: str = None):
+def generate_template_ai_task(
+    task_id: str,
+    manufacturer: str,
+    model_number: str,
+    doc_url: str = None,
+    doc_storage_path: str = None,
+):
     """Background task: AI generates a device template draft."""
     from django.core.cache import cache
 
@@ -161,9 +186,22 @@ def generate_template_ai_task(task_id: str, manufacturer: str, model_number: str
         manufacturer,
         model_number,
     )
+    temporary_path = None
     try:
         cache.set(f"ai_template:{task_id}", {"status": "processing"}, timeout=300)
-        draft = generate_template_from_ai(manufacturer, model_number, doc_url=doc_url)
+        if doc_storage_path:
+            with (
+                default_storage.open(doc_storage_path, "rb") as source,
+                tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temporary,
+            ):
+                shutil.copyfileobj(source, temporary)
+                temporary_path = temporary.name
+        draft = generate_template_from_ai(
+            manufacturer,
+            model_number,
+            doc_url=doc_url,
+            doc_path=temporary_path,
+        )
         if draft.get("status") == "error":
             cache.set(f"ai_template:{task_id}", {"status": "error", "error": draft.get("error")}, timeout=300)
         else:
@@ -171,3 +209,8 @@ def generate_template_ai_task(task_id: str, manufacturer: str, model_number: str
     except Exception as e:
         cache.set(f"ai_template:{task_id}", {"status": "error", "error": str(e)}, timeout=300)
         logger.exception("AI template generation background task failed for task_id %s", task_id)
+    finally:
+        if temporary_path and os.path.exists(temporary_path):
+            os.unlink(temporary_path)
+        if doc_storage_path:
+            default_storage.delete(doc_storage_path)

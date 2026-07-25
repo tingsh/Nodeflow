@@ -69,14 +69,25 @@ class DeviceTemplateAIResult(BaseModel):
     ai_confidence: float = Field(description="Self-assessed confidence score between 0.0 and 1.0.")
 
 
-def _build_generation_prompt(manufacturer: str, model_number: str, doc_url: str = None) -> str:
+def _build_generation_prompt(
+    manufacturer: str,
+    model_number: str,
+    doc_url: str = None,
+    *,
+    document_attached: bool = False,
+) -> str:
     """Build the Gemini prompt for Modbus register map extraction."""
     prompt = (
         "You are an expert industrial IoT engineering assistant. Your task is to find and extract the "
         f"Modbus register map for the equipment: Manufacturer '{manufacturer}', Model '{model_number}'.\n\n"
     )
 
-    if doc_url:
+    if document_attached:
+        prompt += (
+            "IMPORTANT: The customer attached an equipment manual. Ground the register map in "
+            "that document and do not invent registers that are absent or ambiguous.\n\n"
+        )
+    elif doc_url:
         prompt += (
             "IMPORTANT: The user has provided a direct documentation URL. Please prioritize and ground "
             f"your search/extraction on this specific page: {doc_url}\n\n"
@@ -104,7 +115,8 @@ def _build_generation_prompt(manufacturer: str, model_number: str, doc_url: str 
         "5. Standardize units of measurement (e.g., 'V', 'A', 'W', 'kW', 'Hz', 'kWh', 'Wh', 'rpm', 'C').\n"
         "6. Provide 1-2 standard alert presets in the `alert_presets` field "
         "(e.g., over-temperature, under-voltage) if reasonable.\n"
-        "7. Estimate your extraction confidence (0.0 to 1.0) and include the source URL where the map was found.\n\n"
+        "7. Estimate your extraction confidence (0.0 to 1.0) and include the source URL where the map was found. "
+        "For an attached manual without a URL, use 'uploaded-equipment-manual' as source_url.\n\n"
         "Return the output strictly in the requested JSON structure."
     )
     return prompt
@@ -155,7 +167,12 @@ def _validate_register_map(register_map: dict) -> tuple[bool, list[str]]:
     return len(errors) == 0, errors
 
 
-def generate_template_from_ai(manufacturer: str, model_number: str, doc_url: str = None) -> dict:
+def generate_template_from_ai(
+    manufacturer: str,
+    model_number: str,
+    doc_url: str = None,
+    doc_path: str = None,
+) -> dict:
     """
     Use Gemini with grounded search to find and parse a Modbus register map.
     Returns a draft template dict (NOT saved to DB yet).
@@ -177,17 +194,31 @@ def generate_template_from_ai(manufacturer: str, model_number: str, doc_url: str
         logger.exception("Failed to configure/initialize Gemini model")
         return {"status": "error", "error": f"Failed to initialize Gemini: {e}"}
 
-    prompt = _build_generation_prompt(manufacturer, model_number, doc_url)
+    prompt = _build_generation_prompt(
+        manufacturer,
+        model_number,
+        doc_url,
+        document_attached=bool(doc_path),
+    )
 
+    uploaded_document = None
     try:
         logger.info("Calling Gemini for template generation: %s %s (URL: %s)", manufacturer, model_number, doc_url)
 
         # Enforce structured output via Pydantic model response_schema
         # Enable search grounding if doc_url is NOT provided (or even if it is, to help find it)
-        tools = ["google_search"]
+        tools = [] if doc_path else ["google_search"]
 
+        content = prompt
+        if doc_path:
+            uploaded_document = genai.upload_file(
+                path=doc_path,
+                mime_type="application/pdf",
+                display_name=f"{manufacturer} {model_number} equipment manual",
+            )
+            content = [uploaded_document, prompt]
         response = model.generate_content(
-            prompt,
+            content,
             tools=tools,
             generation_config=genai.GenerationConfig(
                 response_mime_type="application/json",
@@ -238,6 +269,12 @@ def generate_template_from_ai(manufacturer: str, model_number: str, doc_url: str
     except Exception as e:
         logger.exception("AI template generation failed")
         return {"status": "error", "error": f"AI template generation failed: {e}"}
+    finally:
+        if uploaded_document and getattr(uploaded_document, "name", None):
+            try:
+                genai.delete_file(uploaded_document.name)
+            except Exception:
+                logger.warning("Could not remove uploaded AI documentation file")
 
 
 def save_approved_template(draft: dict, team=None) -> DeviceTemplate:
