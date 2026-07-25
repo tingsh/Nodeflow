@@ -24,6 +24,11 @@ class Team(SubscriptionModelBase, BaseModel):
         ACTIVE = "active", gettext("Active")
         CLOSED = "closed", gettext("Closed")
 
+    class RemoteControlMode(models.TextChoices):
+        MONITORING_ONLY = "monitoring_only", gettext("Monitoring only")
+        CONTROLLED = "controlled", gettext("Controlled")
+        LOCKED_DOWN = "locked_down", gettext("Locked down")
+
     name = models.CharField(max_length=100)
     slug = models.SlugField(unique=True)
     members = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="teams", through="Membership")
@@ -37,6 +42,18 @@ class Team(SubscriptionModelBase, BaseModel):
         related_name="closed_teams",
     )
     closed_reason = models.CharField(max_length=100, blank=True, default="", db_default="")
+    remote_control_mode = models.CharField(
+        max_length=24,
+        choices=RemoteControlMode.choices,
+        default=RemoteControlMode.MONITORING_ONLY,
+        db_default=RemoteControlMode.MONITORING_ONLY,
+        help_text=gettext("Remote control is disabled until the team completes governed-control activation."),
+    )
+    remote_control_epoch = models.PositiveBigIntegerField(
+        default=1,
+        db_default=1,
+        help_text=gettext("Monotonic epoch used to invalidate previously issued remote commands."),
+    )
 
     # your team customizations go here.
 

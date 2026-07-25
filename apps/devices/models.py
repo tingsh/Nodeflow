@@ -5,6 +5,7 @@ from django.conf import settings
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.teams.models import BaseTeamModel
@@ -97,6 +98,9 @@ class Gateway(BaseTeamModel):
     platform_info = models.CharField(max_length=200, blank=True)
     active_connectors = models.JSONField(default=list, blank=True)
     connected_devices = models.JSONField(default=list, blank=True)
+    remote_control_protocol_version = models.PositiveIntegerField(default=0)
+    remote_control_local_writeback_enabled = models.BooleanField(default=False)
+    remote_control_policy_loaded = models.BooleanField(default=False)
 
     # Network Watchdog fields
     active_interface = models.CharField(max_length=20, blank=True, default="eth0")
@@ -370,6 +374,13 @@ class RpcCommand(BaseTeamModel):
     result = models.JSONField(null=True, blank=True)
     error_message = models.TextField(blank=True)
     responded_at = models.DateTimeField(null=True, blank=True)
+    remote_command = models.ForeignKey(
+        "RemoteCommand",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="transport_attempts",
+    )
 
     class Meta:
         ordering = ["-sent_at"]
@@ -416,9 +427,149 @@ class DeviceCommand(BaseTeamModel):
     requested_at = models.DateTimeField(auto_now_add=True)
     executed_at = models.DateTimeField(null=True, blank=True)
     error_message = models.TextField(blank=True)
+    remote_command = models.OneToOneField(
+        "RemoteCommand",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="legacy_device_command",
+    )
 
     def __str__(self):
         return f"CMD: {self.command_key}={self.value} on {self.device.name} ({self.status})"
+
+
+class RemoteCommand(BaseTeamModel):
+    """Canonical governed command intent, separate from MQTT transport attempts."""
+
+    class Source(models.TextChoices):
+        USER = "user", _("User")
+        AUTOMATION = "automation", _("Automation")
+        SYSTEM = "system", _("System")
+        SUPPORT = "support", _("Support")
+
+    class Risk(models.TextChoices):
+        DIAGNOSTIC = "diagnostic", _("Diagnostic")
+        LOW = "low", _("Low")
+        HIGH = "high", _("High")
+        CRITICAL = "critical", _("Critical")
+
+    class Status(models.TextChoices):
+        REQUESTED = "requested", _("Requested")
+        POLICY_DENIED = "policy_denied", _("Policy denied")
+        AWAITING_APPROVAL = "awaiting_approval", _("Awaiting approval")
+        APPROVED = "approved", _("Approved")
+        QUEUED = "queued_for_dispatch", _("Queued for dispatch")
+        DISPATCHING = "dispatching", _("Dispatching")
+        PUBLISH_ACCEPTED = "publish_accepted", _("Publish accepted")
+        BROKER_ACKNOWLEDGED = "broker_acknowledged", _("Broker acknowledged")
+        GATEWAY_RECEIVED = "gateway_received", _("Gateway received")
+        EXECUTING = "executing", _("Executing")
+        FIELD_PROTOCOL_ACCEPTED = "field_protocol_accepted", _("Field protocol accepted")
+        VERIFICATION_PENDING = "verification_pending", _("Verification pending")
+        VERIFIED = "verified", _("Verified")
+        REJECTED = "rejected", _("Rejected")
+        FAILED = "failed", _("Failed")
+        EXPIRED = "expired", _("Expired")
+        TIMED_OUT = "timed_out", _("Timed out")
+        CANCELLED = "cancelled", _("Cancelled")
+        OUTCOME_UNKNOWN = "outcome_unknown", _("Outcome unknown")
+        RECONCILED_VERIFIED = "reconciled_verified", _("Reconciled: verified")
+        RECONCILED_NOT_APPLIED = "reconciled_not_applied", _("Reconciled: not applied")
+        RECONCILED_UNRESOLVED = "reconciled_unresolved", _("Reconciled: unresolved")
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    gateway = models.ForeignKey(Gateway, on_delete=models.PROTECT, related_name="remote_commands")
+    device = models.ForeignKey(
+        Device,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="remote_commands",
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requested_remote_commands",
+    )
+    source = models.CharField(max_length=16, choices=Source.choices, default=Source.USER)
+    operation = models.CharField(max_length=64)
+    command_key = models.CharField(max_length=100, blank=True)
+    requested_value = models.JSONField(null=True, blank=True)
+    normalized_value = models.JSONField(null=True, blank=True)
+    reason = models.TextField(blank=True)
+    risk = models.CharField(max_length=16, choices=Risk.choices)
+    status = models.CharField(max_length=32, choices=Status.choices, default=Status.REQUESTED)
+    actor_snapshot = models.JSONField(default=dict, blank=True)
+    policy_snapshot = models.JSONField(default=dict, blank=True)
+    request_payload = models.JSONField(default=dict, blank=True)
+    response_payload = models.JSONField(default=dict, blank=True)
+    control_epoch = models.PositiveBigIntegerField(default=1)
+    sequence_number = models.PositiveBigIntegerField(default=0)
+    idempotency_key = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    expires_at = models.DateTimeField()
+    broker_acknowledged_at = models.DateTimeField(null=True, blank=True)
+    gateway_received_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    error_code = models.CharField(max_length=80, blank=True)
+    error_message = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["team", "status", "created_at"]),
+            models.Index(fields=["gateway", "status"]),
+            models.Index(fields=["device", "status"]),
+        ]
+
+    def __str__(self):
+        target = self.device.name if self.device_id else self.gateway.serial_number
+        return f"{self.operation} -> {target} ({self.status})"
+
+
+class CommandEvent(models.Model):
+    """Append-only evidence for a governed command lifecycle transition."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    command = models.ForeignKey(RemoteCommand, on_delete=models.CASCADE, related_name="events")
+    event_type = models.CharField(max_length=80)
+    from_status = models.CharField(max_length=32, blank=True)
+    to_status = models.CharField(max_length=32, blank=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    actor_snapshot = models.JSONField(default=dict, blank=True)
+    evidence = models.JSONField(default=dict, blank=True)
+    checksum = models.CharField(max_length=64, blank=True)
+    happened_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["happened_at", "id"]
+        indexes = [models.Index(fields=["command", "happened_at"])]
+
+
+class CommandOutbox(models.Model):
+    """Transactional dispatch intent claimed by a dedicated MQTT dispatcher."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", _("Pending")
+        CLAIMED = "claimed", _("Claimed")
+        PUBLISHED = "published", _("Published")
+        FAILED = "failed", _("Failed")
+        CANCELLED = "cancelled", _("Cancelled")
+
+    command = models.OneToOneField(RemoteCommand, on_delete=models.CASCADE, related_name="outbox")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    attempt_count = models.PositiveIntegerField(default=0)
+    available_at = models.DateTimeField(default=timezone.now)
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["status", "available_at"])]
 
 
 class FirmwareRelease(models.Model):

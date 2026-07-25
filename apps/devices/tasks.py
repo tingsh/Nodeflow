@@ -8,6 +8,19 @@ from django.utils import timezone
 logger = logging.getLogger("novena_hub")
 
 
+@shared_task(
+    bind=True,
+    autoretry_for=(),
+    name="apps.devices.tasks.dispatch_remote_command_outbox",
+)
+def dispatch_remote_command_outbox(self, outbox_id):
+    """Dispatch one durable outbox row; writes are never blindly autoretried."""
+    from .remote_control import dispatch_outbox
+
+    command = dispatch_outbox(outbox_id)
+    return str(command.pk) if command else None
+
+
 @shared_task
 def check_device_heartbeats():
     """Persist devices as offline when telemetry freshness exceeds the offline timeout."""

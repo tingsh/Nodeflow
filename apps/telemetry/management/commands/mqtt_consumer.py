@@ -300,6 +300,9 @@ class Command(BaseCommand):
             "platform": "platform_info",
             "connected_devices": "connected_devices",
             "active_connectors": "active_connectors",
+            "remote_control_protocol_version": "remote_control_protocol_version",
+            "local_writeback_enabled": "remote_control_local_writeback_enabled",
+            "remote_control_policy_loaded": "remote_control_policy_loaded",
             "active_interface": "active_interface",
             "failover_count": "failover_count",
             "ethernet_status": "ethernet_status",
@@ -404,7 +407,8 @@ class Command(BaseCommand):
 
     def _handle_rpc_response(self, payload, gateway=None):
         """Process RPC command response from a gateway."""
-        from apps.devices.models import RpcCommand
+        from apps.devices.models import RemoteCommand, RpcCommand
+        from apps.devices.remote_control import append_command_event
 
         request_id = payload.get("request_id")
         if not request_id:
@@ -415,7 +419,24 @@ class Command(BaseCommand):
                 rpc_record = RpcCommand.objects.get(request_id=request_id, gateway=gateway)
             else:
                 rpc_record = RpcCommand.objects.get(request_id=request_id)
-            rpc_record.status = payload.get("status", "unknown")
+            response_status = payload.get("status", "unknown")
+            response_stage = payload.get("stage", response_status)
+            if response_status == "received" or response_stage == "gateway_received":
+                if rpc_record.remote_command_id:
+                    command = rpc_record.remote_command
+                    previous = command.status
+                    command.status = RemoteCommand.Status.GATEWAY_RECEIVED
+                    command.gateway_received_at = timezone.now()
+                    command.save(update_fields=["status", "gateway_received_at", "updated_at"])
+                    append_command_event(
+                        command,
+                        "gateway_received",
+                        from_status=previous,
+                        to_status=RemoteCommand.Status.GATEWAY_RECEIVED,
+                        evidence={"request_id": str(request_id)},
+                    )
+                return
+            rpc_record.status = response_status
             rpc_record.result = payload.get("result")
             rpc_record.error_message = payload.get("error", "") or ""
             rpc_record.responded_at = timezone.now()

@@ -211,9 +211,15 @@ def step_3_discover(request, team_slug):
 
     if request.method != "POST" and gateway.status == "online":
         try:
-            from apps.telemetry.mqtt_publisher import publish_rpc_command
+            from apps.devices.remote_control import request_remote_command
 
-            publish_rpc_command(gateway, "scan_devices", {"scan_type": "manual"})
+            request_remote_command(
+                gateway=gateway,
+                operation="scan_devices",
+                requested_by=request.user,
+                params={"scan_type": "manual"},
+                reason="Onboarding device discovery",
+            )
             if gateway.lifecycle_status in ("claimed", "online"):
                 gateway.lifecycle_status = "commissioning"
                 gateway.save(update_fields=["lifecycle_status"])

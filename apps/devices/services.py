@@ -273,14 +273,7 @@ def _register_params_from_template(device, key, command_type, value):
         register = device.template.register_map.get(key)
 
     if not register or "address" not in register:
-        if command_type == "write":
-            logger.warning(
-                "No register map entry for key '%s' on device %s — using fallback FC6/addr0",
-                key,
-                device.name,
-            )
-            return {"functionCode": 6, "address": 0, "value": value}
-        raise ValueError(f"No readable register map entry found for '{key}'.")
+        raise ValueError(f"No mapped register entry found for '{key}'.")
 
     params = {
         "address": register["address"],
@@ -327,74 +320,102 @@ def send_device_command(device, user, key, value=None, *, command_type="write", 
     Sends a customer-facing command to a device via the associated gateway.
     DeviceCommand is the customer audit record; RpcCommand is the transport record.
     """
-    from apps.telemetry.mqtt_publisher import publish_rpc_command
+    from .remote_control import request_remote_command
 
     if not device.gateway:
         raise ValueError("Device is not assigned to a gateway.")
     if command_type not in {"read", "write"}:
         raise ValueError("Command type must be 'read' or 'write'.")
 
-    value = _normalize_command_value(value)
     command_key = key or f"manual_{command_type}"
-    rpc_params = dict(params or _register_params_from_template(device, command_key, command_type, value))
-    rpc_params["device_name"] = device.name
-    _validate_device_command_params(command_type, rpc_params)
-
+    if params:
+        raise ValueError("Raw register parameters are not accepted; select a mapped device key.")
+    value = _normalize_command_value(value)
     transaction_id = str(uuid.uuid4())
-
+    remote_command = request_remote_command(
+        gateway=device.gateway,
+        operation=f"{command_type}_device",
+        requested_by=user,
+        device=device,
+        command_key=command_key,
+        value=value,
+    )
     command = DeviceCommand.objects.create(
         team=device.team,
         device=device,
         created_by=user,
         command_type=command_type,
         command_key=command_key,
-        value=rpc_params.get("value") if command_type == "write" else None,
+        value=remote_command.normalized_value if command_type == "write" else None,
         transaction_id=transaction_id,
-        payload={
-            "method": f"{command_type}_device",
-            "params": rpc_params,
-        },
+        payload=remote_command.request_payload,
+        remote_command=remote_command,
         status="pending",
     )
-
-    try:
-        rpc = publish_rpc_command(
-            device.gateway,
-            method=f"{command_type}_device",
-            params=rpc_params,
-        )
-
-        command.payload = {
-            "rpc_request_id": str(rpc.request_id),
-            "method": f"{command_type}_device",
-            "device_name": device.name,
-            "params": rpc_params,
-        }
-        command.rpc_command = rpc
-        command.status = "sent"
-        command.save(update_fields=["payload", "rpc_command", "status", "updated_at"])
-        logger.info(
-            "%s command %s sent to %s (tx: %s, rpc: %s)",
-            command_type.title(),
-            command_key,
-            device.name,
-            transaction_id,
-            rpc.request_id,
-        )
-        return command
-    except Exception as e:
-        command.status = "failed"
-        command.error_message = str(e)
-        command.save(update_fields=["status", "error_message", "updated_at"])
-        logger.error("Failed to publish command to MQTT: %s", e)
-        raise
+    logger.info(
+        "%s command %s queued for %s (tx: %s, governed command: %s)",
+        command_type.title(),
+        command_key,
+        device.name,
+        transaction_id,
+        remote_command.pk,
+    )
+    return command
 
 
 def sync_device_command_from_rpc(rpc_record):
     """Mirror a transport-level RpcCommand result onto its customer-facing DeviceCommand."""
+    command = None
     try:
         command = rpc_record.device_command
     except DeviceCommand.DoesNotExist:
+        if rpc_record.remote_command_id:
+            with contextlib.suppress(DeviceCommand.DoesNotExist):
+                command = rpc_record.remote_command.legacy_device_command
+
+    if rpc_record.remote_command_id:
+        from .models import RemoteCommand
+        from .remote_control import append_command_event
+
+        governed = rpc_record.remote_command
+        previous = governed.status
+        governed.response_payload = {
+            "status": rpc_record.status,
+            "result": rpc_record.result,
+            "error": rpc_record.error_message or "",
+        }
+        governed.completed_at = rpc_record.responded_at or timezone.now()
+        if rpc_record.status == "success":
+            governed.status = RemoteCommand.Status.FIELD_PROTOCOL_ACCEPTED
+            governed.error_code = ""
+            governed.error_message = ""
+        elif rpc_record.status == "timeout":
+            governed.status = RemoteCommand.Status.OUTCOME_UNKNOWN
+            governed.error_code = "gateway_timeout"
+            governed.error_message = rpc_record.error_message or "Timed out waiting for Gateway response."
+        else:
+            governed.status = RemoteCommand.Status.FAILED
+            governed.error_code = "gateway_rejected"
+            governed.error_message = rpc_record.error_message or "Gateway command failed."
+        governed.save(
+            update_fields=[
+                "status",
+                "response_payload",
+                "completed_at",
+                "error_code",
+                "error_message",
+                "updated_at",
+            ]
+        )
+        append_command_event(
+            governed,
+            "gateway_result",
+            from_status=previous,
+            to_status=governed.status,
+            evidence=governed.response_payload,
+        )
+
+    if not command:
         return None
 
     command.response_payload = {

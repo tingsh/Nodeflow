@@ -4,9 +4,19 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.utils import timezone
 
-from apps.devices.models import Device, DeviceCommand, Gateway, RpcCommand, Site
+from apps.devices.models import (
+    CommandOutbox,
+    Device,
+    DeviceCommand,
+    DeviceTemplate,
+    Gateway,
+    RemoteCommand,
+    RpcCommand,
+    Site,
+)
+from apps.devices.remote_control import CommandDenied
 from apps.devices.services import process_command_response, send_device_command
-from apps.teams.models import Team
+from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
 
 
@@ -15,8 +25,32 @@ class DeviceCommandTest(TestCase):
         self.user = CustomUser.objects.create(email="test@example.com", username="testuser")
         self.team = Team.objects.create(name="Test Team", slug="test-team")
         self.site = Site.objects.create(team=self.team, name="Main Plant")
+        Membership.objects.create(team=self.team, user=self.user, role="manager")
         self.gateway = Gateway.objects.create(
             team=self.team, site=self.site, name="GW-001", serial_number="SN123", access_token="token123"
+        )
+        self.template = DeviceTemplate.objects.create(
+            name="Verified VFD",
+            device_type="vfd",
+            protocol="modbus_tcp",
+            is_verified=True,
+            register_map={
+                "speed_setpoint": {
+                    "address": 100,
+                    "functionCode": 6,
+                    "type": "16uint",
+                    "unit": "RPM",
+                    "min": 0,
+                    "max": 1500,
+                    "writable": True,
+                },
+                "motor_speed": {
+                    "address": 101,
+                    "functionCode": 3,
+                    "type": "16uint",
+                    "unit": "RPM",
+                },
+            },
         )
         self.device = Device.objects.create(
             team=self.team,
@@ -25,68 +59,52 @@ class DeviceCommandTest(TestCase):
             name="Motor 1",
             device_type="vfd",
             protocol="modbus_tcp",
+            template=self.template,
         )
 
-    @patch("apps.telemetry.mqtt_publisher.publish_rpc_command")
-    def test_send_command_creates_record_and_publishes(self, mock_publish_rpc):
-        mock_rpc = RpcCommand.objects.create(
-            team=self.team,
-            gateway=self.gateway,
-            request_id="12345678-1234-1234-1234-123456789012",
-            method="write_device",
-            params={},
-        )
-        mock_publish_rpc.return_value = mock_rpc
+    def test_write_is_monitoring_only_by_default_and_denial_is_audited(self):
+        with self.assertRaises(CommandDenied) as raised:
+            send_device_command(self.device, self.user, "speed_setpoint", 1200)
 
-        command = send_device_command(self.device, self.user, "toggle_switch", True)
+        self.assertEqual(raised.exception.code, "monitoring_only")
+        governed = RemoteCommand.objects.get()
+        self.assertEqual(governed.status, RemoteCommand.Status.POLICY_DENIED)
+        self.assertEqual(governed.events.get().event_type, "policy_denied")
+        self.assertFalse(CommandOutbox.objects.exists())
+        self.assertFalse(DeviceCommand.objects.exists())
 
-        # Verify DB record
-        self.assertEqual(command.status, "sent")
-        self.assertEqual(command.command_key, "toggle_switch")
-        self.assertEqual(command.value, True)
-        self.assertEqual(command.command_type, "write")
-        self.assertEqual(command.rpc_command, mock_rpc)
-
-        # Verify MQTT call
-        self.assertTrue(mock_publish_rpc.called)
-        args, kwargs = mock_publish_rpc.call_args
-
-        # Check method argument
-        method = kwargs.get("method") if "method" in kwargs else args[1]
-        self.assertEqual(method, "write_device")
-
-        # Check params argument
-        params = kwargs.get("params") if "params" in kwargs else args[2]
-        self.assertEqual(params["device_name"], self.device.name)
-        self.assertEqual(params["value"], True)
-
-    @patch("apps.telemetry.mqtt_publisher.publish_rpc_command")
-    def test_send_read_command_creates_audited_record(self, mock_publish_rpc):
-        mock_rpc = RpcCommand.objects.create(
-            team=self.team,
-            gateway=self.gateway,
-            request_id="12345678-1234-1234-1234-123456789013",
-            method="read_device",
-            params={},
-        )
-        mock_publish_rpc.return_value = mock_rpc
-
+    def test_send_read_command_uses_exact_mapping_and_transactional_outbox(self):
         command = send_device_command(
             self.device,
             self.user,
-            "manual_read",
+            "motor_speed",
             command_type="read",
-            params={"functionCode": 3, "address": 100, "objectsCount": 2, "type": "32float"},
         )
 
-        self.assertEqual(command.status, "sent")
+        self.assertEqual(command.status, "pending")
         self.assertEqual(command.command_type, "read")
         self.assertIsNone(command.value)
-        self.assertEqual(command.rpc_command, mock_rpc)
-        params = mock_publish_rpc.call_args.kwargs["params"]
+        governed = command.remote_command
+        self.assertEqual(governed.status, RemoteCommand.Status.QUEUED)
+        self.assertTrue(CommandOutbox.objects.filter(command=governed, status="pending").exists())
+        params = governed.request_payload["params"]
+        self.assertEqual(params["device_id"], str(self.device.pk))
         self.assertEqual(params["device_name"], self.device.name)
         self.assertEqual(params["functionCode"], 3)
-        self.assertEqual(params["objectsCount"], 2)
+        self.assertEqual(params["address"], 101)
+
+    def test_raw_register_parameters_and_unmapped_keys_are_rejected(self):
+        with self.assertRaisesMessage(ValueError, "Raw register parameters"):
+            send_device_command(
+                self.device,
+                self.user,
+                "motor_speed",
+                command_type="read",
+                params={"functionCode": 3, "address": 0},
+            )
+        with self.assertRaises(CommandDenied) as raised:
+            send_device_command(self.device, self.user, "missing_key", command_type="read")
+        self.assertEqual(raised.exception.code, "unmapped_command_key")
 
     def test_process_command_response_success(self):
         # Setup a pending command

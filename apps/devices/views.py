@@ -337,11 +337,11 @@ def gateway_rotate_password(request, team_slug, pk):
     return JsonResponse({"status": "rotated", "gateway": gateway.serial_number})
 
 
-@require_permission("manage_devices")
+@require_permission("request_low_risk_commands")
 @require_POST
 def gateway_send_rpc(request, team_slug, pk):
     """Send an RPC command to a gateway from the dashboard."""
-    from apps.telemetry.mqtt_publisher import publish_rpc_command
+    from .remote_control import CommandDenied, request_remote_command
 
     gateway = Gateway.objects.get(pk=pk, team=request.team)
     method = request.POST.get("method")
@@ -350,11 +350,22 @@ def gateway_send_rpc(request, team_slug, pk):
             {"error": "Firmware updates must use the signed OTA release endpoint."},
             status=400,
         )
-    params = json.loads(request.POST.get("params", "{}"))
+    try:
+        params = json.loads(request.POST.get("params", "{}"))
+        command = request_remote_command(
+            gateway=gateway,
+            operation=method,
+            requested_by=request.user,
+            params=params,
+            reason=request.POST.get("reason", ""),
+        )
+    except (CommandDenied, json.JSONDecodeError) as exc:
+        return JsonResponse(
+            {"error": str(exc), "code": getattr(exc, "code", "invalid_request")},
+            status=403 if getattr(exc, "code", "") == "permission_denied" else 400,
+        )
 
-    rpc = publish_rpc_command(gateway, method, params)
-
-    return JsonResponse({"request_id": str(rpc.request_id), "method": method, "status": "sent"})
+    return JsonResponse({"command_id": str(command.pk), "method": method, "status": command.status})
 
 
 @require_permission("manage_devices")
@@ -408,7 +419,7 @@ def gateway_rpc_history(request, team_slug, pk):
     )
 
 
-@require_permission("manage_devices")
+@require_permission("request_low_risk_commands")
 @require_POST
 def device_rpc_command(request, team_slug, gateway_pk, device_pk):
     """Compatibility endpoint: routes customer device RPC through DeviceCommand audit."""
@@ -422,14 +433,7 @@ def device_rpc_command(request, team_slug, gateway_pk, device_pk):
     command_type = "read" if method == "read_device" else "write"
     key = params.pop("command_key", f"manual_{command_type}")
     value = params.get("value")
-    command = send_device_command(
-        device,
-        request.user,
-        key,
-        value,
-        command_type=command_type,
-        params=params,
-    )
+    command = send_device_command(device, request.user, key, value, command_type=command_type)
 
     return JsonResponse(
         {
@@ -437,7 +441,7 @@ def device_rpc_command(request, team_slug, gateway_pk, device_pk):
             "transaction_id": str(command.transaction_id),
             "method": method,
             "device": device.name,
-            "status": "sent",
+            "status": command.status,
         }
     )
 
@@ -512,6 +516,9 @@ class DeviceDetailView(PermissionRequiredMixin, DetailView):
         context.update(dashboard_context)
         context["ai_insights"] = get_ai_insights(self.object)
         context["recent_commands"] = self.object.commands.all().order_by("-requested_at")[:10]
+        context["remote_control_enabled"] = (
+            self.request.team.remote_control_mode == self.request.team.RemoteControlMode.CONTROLLED
+        )
 
         latency_limit_seconds = get_latency_limit_for_team(self.object.team)
         context["telemetry_fallback_interval_ms"] = int(max(5.0, latency_limit_seconds) * 1000)
@@ -541,7 +548,7 @@ class DeviceDetailView(PermissionRequiredMixin, DetailView):
 # ... existing views ...
 
 
-@require_permission("manage_devices")
+@require_permission("request_low_risk_commands")
 def device_send_command(request, team_slug, pk):
     from django.shortcuts import get_object_or_404
 
@@ -554,10 +561,9 @@ def device_send_command(request, team_slug, pk):
         command_type = "write"
     key = request.POST.get("key") or request.POST.get("command_key") or f"manual_{command_type}"
     raw_value = request.POST.get("value")
-    params = None
     if request.POST.get("params"):
-        params = json.loads(request.POST.get("params", "{}"))
-        key = params.pop("command_key", key)
+        submitted = json.loads(request.POST.get("params", "{}"))
+        key = submitted.get("command_key", key)
 
     try:
         from .services import send_device_command
@@ -568,7 +574,6 @@ def device_send_command(request, team_slug, pk):
             key,
             raw_value,
             command_type=command_type,
-            params=params,
         )
         if request.headers.get("HX-Request"):
             return render(request, "devices/partials/command_status_badge.html", {"command": command})
@@ -1018,14 +1023,13 @@ class TemplateLibraryView(PermissionRequiredMixin, ListView):
         return context
 
 
-@require_permission("manage_devices")
+@require_permission("send_critical_commands")
 @require_POST
 def gateway_ota_update(request, team_slug, pk):
     """Trigger an OTA Firmware update on the gateway."""
-    from apps.telemetry.mqtt_publisher import publish_rpc_command
-
     from .models import FirmwareRelease
     from .ota_signing import ensure_release_signed
+    from .remote_control import CommandDenied, request_remote_command
 
     gateway = Gateway.objects.get(pk=pk, team=request.team)
     version = request.POST.get("version")
@@ -1046,6 +1050,15 @@ def gateway_ota_update(request, team_slug, pk):
         "signature": release.signature,
     }
 
-    rpc = publish_rpc_command(gateway, "update_firmware", params)
+    try:
+        command = request_remote_command(
+            gateway=gateway,
+            operation="update_firmware",
+            requested_by=request.user,
+            params=params,
+            reason=request.POST.get("reason", f"Install signed firmware {release.version}"),
+        )
+    except CommandDenied as exc:
+        return JsonResponse({"error": str(exc), "code": exc.code}, status=400)
 
-    return JsonResponse({"request_id": str(rpc.request_id), "version": release.version, "status": "sent"})
+    return JsonResponse({"command_id": str(command.pk), "version": release.version, "status": command.status})

@@ -94,7 +94,7 @@ def publish_config_update(gateway, action, config):
     return config_record
 
 
-def publish_rpc_command(gateway, method, params=None):
+def publish_rpc_command(gateway, method, params=None, *, remote_command=None, request_id=None):
     """
     Send an RPC command to a gateway.
 
@@ -108,7 +108,7 @@ def publish_rpc_command(gateway, method, params=None):
     """
     from apps.devices.models import RpcCommand
 
-    request_id = uuid.uuid4()
+    request_id = request_id or uuid.uuid4()
     topic = f"v1/gateway/{gateway.serial_number}/rpc/request"
     payload = {
         "request_id": str(request_id),
@@ -123,11 +123,17 @@ def publish_rpc_command(gateway, method, params=None):
         request_id=request_id,
         method=method,
         params=params or {},
+        remote_command=remote_command,
     )
 
     # Publish
     client = get_mqtt_client()
     result = client.publish(topic, json.dumps(payload), qos=1)
+    if result.rc != mqtt.MQTT_ERR_SUCCESS:
+        rpc_record.status = "error"
+        rpc_record.error_message = f"MQTT publish rejected locally (rc={result.rc})."
+        rpc_record.save(update_fields=["status", "error_message", "updated_at"])
+        raise RuntimeError(rpc_record.error_message)
     logger.info(
         "Published RPC command '%s' to %s (request_id=%s, rc=%s)",
         method,
