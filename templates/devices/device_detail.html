@@ -641,8 +641,21 @@
         <!-- Right: Remote Controls & Metadata -->
         <div class="space-y-6" x-data="deviceControls()">
 
+            {% if writable_registers and not remote_control_enabled %}
+            <div class="alert border border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-100">
+                <i class="fa fa-shield-halved"></i>
+                <div>
+                    <h3 class="font-bold">Monitoring-only mode</h3>
+                    <p class="text-xs opacity-80">
+                        Remote writes are disabled until this equipment has a verified control definition,
+                        commissioned operating limits, and an approved activation.
+                    </p>
+                </div>
+            </div>
+            {% endif %}
+
             <!-- ── Section 1: Quick Controls (writable registers) ── -->
-            {% if writable_registers %}
+            {% if writable_registers and remote_control_enabled %}
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                 <div class="p-6 border-b border-gray-100 dark:border-gray-700 bg-indigo-50/30 dark:bg-indigo-900/10">
                     <div class="flex items-center space-x-3">
@@ -751,7 +764,7 @@
             {% endif %}
 
             <!-- ── Section 3: Advanced Controls (collapsible) ── -->
-            {% if rpc_url %}
+            {% if advanced_controls_enabled %}
             <div x-data="{showAdvanced: false}" class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                 <button @click="showAdvanced = !showAdvanced" class="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-all">
                     <div class="flex items-center space-x-3">

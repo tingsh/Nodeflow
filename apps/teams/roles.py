@@ -33,6 +33,17 @@ PERMISSIONS = {
     "acknowledge_alerts": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER, ROLE_OPERATOR],
     "send_commands": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER],
     "send_critical_commands": [ROLE_OWNER, ROLE_ADMIN],
+    "view_command_audit": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER, ROLE_OPERATOR],
+    "request_low_risk_commands": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER, ROLE_OPERATOR],
+    "request_high_risk_commands": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER],
+    "request_critical_commands": [ROLE_OWNER, ROLE_ADMIN],
+    "approve_high_risk_commands": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER],
+    "approve_critical_commands": [ROLE_OWNER, ROLE_ADMIN],
+    "manage_command_policies": [ROLE_OWNER, ROLE_ADMIN],
+    "manage_commissioned_limits": [ROLE_OWNER, ROLE_ADMIN],
+    "perform_commissioning": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER],
+    "toggle_remote_control": [ROLE_OWNER, ROLE_ADMIN],
+    "export_command_audit": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER],
     "manage_automations": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER],
     "view_automations": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER],
     "manage_team": [ROLE_OWNER, ROLE_ADMIN],
@@ -63,7 +74,7 @@ def is_admin(user: CustomUser, team) -> bool:
     return Membership.objects.filter(team=team, user=user, role__in=[ROLE_OWNER, ROLE_ADMIN]).exists()
 
 
-def has_permission(user: CustomUser, team, permission: str) -> bool:
+def has_permission(user: CustomUser, team, permission: str, *, site=None) -> bool:
     """Check if a user has a specific permission within a team."""
     if not team or not user.is_authenticated:
         return False
@@ -74,6 +85,10 @@ def has_permission(user: CustomUser, team, permission: str) -> bool:
 
     try:
         membership = Membership.objects.get(user=user, team=team)
-        return membership.role in PERMISSIONS.get(permission, [])
+        if membership.role not in PERMISSIONS.get(permission, []):
+            return False
+        if site is not None and membership.site_access.exists():
+            return membership.site_access.filter(site=site, team=team).exists()
+        return True
     except Membership.DoesNotExist:
         return False

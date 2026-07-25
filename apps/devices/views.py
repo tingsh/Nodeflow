@@ -1,7 +1,10 @@
+import csv
 import json
 import logging
 import uuid
+from datetime import datetime
 
+from django.conf import settings
 from django.contrib.auth.hashers import make_password
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
@@ -18,12 +21,145 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 from apps.teams.decorators import require_permission
 from apps.teams.mixins import PermissionRequiredMixin
 
-from .models import Device, DeviceTemplate, Gateway, GatewayConfig, RpcCommand, Site
+from .models import (
+    ControlActivation,
+    Device,
+    DeviceTemplate,
+    Gateway,
+    GatewayConfig,
+    RemoteCommand,
+    RemoteCommandApproval,
+    RpcCommand,
+    Site,
+)
 from .services import gateways_for_team, sites_for_team, visible_templates_for_team
 from .tasks import generate_template_ai_task
 from .template_ai import save_approved_template
 
 logger = logging.getLogger("novena_hub")
+
+
+@require_permission("view_command_audit")
+def gateway_control_center(request, pk):
+    gateway = get_object_or_404(Gateway, pk=pk, team=request.team)
+    return render(
+        request,
+        "devices/control_center.html",
+        {
+            "gateway": gateway,
+            "assessment": gateway.control_readiness_assessments.order_by("-assessed_at").first(),
+            "activations": ControlActivation.objects.filter(
+                team=request.team,
+                device__gateway=gateway,
+            ).select_related("device"),
+            "approvals": RemoteCommandApproval.objects.filter(
+                command__team=request.team,
+                command__gateway=gateway,
+                status=RemoteCommandApproval.Status.PENDING,
+            ).select_related("command", "command__device"),
+            "commands": RemoteCommand.objects.filter(
+                team=request.team,
+                gateway=gateway,
+            ).prefetch_related("events")[:100],
+        },
+    )
+
+
+@require_POST
+@require_permission("toggle_remote_control")
+def gateway_emergency_disable(request, pk):
+    gateway = get_object_or_404(Gateway, pk=pk, team=request.team)
+    from .control_readiness import emergency_disable
+
+    epoch = emergency_disable(
+        team=request.team,
+        actor=request.user,
+        reason=request.POST.get("reason", "Emergency disable from control center"),
+        gateway=gateway,
+    )
+    return JsonResponse(
+        {
+            "status": "disabled_at_hub",
+            "control_epoch": epoch,
+            "gateway_acknowledged": False,
+            "message": "Hub dispatch is blocked immediately. Gateway acknowledgement is pending.",
+        }
+    )
+
+
+@require_POST
+@require_permission("approve_high_risk_commands")
+def remote_command_approve(request, command_id):
+    command = get_object_or_404(RemoteCommand, pk=command_id, team=request.team)
+    recent_value = request.session.get("remote_control_recent_auth_at")
+    recent_auth_at = datetime.fromisoformat(recent_value) if recent_value else None
+    mfa_value = request.session.get("remote_control_mfa_verified_at")
+    mfa_verified = bool(mfa_value)
+    from .control_readiness import ReadinessDenied, approve_command
+
+    try:
+        approve_command(
+            command=command,
+            approver=request.user,
+            mfa_verified=mfa_verified,
+            recent_auth_at=recent_auth_at,
+            reason=request.POST.get("reason", ""),
+        )
+    except ReadinessDenied as exc:
+        return JsonResponse({"error": str(exc), "code": exc.code}, status=409)
+    return JsonResponse({"status": "queued_for_dispatch", "command_id": str(command.pk)})
+
+
+@require_permission("export_command_audit")
+def command_audit_export(request, format):
+    commands = RemoteCommand.objects.filter(team=request.team).select_related(
+        "gateway",
+        "device",
+        "requested_by",
+    )
+    records = [
+        {
+            "command_id": str(command.pk),
+            "requested_at": command.created_at.isoformat(),
+            "requester": command.actor_snapshot.get("email", ""),
+            "gateway": command.gateway.serial_number,
+            "device": command.device.name if command.device_id else "",
+            "operation": command.operation,
+            "command_key": command.command_key,
+            "requested_value": command.requested_value,
+            "status": command.status,
+            "error_code": command.error_code,
+            "error_message": command.error_message,
+        }
+        for command in commands
+    ]
+    if format == "json":
+        return JsonResponse({"commands": records})
+    if format != "csv":
+        raise Http404
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="remote-command-audit.csv"'
+    fields = (
+        list(records[0])
+        if records
+        else [
+            "command_id",
+            "requested_at",
+            "requester",
+            "gateway",
+            "device",
+            "operation",
+            "command_key",
+            "requested_value",
+            "status",
+            "error_code",
+            "error_message",
+        ]
+    )
+    writer = csv.DictWriter(response, fieldnames=fields)
+    writer.writeheader()
+    writer.writerows(records)
+    return response
 
 
 class SiteListView(PermissionRequiredMixin, ListView):
@@ -337,11 +473,11 @@ def gateway_rotate_password(request, team_slug, pk):
     return JsonResponse({"status": "rotated", "gateway": gateway.serial_number})
 
 
-@require_permission("manage_devices")
+@require_permission("request_low_risk_commands")
 @require_POST
 def gateway_send_rpc(request, team_slug, pk):
     """Send an RPC command to a gateway from the dashboard."""
-    from apps.telemetry.mqtt_publisher import publish_rpc_command
+    from .remote_control import CommandDenied, request_remote_command
 
     gateway = Gateway.objects.get(pk=pk, team=request.team)
     method = request.POST.get("method")
@@ -350,11 +486,22 @@ def gateway_send_rpc(request, team_slug, pk):
             {"error": "Firmware updates must use the signed OTA release endpoint."},
             status=400,
         )
-    params = json.loads(request.POST.get("params", "{}"))
+    try:
+        params = json.loads(request.POST.get("params", "{}"))
+        command = request_remote_command(
+            gateway=gateway,
+            operation=method,
+            requested_by=request.user,
+            params=params,
+            reason=request.POST.get("reason", ""),
+        )
+    except (CommandDenied, json.JSONDecodeError) as exc:
+        return JsonResponse(
+            {"error": str(exc), "code": getattr(exc, "code", "invalid_request")},
+            status=403 if getattr(exc, "code", "") == "permission_denied" else 400,
+        )
 
-    rpc = publish_rpc_command(gateway, method, params)
-
-    return JsonResponse({"request_id": str(rpc.request_id), "method": method, "status": "sent"})
+    return JsonResponse({"command_id": str(command.pk), "method": method, "status": command.status})
 
 
 @require_permission("manage_devices")
@@ -408,36 +555,43 @@ def gateway_rpc_history(request, team_slug, pk):
     )
 
 
-@require_permission("manage_devices")
+@require_permission("request_low_risk_commands")
 @require_POST
 def device_rpc_command(request, team_slug, gateway_pk, device_pk):
     """Compatibility endpoint: routes customer device RPC through DeviceCommand audit."""
+    from .remote_control_protocol import canonical_device_operation
     from .services import send_device_command
 
-    gateway = Gateway.objects.get(pk=gateway_pk, team=request.team)
-    device = Device.objects.get(pk=device_pk, gateway=gateway)
-
-    method = request.POST.get("method")  # 'write_device' or 'read_device'
-    params = json.loads(request.POST.get("params", "{}"))
-    command_type = "read" if method == "read_device" else "write"
-    key = params.pop("command_key", f"manual_{command_type}")
-    value = params.get("value")
-    command = send_device_command(
-        device,
-        request.user,
-        key,
-        value,
-        command_type=command_type,
-        params=params,
-    )
+    try:
+        operation = canonical_device_operation(request.POST.get("method"))
+        params = json.loads(request.POST.get("params", "{}"))
+        if not isinstance(params, dict):
+            raise ValueError("Command params must be an object.")
+        if set(params) - {"command_key", "value"}:
+            raise ValueError("Raw register parameters are not accepted.")
+        key = params.get("command_key")
+        if not key:
+            raise ValueError("A mapped canonical device command key is required.")
+        command_type = "write" if operation == "write_device" else "read"
+        gateway = Gateway.objects.get(pk=gateway_pk, team=request.team)
+        device = Device.objects.get(pk=device_pk, gateway=gateway)
+        command = send_device_command(
+            device,
+            request.user,
+            key,
+            params.get("value"),
+            command_type=command_type,
+        )
+    except (ValueError, json.JSONDecodeError) as exc:
+        return JsonResponse({"error": str(exc), "code": getattr(exc, "code", "invalid_request")}, status=400)
 
     return JsonResponse(
         {
             "request_id": str(command.rpc_command.request_id) if command.rpc_command else None,
             "transaction_id": str(command.transaction_id),
-            "method": method,
+            "method": operation,
             "device": device.name,
-            "status": "sent",
+            "status": command.status,
         }
     )
 
@@ -512,6 +666,9 @@ class DeviceDetailView(PermissionRequiredMixin, DetailView):
         context.update(dashboard_context)
         context["ai_insights"] = get_ai_insights(self.object)
         context["recent_commands"] = self.object.commands.all().order_by("-requested_at")[:10]
+        context["remote_control_enabled"] = (
+            self.request.team.remote_control_mode == self.request.team.RemoteControlMode.CONTROLLED
+        )
 
         latency_limit_seconds = get_latency_limit_for_team(self.object.team)
         context["telemetry_fallback_interval_ms"] = int(max(5.0, latency_limit_seconds) * 1000)
@@ -541,25 +698,27 @@ class DeviceDetailView(PermissionRequiredMixin, DetailView):
 # ... existing views ...
 
 
-@require_permission("manage_devices")
+@require_permission("request_low_risk_commands")
 def device_send_command(request, team_slug, pk):
     from django.shortcuts import get_object_or_404
 
-    device = get_object_or_404(Device, pk=pk, team=request.team)
-    command_type = request.POST.get("command_type") or request.POST.get("type") or "write"
-    method = request.POST.get("method", "")
-    if method == "read_device":
-        command_type = "read"
-    elif method == "write_device":
-        command_type = "write"
-    key = request.POST.get("key") or request.POST.get("command_key") or f"manual_{command_type}"
-    raw_value = request.POST.get("value")
-    params = None
-    if request.POST.get("params"):
-        params = json.loads(request.POST.get("params", "{}"))
-        key = params.pop("command_key", key)
+    from .remote_control_protocol import canonical_device_operation
 
     try:
+        submitted_method = request.POST.get("method") or request.POST.get("command_type") or request.POST.get("type")
+        operation = canonical_device_operation(submitted_method)
+        command_type = "write" if operation == "write_device" else "read"
+        key = request.POST.get("key") or request.POST.get("command_key")
+        raw_value = request.POST.get("value")
+        if request.POST.get("params"):
+            submitted = json.loads(request.POST.get("params", "{}"))
+            if not isinstance(submitted, dict) or set(submitted) - {"command_key", "value"}:
+                raise ValueError("Raw register parameters are not accepted.")
+            key = submitted.get("command_key", key)
+            raw_value = submitted.get("value", raw_value)
+        if not key:
+            raise ValueError("A mapped canonical device command key is required.")
+        device = get_object_or_404(Device, pk=pk, team=request.team)
         from .services import send_device_command
 
         command = send_device_command(
@@ -568,7 +727,6 @@ def device_send_command(request, team_slug, pk):
             key,
             raw_value,
             command_type=command_type,
-            params=params,
         )
         if request.headers.get("HX-Request"):
             return render(request, "devices/partials/command_status_badge.html", {"command": command})
@@ -1018,14 +1176,13 @@ class TemplateLibraryView(PermissionRequiredMixin, ListView):
         return context
 
 
-@require_permission("manage_devices")
+@require_permission("send_critical_commands")
 @require_POST
 def gateway_ota_update(request, team_slug, pk):
     """Trigger an OTA Firmware update on the gateway."""
-    from apps.telemetry.mqtt_publisher import publish_rpc_command
-
     from .models import FirmwareRelease
     from .ota_signing import ensure_release_signed
+    from .remote_control import CommandDenied, request_remote_command
 
     gateway = Gateway.objects.get(pk=pk, team=request.team)
     version = request.POST.get("version")
@@ -1046,6 +1203,15 @@ def gateway_ota_update(request, team_slug, pk):
         "signature": release.signature,
     }
 
-    rpc = publish_rpc_command(gateway, "update_firmware", params)
+    try:
+        command = request_remote_command(
+            gateway=gateway,
+            operation="update_firmware",
+            requested_by=request.user,
+            params=params,
+            reason=request.POST.get("reason", f"Install signed firmware {release.version}"),
+        )
+    except CommandDenied as exc:
+        return JsonResponse({"error": str(exc), "code": exc.code}, status=400)
 
-    return JsonResponse({"request_id": str(rpc.request_id), "version": release.version, "status": "sent"})
+    return JsonResponse({"command_id": str(command.pk), "version": release.version, "status": command.status})

@@ -8,6 +8,27 @@ from django.utils import timezone
 logger = logging.getLogger("novena_hub")
 
 
+@shared_task(
+    bind=True,
+    autoretry_for=(),
+    name="apps.devices.tasks.dispatch_remote_command_outbox",
+)
+def dispatch_remote_command_outbox(self, outbox_id):
+    """Dispatch one durable outbox row; writes are never blindly autoretried."""
+    from .remote_control import dispatch_outbox
+
+    command = dispatch_outbox(outbox_id)
+    return str(command.pk) if command else None
+
+
+@shared_task(name="apps.devices.tasks.dispatch_due_remote_command_outboxes")
+def dispatch_due_remote_command_outboxes():
+    """Independent recovery scanner for committed and expired-lease outbox rows."""
+    from .remote_control import dispatch_due_outboxes
+
+    return dispatch_due_outboxes()
+
+
 @shared_task
 def check_device_heartbeats():
     """Persist devices as offline when telemetry freshness exceeds the offline timeout."""
@@ -92,6 +113,39 @@ def expire_and_retry_gateway_activations():
             result["retried"],
         )
     return result
+
+
+@shared_task
+def expire_control_activations():
+    """Require annual recommissioning and suspend the exact expired keys."""
+    from .models import (
+        ControlActivation,
+        ControlReadinessAssessment,
+        RemoteControlScope,
+    )
+
+    expired = list(
+        ControlActivation.objects.filter(
+            status=ControlActivation.Status.ACTIVE,
+            expires_at__lte=timezone.now(),
+        ).select_related("device")
+    )
+    for activation in expired:
+        activation.status = ControlActivation.Status.EXPIRED
+        activation.suspended_reason = "Annual recommissioning is due"
+        activation.save(update_fields=["status", "suspended_reason", "updated_at"])
+        RemoteControlScope.objects.filter(
+            team=activation.team,
+            device=activation.device,
+            command_key=activation.command_key,
+        ).update(
+            mode=RemoteControlScope.Mode.SUSPENDED,
+            reason="Annual recommissioning is due",
+        )
+        ControlReadinessAssessment.objects.filter(pk=activation.readiness_assessment_id).update(
+            state=ControlReadinessAssessment.State.RECOMMISSIONING_REQUIRED
+        )
+    return len(expired)
 
 
 @shared_task

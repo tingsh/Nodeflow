@@ -1,8 +1,6 @@
 import base64
 import shutil
 import tempfile
-import uuid
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from cryptography.exceptions import InvalidSignature
@@ -74,9 +72,7 @@ class OtaSigningTest(TestCase):
             verify_manifest_signature(tampered, self.release.signature, public_key_b64(self.private_key))
 
     @patch("apps.telemetry.mqtt_publisher.publish_rpc_command")
-    def test_ota_endpoint_dispatches_signed_manifest_only(self, mock_publish):
-        request_id = uuid.uuid4()
-        mock_publish.return_value = SimpleNamespace(request_id=request_id)
+    def test_ota_endpoint_is_monitoring_only_by_default(self, mock_publish):
         self.client.force_login(self.user)
 
         response = self.client.post(
@@ -85,16 +81,10 @@ class OtaSigningTest(TestCase):
             secure=True,
         )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 400)
         payload = response.json()
-        self.assertEqual(payload["request_id"], str(request_id))
-        method = mock_publish.call_args.args[1]
-        params = mock_publish.call_args.args[2]
-        self.assertEqual(method, "update_firmware")
-        self.assertIn("manifest", params)
-        self.assertIn("signature", params)
-        self.assertNotIn("url", params)
-        self.assertNotIn("sha256", params)
+        self.assertIn("disabled", payload["error"])
+        mock_publish.assert_not_called()
 
     @patch("apps.telemetry.mqtt_publisher.publish_rpc_command")
     def test_generic_rpc_rejects_update_firmware(self, mock_publish):

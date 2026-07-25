@@ -45,6 +45,9 @@
             </div>
         </div>
         <div class="mt-5 flex lg:ml-4 lg:mt-0 space-x-3">
+            <a href="{% url 'web_team:devices:gateway_control_center' request.team.slug gateway.pk %}" class="btn btn-warning btn-sm rounded-xl text-sm font-bold">
+                <i class="fa fa-shield mr-1.5"></i> Governed Control
+            </a>
             <a href="{% url 'web_team:devices:gateway_logs' request.team.slug gateway.pk %}" class="btn btn-ghost btn-sm rounded-xl text-sm font-bold">
                 <i class="fa fa-scroll mr-1.5"></i> Logs
             </a>

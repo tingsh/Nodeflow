@@ -11,7 +11,6 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-
 OTA_KEY_ID = "novena-ota-v1"
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:-(?:rc|canary)\.\d+)?$")
 
