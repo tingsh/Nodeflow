@@ -108,6 +108,39 @@ def expire_and_retry_gateway_activations():
 
 
 @shared_task
+def expire_control_activations():
+    """Require annual recommissioning and suspend the exact expired keys."""
+    from .models import (
+        ControlActivation,
+        ControlReadinessAssessment,
+        RemoteControlScope,
+    )
+
+    expired = list(
+        ControlActivation.objects.filter(
+            status=ControlActivation.Status.ACTIVE,
+            expires_at__lte=timezone.now(),
+        ).select_related("device")
+    )
+    for activation in expired:
+        activation.status = ControlActivation.Status.EXPIRED
+        activation.suspended_reason = "Annual recommissioning is due"
+        activation.save(update_fields=["status", "suspended_reason", "updated_at"])
+        RemoteControlScope.objects.filter(
+            team=activation.team,
+            device=activation.device,
+            command_key=activation.command_key,
+        ).update(
+            mode=RemoteControlScope.Mode.SUSPENDED,
+            reason="Annual recommissioning is due",
+        )
+        ControlReadinessAssessment.objects.filter(
+            pk=activation.readiness_assessment_id
+        ).update(state=ControlReadinessAssessment.State.RECOMMISSIONING_REQUIRED)
+    return len(expired)
+
+
+@shared_task
 def generate_template_ai_task(task_id: str, manufacturer: str, model_number: str, doc_url: str = None):
     """Background task: AI generates a device template draft."""
     from django.core.cache import cache

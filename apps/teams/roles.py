@@ -74,7 +74,7 @@ def is_admin(user: CustomUser, team) -> bool:
     return Membership.objects.filter(team=team, user=user, role__in=[ROLE_OWNER, ROLE_ADMIN]).exists()
 
 
-def has_permission(user: CustomUser, team, permission: str) -> bool:
+def has_permission(user: CustomUser, team, permission: str, *, site=None) -> bool:
     """Check if a user has a specific permission within a team."""
     if not team or not user.is_authenticated:
         return False
@@ -85,6 +85,10 @@ def has_permission(user: CustomUser, team, permission: str) -> bool:
 
     try:
         membership = Membership.objects.get(user=user, team=team)
-        return membership.role in PERMISSIONS.get(permission, [])
+        if membership.role not in PERMISSIONS.get(permission, []):
+            return False
+        if site is not None and membership.site_access.exists():
+            return membership.site_access.filter(site=site, team=team).exists()
+        return True
     except Membership.DoesNotExist:
         return False

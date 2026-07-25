@@ -128,12 +128,12 @@ def append_command_event(
     )
 
 
-def _has_permission(user, team, permission: str) -> bool:
+def _has_permission(user, team, permission: str, *, site=None) -> bool:
     if not user or not getattr(user, "is_authenticated", False):
         return False
     from apps.teams.roles import has_permission
 
-    return has_permission(user, team, permission)
+    return has_permission(user, team, permission, site=site)
 
 
 def _normalize_value(value):
@@ -231,7 +231,12 @@ def _request_remote_command_atomic(
 
     team = Team.objects.select_for_update().get(pk=gateway.team_id)
     denial: tuple[str, str] | None = None
-    if source == RemoteCommand.Source.USER and not _has_permission(requested_by, team, definition.permission):
+    if source == RemoteCommand.Source.USER and not _has_permission(
+        requested_by,
+        team,
+        definition.permission,
+        site=device.site if device else gateway.site,
+    ):
         denial = ("permission_denied", "You do not have permission to request this command.")
     elif definition.state_changing and team.remote_control_mode != Team.RemoteControlMode.CONTROLLED:
         denial = ("monitoring_only", "Remote state-changing commands are disabled for this team.")
@@ -299,7 +304,18 @@ def _request_remote_command_atomic(
 
     previous = RemoteCommand.objects.filter(device=device).order_by("-sequence_number").first() if device else None
     sequence_number = (previous.sequence_number + 1) if previous else 1
-    status = RemoteCommand.Status.POLICY_DENIED if denial else RemoteCommand.Status.QUEUED
+    approval_required = bool(
+        policy_snapshot.get("effective_envelope", {}).get("approval_required")
+    )
+    status = (
+        RemoteCommand.Status.POLICY_DENIED
+        if denial
+        else (
+            RemoteCommand.Status.AWAITING_APPROVAL
+            if approval_required
+            else RemoteCommand.Status.QUEUED
+        )
+    )
     command = RemoteCommand.objects.create(
         team=team,
         gateway=gateway,
@@ -328,7 +344,7 @@ def _request_remote_command_atomic(
     )
     append_command_event(
         command,
-        "policy_denied" if denial else "command_queued",
+        "policy_denied" if denial else ("approval_requested" if approval_required else "command_queued"),
         actor=requested_by,
         from_status=RemoteCommand.Status.REQUESTED,
         to_status=status,
@@ -336,6 +352,11 @@ def _request_remote_command_atomic(
     )
     if denial:
         return command, denial
+    if approval_required:
+        from .control_readiness import create_approval
+
+        create_approval(command)
+        return command, None
 
     outbox = CommandOutbox.objects.create(command=command)
     transaction.on_commit(lambda: _schedule_outbox_dispatch(outbox.pk))

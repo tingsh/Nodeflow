@@ -348,6 +348,24 @@ class Command(BaseCommand):
 
         gateway.save(update_fields=list(dict.fromkeys(update_fields)))
 
+        policy_ack_revision = attrs.get("remote_control_policy_ack_revision")
+        policy_ack_epoch = attrs.get("remote_control_policy_ack_epoch")
+        if policy_ack_revision is not None and policy_ack_epoch is not None:
+            from apps.devices.models import GatewayControlPolicyBundle
+
+            acknowledged = GatewayControlPolicyBundle.objects.filter(
+                gateway=gateway,
+                revision=policy_ack_revision,
+                control_epoch=policy_ack_epoch,
+            ).first()
+            if acknowledged:
+                GatewayControlPolicyBundle.objects.filter(gateway=gateway, is_active=True).exclude(
+                    pk=acknowledged.pk
+                ).update(is_active=False)
+                acknowledged.acknowledged_at = timezone.now()
+                acknowledged.is_active = True
+                acknowledged.save(update_fields=["acknowledged_at", "is_active", "updated_at"])
+
         # Handle discovery report from Edge auto-scan
         discovery_report = attrs.get("discovery_report")
         if discovery_report:
@@ -448,6 +466,32 @@ class Command(BaseCommand):
             from apps.devices.services import sync_device_command_from_rpc
 
             sync_device_command_from_rpc(rpc_record)
+            verification = (rpc_record.result or {}).get("verification", {})
+            if (
+                rpc_record.remote_command_id
+                and verification.get("status") == "mismatch"
+                and rpc_record.remote_command.device_id
+            ):
+                from apps.devices.models import ControlActivation, RemoteControlScope
+
+                command = rpc_record.remote_command
+                reason = "Automatic suspension after post-write verification mismatch"
+                RemoteControlScope.objects.filter(
+                    team=command.team,
+                    device=command.device,
+                    command_key=command.command_key,
+                ).update(mode=RemoteControlScope.Mode.SUSPENDED, reason=reason)
+                ControlActivation.objects.filter(
+                    team=command.team,
+                    device=command.device,
+                    command_key=command.command_key,
+                    status=ControlActivation.Status.ACTIVE,
+                ).update(status=ControlActivation.Status.SUSPENDED, suspended_reason=reason)
+                append_command_event(
+                    command,
+                    "control_key_auto_suspended",
+                    evidence=verification,
+                )
             logger.info(
                 "RPC response for %s (%s): %s",
                 request_id,

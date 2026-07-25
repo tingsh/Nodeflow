@@ -548,6 +548,111 @@ class CommandPolicy(BaseTeamModel):
         ]
 
 
+class SiteMembershipAccess(BaseTeamModel):
+    """Optional site boundary for a team membership; no rows means all team sites."""
+
+    membership = models.ForeignKey(
+        "teams.Membership",
+        on_delete=models.CASCADE,
+        related_name="site_access",
+    )
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="membership_access")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["membership", "site"],
+                name="unique_membership_site_access",
+            )
+        ]
+
+
+class ControlReadinessAssessment(BaseTeamModel):
+    class State(models.TextChoices):
+        MONITORING_ONLY = "monitoring_only", _("Monitoring only")
+        EVIDENCE_COLLECTING = "evidence_collecting", _("Evidence collecting")
+        READY_FOR_COMMISSIONING = "ready_for_commissioning", _("Ready for commissioning")
+        COMMISSIONING = "commissioning", _("Commissioning")
+        READY_FOR_ACTIVATION = "ready_for_activation", _("Ready for activation")
+        ACTIVE = "active", _("Active")
+        SUSPENDED = "suspended", _("Suspended")
+        RECOMMISSIONING_REQUIRED = "recommissioning_required", _("Recommissioning required")
+
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="control_readiness_assessments")
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="control_readiness_assessments")
+    state = models.CharField(max_length=32, choices=State.choices, default=State.MONITORING_ONLY)
+    observation_days = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    telemetry_coverage_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    evidence = models.JSONField(default=dict)
+    blockers = models.JSONField(default=list, blank=True)
+    waiver_reason = models.TextField(blank=True)
+    waiver_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="approved_control_readiness_waivers",
+    )
+    assessed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="control_readiness_assessments",
+    )
+    assessed_at = models.DateTimeField(default=timezone.now)
+
+
+class ControlCommissioningSession(BaseTeamModel):
+    class Status(models.TextChoices):
+        OPEN = "open", _("Open")
+        COMPLETED = "completed", _("Completed")
+        EXPIRED = "expired", _("Expired")
+        CANCELLED = "cancelled", _("Cancelled")
+
+    site = models.ForeignKey(Site, on_delete=models.CASCADE)
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE)
+    commissioner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="control_commissioning_sessions",
+    )
+    scope = models.JSONField(default=dict)
+    evidence = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.OPEN)
+    expires_at = models.DateTimeField()
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+
+class ControlActivation(BaseTeamModel):
+    class Status(models.TextChoices):
+        ACTIVE = "active", _("Active")
+        SUSPENDED = "suspended", _("Suspended")
+        EXPIRED = "expired", _("Expired")
+        REVOKED = "revoked", _("Revoked")
+
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name="control_activations")
+    command_key = models.CharField(max_length=100)
+    readiness_assessment = models.ForeignKey(ControlReadinessAssessment, on_delete=models.PROTECT)
+    commissioning_session = models.ForeignKey(ControlCommissioningSession, on_delete=models.PROTECT)
+    activated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="control_activations",
+    )
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    control_epoch = models.PositiveBigIntegerField()
+    activated_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField()
+    suspended_reason = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["device", "command_key", "control_epoch"],
+                name="unique_control_activation_epoch",
+            )
+        ]
+
+
 class RemoteCommand(BaseTeamModel):
     """Canonical governed command intent, separate from MQTT transport attempts."""
 
@@ -662,6 +767,33 @@ class CommandEvent(models.Model):
     class Meta:
         ordering = ["happened_at", "id"]
         indexes = [models.Index(fields=["command", "happened_at"])]
+
+
+class RemoteCommandApproval(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", _("Pending")
+        APPROVED = "approved", _("Approved")
+        REJECTED = "rejected", _("Rejected")
+        EXPIRED = "expired", _("Expired")
+        INVALIDATED = "invalidated", _("Invalidated")
+
+    command = models.OneToOneField(RemoteCommand, on_delete=models.CASCADE, related_name="approval")
+    requested_by_snapshot = models.JSONField(default=dict)
+    approver = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="remote_command_approvals",
+    )
+    approver_snapshot = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    binding_checksum = models.CharField(max_length=64)
+    expires_at = models.DateTimeField()
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_reason = models.TextField(blank=True)
+    mfa_verified = models.BooleanField(default=False)
+    recent_auth_at = models.DateTimeField(null=True, blank=True)
 
 
 class CommandOutbox(models.Model):

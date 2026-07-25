@@ -23,6 +23,8 @@ urlpatterns = [
     path("gateways/<int:pk>/config/", views.gateway_push_config, name="gateway_push_config"),
     path("gateways/<int:pk>/logs/", views.gateway_logs, name="gateway_logs"),
     path("gateways/<int:pk>/rpc-history/", views.gateway_rpc_history, name="gateway_rpc_history"),
+    path("gateways/<int:pk>/control/", views.gateway_control_center, name="gateway_control_center"),
+    path("gateways/<int:pk>/control/disable/", views.gateway_emergency_disable, name="gateway_emergency_disable"),
     path(
         "gateways/<int:gateway_pk>/rpc-status/<uuid:request_id>/", views.gateway_rpc_status, name="gateway_rpc_status"
     ),
@@ -56,6 +58,8 @@ urlpatterns = [
     # Remote Control Command URLs
     path("<int:pk>/command/", views.device_send_command, name="device_send_command"),
     path("<int:pk>/command/status/<uuid:tx_id>/", views.device_command_status, name="device_command_status"),
+    path("commands/<uuid:command_id>/approve/", views.remote_command_approve, name="remote_command_approve"),
+    path("commands/audit/export.<str:format>/", views.command_audit_export, name="command_audit_export"),
     # API endpoints for Edge Gateway
     path("api/discovery/", views.gateway_discovery_api, name="gateway_discovery_api"),
 ]

@@ -1,6 +1,8 @@
 import json
 import logging
 import uuid
+import csv
+from datetime import datetime
 
 from django.contrib.auth.hashers import make_password
 from django.core.cache import cache
@@ -18,12 +20,142 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 from apps.teams.decorators import require_permission
 from apps.teams.mixins import PermissionRequiredMixin
 
-from .models import Device, DeviceTemplate, Gateway, GatewayConfig, RpcCommand, Site
+from .models import (
+    ControlActivation,
+    ControlReadinessAssessment,
+    Device,
+    DeviceTemplate,
+    Gateway,
+    GatewayConfig,
+    RemoteCommand,
+    RemoteCommandApproval,
+    RpcCommand,
+    Site,
+)
 from .services import gateways_for_team, sites_for_team, visible_templates_for_team
 from .tasks import generate_template_ai_task
 from .template_ai import save_approved_template
 
 logger = logging.getLogger("novena_hub")
+
+
+@require_permission("view_command_audit")
+def gateway_control_center(request, pk):
+    gateway = get_object_or_404(Gateway, pk=pk, team=request.team)
+    return render(
+        request,
+        "devices/control_center.html",
+        {
+            "gateway": gateway,
+            "assessment": gateway.control_readiness_assessments.order_by("-assessed_at").first(),
+            "activations": ControlActivation.objects.filter(
+                team=request.team,
+                device__gateway=gateway,
+            ).select_related("device"),
+            "approvals": RemoteCommandApproval.objects.filter(
+                command__team=request.team,
+                command__gateway=gateway,
+                status=RemoteCommandApproval.Status.PENDING,
+            ).select_related("command", "command__device"),
+            "commands": RemoteCommand.objects.filter(
+                team=request.team,
+                gateway=gateway,
+            ).prefetch_related("events")[:100],
+        },
+    )
+
+
+@require_POST
+@require_permission("toggle_remote_control")
+def gateway_emergency_disable(request, pk):
+    gateway = get_object_or_404(Gateway, pk=pk, team=request.team)
+    from .control_readiness import emergency_disable
+
+    epoch = emergency_disable(
+        team=request.team,
+        actor=request.user,
+        reason=request.POST.get("reason", "Emergency disable from control center"),
+        gateway=gateway,
+    )
+    return JsonResponse(
+        {
+            "status": "disabled_at_hub",
+            "control_epoch": epoch,
+            "gateway_acknowledged": False,
+            "message": "Hub dispatch is blocked immediately. Gateway acknowledgement is pending.",
+        }
+    )
+
+
+@require_POST
+@require_permission("approve_high_risk_commands")
+def remote_command_approve(request, command_id):
+    command = get_object_or_404(RemoteCommand, pk=command_id, team=request.team)
+    recent_value = request.session.get("remote_control_recent_auth_at")
+    recent_auth_at = datetime.fromisoformat(recent_value) if recent_value else None
+    mfa_value = request.session.get("remote_control_mfa_verified_at")
+    mfa_verified = bool(mfa_value)
+    from .control_readiness import ReadinessDenied, approve_command
+
+    try:
+        approve_command(
+            command=command,
+            approver=request.user,
+            mfa_verified=mfa_verified,
+            recent_auth_at=recent_auth_at,
+            reason=request.POST.get("reason", ""),
+        )
+    except ReadinessDenied as exc:
+        return JsonResponse({"error": str(exc), "code": exc.code}, status=409)
+    return JsonResponse({"status": "queued_for_dispatch", "command_id": str(command.pk)})
+
+
+@require_permission("export_command_audit")
+def command_audit_export(request, format):
+    commands = RemoteCommand.objects.filter(team=request.team).select_related(
+        "gateway",
+        "device",
+        "requested_by",
+    )
+    records = [
+        {
+            "command_id": str(command.pk),
+            "requested_at": command.created_at.isoformat(),
+            "requester": command.actor_snapshot.get("email", ""),
+            "gateway": command.gateway.serial_number,
+            "device": command.device.name if command.device_id else "",
+            "operation": command.operation,
+            "command_key": command.command_key,
+            "requested_value": command.requested_value,
+            "status": command.status,
+            "error_code": command.error_code,
+            "error_message": command.error_message,
+        }
+        for command in commands
+    ]
+    if format == "json":
+        return JsonResponse({"commands": records})
+    if format != "csv":
+        raise Http404
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="remote-command-audit.csv"'
+    fields = list(records[0]) if records else [
+        "command_id",
+        "requested_at",
+        "requester",
+        "gateway",
+        "device",
+        "operation",
+        "command_key",
+        "requested_value",
+        "status",
+        "error_code",
+        "error_message",
+    ]
+    writer = csv.DictWriter(response, fieldnames=fields)
+    writer.writeheader()
+    writer.writerows(records)
+    return response
 
 
 class SiteListView(PermissionRequiredMixin, ListView):

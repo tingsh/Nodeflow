@@ -249,6 +249,8 @@ def create_gateway_policy_bundle(gateway) -> GatewayControlPolicyBundle:
                 "policy": envelope.policy.revision,
             },
             "policy_checksum": envelope.policy.checksum,
+            "risk": envelope.policy.risk,
+            "readback": envelope.template.technical_limits.get("readback", {}),
         }
     latest = GatewayControlPolicyBundle.objects.filter(gateway=gateway).order_by("-revision").first()
     payload = {
