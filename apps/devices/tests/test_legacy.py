@@ -8,7 +8,8 @@ from apps.alerts.models import AlertRule
 from apps.teams.models import Team
 from apps.users.models import CustomUser
 
-from ..models import Device, DeviceCommand, DeviceTemplate, Gateway, RpcCommand, Site
+from ..models import Device, DeviceCommand, DeviceTemplate, Gateway, Site
+from ..remote_control import CommandDenied
 from ..services import process_command_response, send_device_command
 
 
@@ -71,20 +72,10 @@ class DeviceCommandTest(TestCase):
         )
 
     @patch("apps.telemetry.mqtt_publisher.publish_rpc_command")
-    def test_send_command_creates_record_and_publishes(self, mock_publish_rpc):
-        mock_rpc = RpcCommand.objects.create(
-            team=self.team,
-            gateway=self.gateway,
-            request_id="12345678-1234-1234-1234-123456789012",
-            method="write_device",
-            params={},
-        )
-        mock_publish_rpc.return_value = mock_rpc
-
-        command = send_device_command(self.device, self.user, "toggle_switch", True)
-        self.assertEqual(command.status, "sent")
-        self.assertEqual(command.rpc_command, mock_rpc)
-        self.assertTrue(mock_publish_rpc.called)
+    def test_legacy_write_path_is_governed_and_default_denied(self, mock_publish_rpc):
+        with self.assertRaises(CommandDenied):
+            send_device_command(self.device, self.user, "toggle_switch", True)
+        mock_publish_rpc.assert_not_called()
 
     def test_process_command_response_success(self):
         command = DeviceCommand.objects.create(
