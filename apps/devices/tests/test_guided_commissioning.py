@@ -1,0 +1,400 @@
+import base64
+import uuid
+from datetime import timedelta
+from unittest.mock import patch
+
+from django.test import Client, TestCase, override_settings
+from django.urls import reverse
+from django.utils import timezone
+
+from apps.devices.deployment_setup import (
+    confidence_label,
+    gateway_readiness,
+    get_or_create_setup_run,
+    support_bundle,
+    sync_setup_run,
+)
+from apps.devices.gateway_config_delivery import (
+    dispatch_gateway_config_outbox,
+    queue_gateway_config,
+)
+from apps.devices.models import (
+    DeploymentSetupItem,
+    Device,
+    DeviceTemplate,
+    EquipmentTemplateRequest,
+    Gateway,
+    GatewayConfig,
+    GatewayConfigOutbox,
+    RemoteCommand,
+    RpcCommand,
+    Site,
+)
+from apps.teams.models import Membership, Team
+from apps.users.models import CustomUser
+
+SIGNING_SEED = base64.b64encode(b"0" * 32).decode()
+
+
+@override_settings(
+    REMOTE_CONTROL_ACTIVE_SIGNING_KEY_ID="setup-test",
+    REMOTE_CONTROL_SIGNING_KEYS={"setup-test": SIGNING_SEED},
+    REMOTE_CONTROL_SIGNING_PRIVATE_KEY=SIGNING_SEED,
+)
+class GatewayConfigDeliveryTest(TestCase):
+    def setUp(self):
+        self.team = Team.objects.create(name="Guided Team", slug="guided-team")
+        self.site = Site.objects.create(team=self.team, name="Factory")
+        self.gateway = Gateway.objects.create(
+            team=self.team,
+            site=self.site,
+            name="Main Gateway",
+            serial_number="NF-GUIDED-001",
+            access_token="guided-token",
+            gateway_capabilities=["guided_setup_v1"],
+        )
+
+    @patch("apps.devices.gateway_config_delivery._schedule_config_dispatch")
+    def test_queue_builds_signed_revisioned_transactional_outbox(self, schedule):
+        first = queue_gateway_config(self.gateway, "connector_update", {"connectors": []})
+        second = queue_gateway_config(self.gateway, "connector_update", {"connectors": [{"type": "modbus"}]})
+
+        self.assertEqual(first.revision, 1)
+        self.assertEqual(second.revision, 2)
+        self.assertEqual(first.status, "queued")
+        self.assertEqual(first.envelope_json["target"]["gateway_serial"], self.gateway.serial_number)
+        self.assertEqual(first.envelope_json["checksum"], first.checksum)
+        self.assertTrue(first.envelope_json["signature"])
+        self.assertTrue(GatewayConfigOutbox.objects.filter(config=first, status="pending").exists())
+        schedule.assert_not_called()
+
+    @patch("apps.telemetry.mqtt_publisher.publish_config_envelope")
+    @patch("apps.devices.gateway_config_delivery._schedule_config_dispatch")
+    def test_dispatch_marks_broker_delivery_separately_from_activation(self, _schedule, publish):
+        config = queue_gateway_config(self.gateway, "connector_update", {"connectors": []})
+
+        dispatch_gateway_config_outbox(config.outbox.pk)
+
+        config.refresh_from_db()
+        config.outbox.refresh_from_db()
+        self.assertEqual(config.status, "delivered")
+        self.assertEqual(config.outbox.status, "delivered")
+        self.assertIsNotNone(config.delivered_at)
+        publish.assert_called_once()
+
+    @patch("apps.telemetry.mqtt_publisher.publish_config_envelope", side_effect=RuntimeError("broker unavailable"))
+    @patch("apps.devices.gateway_config_delivery._schedule_config_dispatch")
+    def test_delivery_failure_is_retryable_and_customer_safe(self, _schedule, _publish):
+        config = queue_gateway_config(self.gateway, "connector_update", {"connectors": []})
+
+        dispatch_gateway_config_outbox(config.outbox.pk)
+
+        config.refresh_from_db()
+        config.outbox.refresh_from_db()
+        self.assertEqual(config.status, "queued")
+        self.assertEqual(config.outbox.status, "retry")
+        self.assertEqual(config.error_code, "broker_publish_failed")
+        self.assertNotIn("broker unavailable", config.error_message)
+
+
+class DeploymentSetupWorkflowTest(TestCase):
+    def setUp(self):
+        self.team = Team.objects.create(name="Workflow Team", slug="workflow-team")
+        self.user = CustomUser.objects.create(email="setup@example.com", username="setup-user")
+        self.site = Site.objects.create(team=self.team, name="Factory")
+        self.gateway = Gateway.objects.create(
+            team=self.team,
+            site=self.site,
+            name="Gateway",
+            serial_number="NF-WORKFLOW",
+            access_token="workflow-token",
+            status="online",
+            mqtt_connected=True,
+            tls_ok=True,
+            firmware_version="1.0.0",
+            last_seen=timezone.now(),
+        )
+        self.template = DeviceTemplate.objects.create(
+            name="Verified Meter",
+            manufacturer="MeterCo",
+            model_number="M1",
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            register_map={"voltage": {"address": 1, "functionCode": 3, "type": "uint16", "unit": "V"}},
+            is_verified=True,
+        )
+
+    def test_confidence_and_readiness_use_customer_facing_states(self):
+        self.assertEqual(confidence_label(80), "High confidence")
+        self.assertEqual(confidence_label(45), "Possible match")
+        self.assertEqual(confidence_label(44), "Needs setup")
+        self.assertEqual(gateway_readiness(self.gateway)["status"], "ready")
+
+    def test_successful_validation_then_telemetry_completes_run_and_dashboard(self):
+        run = get_or_create_setup_run(team=self.team, gateway=self.gateway, initiated_by=self.user)
+        device = Device.objects.create(
+            team=self.team,
+            site=self.site,
+            gateway=self.gateway,
+            name="Meter",
+            template=self.template,
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            metadata={"guided_setup_validation": "pending"},
+        )
+        command = RemoteCommand.objects.create(
+            team=self.team,
+            gateway=self.gateway,
+            requested_by=self.user,
+            operation="deployment_validate",
+            risk="diagnostic",
+            status="action_completed",
+            expires_at=timezone.now() + timedelta(minutes=5),
+        )
+        item = DeploymentSetupItem.objects.create(
+            team=self.team,
+            run=run,
+            device=device,
+            selected_template=self.template,
+            state="validating",
+            validation_command=command,
+        )
+        RpcCommand.objects.create(
+            team=self.team,
+            gateway=self.gateway,
+            request_id=uuid.uuid4(),
+            method="deployment_validate",
+            status="success",
+            result={
+                "status": "success",
+                "message": "Voltage was read successfully.",
+                "signals": [{"key": "voltage", "status": "success"}],
+            },
+            remote_command=command,
+        )
+
+        sync_setup_run(run)
+        item.refresh_from_db()
+        device.refresh_from_db()
+        self.assertEqual(item.state, "validated")
+        self.assertEqual(device.metadata["guided_setup_validation"], "validated")
+
+        GatewayConfig.objects.create(
+            team=self.team,
+            gateway=self.gateway,
+            setup_run=run,
+            config_json={"connectors": []},
+            request_id=uuid.uuid4(),
+            status="active",
+        )
+        device.last_telemetry_at = timezone.now()
+        device.save(update_fields=["last_telemetry_at"])
+        item.state = "applied"
+        item.save(update_fields=["state"])
+
+        completed = sync_setup_run(run)
+        item.refresh_from_db()
+        self.assertEqual(item.state, "telemetry_confirmed")
+        self.assertEqual(completed.state, "completed")
+        self.assertTrue(device.dashboards.exists())
+
+    def test_support_bundle_excludes_raw_configuration_and_credentials(self):
+        run = get_or_create_setup_run(team=self.team, gateway=self.gateway, initiated_by=self.user)
+        config = GatewayConfig.objects.create(
+            team=self.team,
+            gateway=self.gateway,
+            setup_run=run,
+            config_json={"mqtt": {"password": "secret-value"}},
+            request_id=uuid.uuid4(),
+            checksum="abc",
+            status="failed",
+            error_message="Connection timed out.",
+            technical_error="password=secret-value",
+        )
+
+        bundle = support_bundle(run)
+
+        self.assertEqual(bundle["configuration"]["request_id"], str(config.request_id))
+        self.assertNotIn("config_json", bundle["configuration"])
+        self.assertNotIn("secret-value", str(bundle))
+        self.assertIn("[redacted]", str(bundle))
+
+    @override_settings(GUIDED_SETUP_FIRST_TELEMETRY_TIMEOUT_SECONDS=1)
+    def test_multi_device_setup_completes_with_attention_after_telemetry_timeout(self):
+        run = get_or_create_setup_run(team=self.team, gateway=self.gateway, initiated_by=self.user)
+        live_device = Device.objects.create(
+            team=self.team,
+            site=self.site,
+            gateway=self.gateway,
+            name="Live meter",
+            template=self.template,
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            last_telemetry_at=timezone.now(),
+        )
+        quiet_device = Device.objects.create(
+            team=self.team,
+            site=self.site,
+            gateway=self.gateway,
+            name="Quiet meter",
+            template=self.template,
+            device_type="power_meter",
+            protocol="modbus_tcp",
+        )
+        DeploymentSetupItem.objects.create(
+            team=self.team,
+            run=run,
+            device=live_device,
+            selected_template=self.template,
+            state="applied",
+        )
+        quiet_item = DeploymentSetupItem.objects.create(
+            team=self.team,
+            run=run,
+            device=quiet_device,
+            selected_template=self.template,
+            state="applied",
+        )
+        GatewayConfig.objects.create(
+            team=self.team,
+            gateway=self.gateway,
+            setup_run=run,
+            config_json={"connectors": []},
+            request_id=uuid.uuid4(),
+            status="active",
+            acknowledged_at=timezone.now() - timedelta(seconds=5),
+        )
+
+        updated = sync_setup_run(run)
+
+        quiet_item.refresh_from_db()
+        self.assertEqual(quiet_item.state, "needs_attention")
+        self.assertEqual(updated.state, "completed_attention")
+
+
+class GuidedSetupViewTest(TestCase):
+    def setUp(self):
+        self.team = Team.objects.create(name="View Team", slug="view-team")
+        self.user = CustomUser.objects.create(email="view@example.com", username="view-user")
+        Membership.objects.create(team=self.team, user=self.user, role="admin")
+        self.site = Site.objects.create(team=self.team, name="Factory")
+        self.gateway = Gateway.objects.create(
+            team=self.team,
+            site=self.site,
+            name="Gateway",
+            serial_number="NF-VIEW",
+            access_token="view-token",
+            status="online",
+            last_seen=timezone.now(),
+        )
+        self.client = Client()
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["onboarding_site_id"] = self.site.pk
+        session["onboarding_gateway_id"] = self.gateway.pk
+        session.save()
+        self.url = reverse("web_team:onboarding:step_3_discover", args=[self.team.slug])
+
+    def test_page_exposes_manual_fallback_without_raw_json(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "I can’t find my equipment")
+        self.assertContains(response, "Guided Modbus setup")
+        self.assertNotContains(response, "connection_config")
+        self.assertNotContains(response, "raw connector JSON")
+
+    @patch("apps.devices.deployment_setup.start_validation")
+    def test_manual_setup_creates_private_unverified_template(self, _validation):
+        self.gateway.gateway_capabilities = ["guided_setup_v1"]
+        self.gateway.save(update_fields=["gateway_capabilities"])
+        response = self.client.post(
+            self.url,
+            {
+                "action": "manual",
+                "manual_name": "Main Meter",
+                "manual_protocol": "modbus_tcp",
+                "manual_manufacturer": "PrivateCo",
+                "manual_model": "P1",
+                "manual_device_type": "power_meter",
+                "manual_host": "192.168.1.50",
+                "manual_port": "502",
+                "manual_slave_id": "1",
+                "manual_timeout": "3",
+                "manual_byte_order": "BIG",
+                "manual_word_order": "BIG",
+                "point_key_1": "voltage",
+                "point_address_1": "1",
+                "point_type_1": "uint16",
+                "point_function_1": "3",
+                "point_count_1": "1",
+                "point_scale_1": "1",
+                "point_unit_1": "V",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        template = DeviceTemplate.objects.get(created_by_team=self.team, model_number="P1")
+        self.assertFalse(template.is_verified)
+        self.assertEqual(template.source, "user_created")
+        device = Device.objects.get(team=self.team, name="Main Meter")
+        self.assertEqual(device.connection_config["host"], "192.168.1.50")
+        self.assertEqual(device.metadata["guided_setup_validation"], "pending")
+
+    def test_legacy_gateway_can_use_saved_discovery_with_verified_template(self):
+        template = DeviceTemplate.objects.create(
+            name="Verified Legacy Meter",
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            register_map={
+                "voltage": {
+                    "address": 1,
+                    "functionCode": 3,
+                    "type": "uint16",
+                }
+            },
+            is_verified=True,
+        )
+        self.gateway.discovery_data = {
+            "status": "complete",
+            "devices": [
+                {
+                    "interface": "192.168.1.50:502",
+                    "connection": "modbus_tcp",
+                    "slave_id": 1,
+                    "signature": "Legacy meter",
+                }
+            ],
+        }
+        self.gateway.save(update_fields=["discovery_data"])
+
+        response = self.client.post(
+            self.url,
+            {
+                "action": "validate_selected",
+                "device_index": ["0"],
+                "name_0": "Legacy meter",
+                "template_0": str(template.pk),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        item = DeploymentSetupItem.objects.get(run__gateway=self.gateway)
+        self.assertEqual(item.state, "validated")
+        self.assertEqual(item.trust_level, "novena_verified")
+        self.assertFalse(RemoteCommand.objects.filter(gateway=self.gateway).exists())
+
+    def test_template_request_has_support_reference(self):
+        response = self.client.post(
+            self.url,
+            {
+                "action": "request_template",
+                "request_manufacturer": "UnknownCo",
+                "request_model": "X1",
+                "request_protocol": "modbus_tcp",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        request_row = EquipmentTemplateRequest.objects.get(team=self.team)
+        self.assertTrue(request_row.support_reference)

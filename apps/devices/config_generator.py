@@ -38,6 +38,10 @@ def generate_connector_config(gateway):
 
     protocol_groups = {}
     for device in devices:
+        validation_state = (device.metadata or {}).get("guided_setup_validation")
+        if validation_state in {"pending", "failed"}:
+            logger.info("Device %s is not validated yet; excluding it from config", device.name)
+            continue
         protocol = device.protocol or "modbus_tcp"
         protocol_groups.setdefault(protocol, []).append(device)
 
@@ -165,13 +169,76 @@ def _default_objects_count(type_name):
     return 1
 
 
-def generate_and_push_config(gateway):
+def normalized_datapoints(template):
+    """Expose the legacy register map through a versioned protocol-neutral shape."""
+    datapoints = []
+    for key, register in (template.register_map or {}).items():
+        if not isinstance(register, dict):
+            continue
+        datapoints.append(
+            {
+                "key": key,
+                "label": register.get("label") or key.replace("_", " ").title(),
+                "address": register.get("address", 0),
+                "functionCode": register.get("functionCode", 3),
+                "objectsCount": register.get("objectsCount", _default_objects_count(register.get("type"))),
+                "data_type": register.get("type", "uint16"),
+                "access": "write" if register.get("writable") else "read",
+                "scale": register.get("scale", register.get("multiplier", 1)),
+                "offset": register.get("offset", 0),
+                "unit": register.get("unit", ""),
+                "quality": register.get("quality", {}),
+                "protocol_metadata": register.get("protocol_metadata", {}),
+            }
+        )
+    return datapoints
+
+
+def human_config_preview(gateway):
+    connectors = generate_connector_config(gateway)
+    devices = list(gateway.devices.select_related("template").all())
+    return {
+        "gateway": gateway.name,
+        "connector_count": len(connectors),
+        "device_count": len(devices),
+        "connectors": [
+            {
+                "name": connector.get("name"),
+                "protocol": connector.get("type"),
+                "device_count": len(connector.get("config", {}).get("master", {}).get("slaves", [])),
+            }
+            for connector in connectors
+        ],
+        "devices": [
+            {
+                "name": device.name,
+                "template": device.template.name if device.template else "",
+                "protocol": device.get_protocol_display(),
+                "target": device.port or "",
+                "slave_id": (device.connection_config or {}).get("slave_id"),
+                "polling_interval": (device.template.default_polling_interval if device.template else None),
+                "telemetry_keys": [datapoint["key"] for datapoint in normalized_datapoints(device.template)]
+                if device.template
+                else [],
+            }
+            for device in devices
+        ],
+        "dashboard": "Automatic operations dashboard",
+        "recommended_alert_count": sum(
+            len(device.template.alert_presets or []) for device in devices if device.template
+        ),
+    }
+
+
+def generate_and_push_config(gateway, *, setup_run=None):
     """
     Generate connector config for a gateway and push it via MQTT.
 
     Returns the GatewayConfig record or None.
     """
     from apps.telemetry.mqtt_publisher import publish_config_update
+
+    from .gateway_config_delivery import gateway_supports_guided_setup, queue_gateway_config
 
     connectors = generate_connector_config(gateway)
 
@@ -186,7 +253,18 @@ def generate_and_push_config(gateway):
     gateway.lifecycle_status = "commissioning"
     gateway.save(update_fields=["lifecycle_status"])
 
-    config_record = publish_config_update(gateway, "connector_update", config_payload)
+    if gateway_supports_guided_setup(gateway):
+        config_record = queue_gateway_config(
+            gateway,
+            "connector_update",
+            config_payload,
+            setup_run=setup_run,
+        )
+    else:
+        config_record = publish_config_update(gateway, "connector_update", config_payload)
+        if setup_run:
+            config_record.setup_run = setup_run
+            config_record.save(update_fields=["setup_run", "updated_at"])
     logger.info(
         "Pushed connector config to %s: %d connectors, request_id=%s",
         gateway.serial_number,

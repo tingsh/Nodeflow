@@ -28,7 +28,7 @@ def _hint_values(template: DeviceTemplate, key: str) -> list[str]:
     return []
 
 
-def rank_templates_for_discovery(discovery: dict, limit: int = 5) -> list[dict]:
+def rank_templates_for_discovery(discovery: dict, limit: int = 5, team=None) -> list[dict]:
     """Return ranked candidate templates for one discovered field device."""
     identification = discovery.get("identification") or {}
     vendor = _norm(identification.get("vendor") or discovery.get("vendor"))
@@ -37,6 +37,8 @@ def rank_templates_for_discovery(discovery: dict, limit: int = 5) -> list[dict]:
     protocol = _norm(discovery.get("protocol") or discovery.get("connection")).replace("modbus_", "modbus_")
 
     qs = DeviceTemplate.objects.all()
+    if team is not None:
+        qs = qs.filter(Q(created_by_team__isnull=True) | Q(created_by_team=team))
     query = Q()
     if vendor:
         query |= Q(manufacturer__icontains=vendor)
@@ -93,7 +95,7 @@ def rank_templates_for_discovery(discovery: dict, limit: int = 5) -> list[dict]:
     ]
 
 
-def enrich_discovered_device(discovery: dict) -> dict:
+def enrich_discovered_device(discovery: dict, team=None) -> dict:
     enriched = dict(discovery)
     stable_key_parts = [
         enriched.get("connection") or enriched.get("protocol") or "unknown",
@@ -101,7 +103,7 @@ def enrich_discovered_device(discovery: dict) -> dict:
         str(enriched.get("slave_id") or ""),
     ]
     enriched["stable_key"] = "|".join(str(part) for part in stable_key_parts)
-    candidates = rank_templates_for_discovery(enriched)
+    candidates = rank_templates_for_discovery(enriched, team=team)
     enriched["template_candidates"] = candidates
     if candidates:
         best = candidates[0]

@@ -98,6 +98,7 @@ class Gateway(BaseTeamModel):
     platform_info = models.CharField(max_length=200, blank=True)
     active_connectors = models.JSONField(default=list, blank=True)
     connected_devices = models.JSONField(default=list, blank=True)
+    gateway_capabilities = models.JSONField(default=list, blank=True)
     remote_control_protocol_version = models.PositiveIntegerField(default=0)
     remote_control_capabilities = models.JSONField(default=list, blank=True)
     remote_control_local_writeback_enabled = models.BooleanField(default=False)
@@ -255,6 +256,10 @@ class DeviceTemplate(models.Model):
     category = models.CharField(max_length=20, choices=VERTICAL_CHOICES, default="energy")
     alert_presets = models.JSONField(default=list, blank=True)
     is_verified = models.BooleanField(default=False)
+    datapoint_schema_version = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=_("Version of the normalized datapoint representation stored in register_map."),
+    )
 
     SOURCE_CHOICES = (
         ("curated", _("Curated (Novena)")),
@@ -338,28 +343,230 @@ class GatewayConfig(BaseTeamModel):
     """Tracks config versions pushed to gateways."""
 
     STATUS_CHOICES = (
-        ("pending", _("Pending")),
-        ("success", _("Success")),
+        ("queued", _("Queued")),
+        ("delivered", _("Delivered")),
+        ("accepted", _("Accepted")),
+        ("active", _("Active")),
         ("failed", _("Failed")),
         ("rolled_back", _("Rolled Back")),
     )
 
     gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="config_history")
+    setup_run = models.ForeignKey(
+        "DeploymentSetupRun",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="configurations",
+    )
     config_json = models.JSONField()
     pushed_at = models.DateTimeField(auto_now_add=True)
     request_id = models.UUIDField(unique=True)
+    idempotency_key = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    revision = models.PositiveBigIntegerField(default=0)
+    checksum = models.CharField(max_length=64, blank=True)
+    envelope_json = models.JSONField(default=dict, blank=True)
     action = models.CharField(max_length=30, default="full_update")
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="queued")
     error_message = models.TextField(blank=True)
+    error_code = models.CharField(max_length=80, blank=True)
+    technical_error = models.TextField(blank=True)
     rollback_performed = models.BooleanField(default=False)
     connector_results = models.JSONField(default=list, blank=True)
+    rollback_connector_results = models.JSONField(default=list, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
     acknowledged_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-pushed_at"]
 
     def __str__(self):
         return f"Config push {self.request_id} → {self.gateway.serial_number} ({self.status})"
+
+
+class GatewayConfigOutbox(BaseTeamModel):
+    """Transactional delivery record for a Gateway configuration."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", _("Pending")
+        CLAIMED = "claimed", _("Claimed")
+        DELIVERED = "delivered", _("Delivered")
+        RETRY = "retry", _("Retry")
+        DEAD_LETTER = "dead_letter", _("Dead letter")
+
+    config = models.OneToOneField(GatewayConfig, on_delete=models.CASCADE, related_name="outbox")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    attempt_count = models.PositiveIntegerField(default=0)
+    next_attempt_at = models.DateTimeField(default=timezone.now)
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    dead_lettered_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["next_attempt_at", "created_at"]
+        indexes = [models.Index(fields=["status", "next_attempt_at"])]
+
+
+class DeploymentSetupRun(BaseTeamModel):
+    """Durable customer setup journey, separate from control commissioning."""
+
+    class State(models.TextChoices):
+        DRAFT = "draft", _("Draft")
+        GATEWAY_CHECK = "gateway_check", _("Gateway check")
+        DISCOVERING = "discovering", _("Discovering")
+        CONFIGURING = "configuring", _("Configuring")
+        DEPLOYING = "deploying", _("Deploying")
+        VERIFYING = "verifying", _("Verifying")
+        COMPLETED = "completed", _("Completed")
+        COMPLETED_ATTENTION = "completed_attention", _("Completed with attention")
+        FAILED = "failed", _("Failed")
+        CANCELLED = "cancelled", _("Cancelled")
+
+    run_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="deployment_setup_runs")
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="deployment_setup_runs")
+    state = models.CharField(max_length=30, choices=State.choices, default=State.DRAFT)
+    current_step = models.CharField(max_length=30, default="location")
+    initiated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="deployment_setup_runs",
+    )
+    readiness = models.JSONField(default=dict, blank=True)
+    summary = models.JSONField(default=dict, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["team", "gateway", "state"])]
+
+
+class DeploymentSetupItem(BaseTeamModel):
+    """One equipment candidate and its validation/deployment evidence."""
+
+    class State(models.TextChoices):
+        DISCOVERED = "discovered", _("Discovered")
+        TEMPLATE_SELECTED = "template_selected", _("Template selected")
+        VALIDATING = "validating", _("Validating")
+        VALIDATED = "validated", _("Validated")
+        QUEUED = "queued", _("Queued")
+        APPLIED = "applied", _("Applied")
+        TELEMETRY_CONFIRMED = "telemetry_confirmed", _("Telemetry confirmed")
+        NEEDS_ATTENTION = "needs_attention", _("Needs attention")
+        FAILED = "failed", _("Failed")
+        ROLLED_BACK = "rolled_back", _("Rolled back")
+
+    class Trust(models.TextChoices):
+        NOVENA_VERIFIED = "novena_verified", _("Novena verified")
+        CUSTOMER_VALIDATED = "customer_validated", _("Customer validated")
+        AI_DRAFT = "ai_draft", _("AI draft")
+        UNVALIDATED = "unvalidated", _("Unvalidated")
+
+    run = models.ForeignKey(DeploymentSetupRun, on_delete=models.CASCADE, related_name="items")
+    device = models.ForeignKey(
+        Device,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="deployment_setup_items",
+    )
+    discovery_index = models.PositiveIntegerField(null=True, blank=True)
+    candidate_data = models.JSONField(default=dict, blank=True)
+    selected_template = models.ForeignKey(
+        DeviceTemplate,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="deployment_setup_items",
+    )
+    confidence_score = models.PositiveSmallIntegerField(default=0)
+    confidence_explanation = models.TextField(blank=True)
+    trust_level = models.CharField(max_length=30, choices=Trust.choices, default=Trust.UNVALIDATED)
+    state = models.CharField(max_length=30, choices=State.choices, default=State.DISCOVERED)
+    connection = models.JSONField(default=dict, blank=True)
+    datapoints = models.JSONField(default=list, blank=True)
+    validation_result = models.JSONField(default=dict, blank=True)
+    validation_command = models.ForeignKey(
+        "RemoteCommand",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="deployment_validation_items",
+    )
+    first_telemetry_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [models.Index(fields=["run", "state"])]
+
+
+class DeploymentSetupEvent(models.Model):
+    """Append-only setup timeline for customers and support."""
+
+    run = models.ForeignKey(DeploymentSetupRun, on_delete=models.PROTECT, related_name="events")
+    item = models.ForeignKey(
+        DeploymentSetupItem,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="events",
+    )
+    sequence_number = models.PositiveIntegerField()
+    event_type = models.CharField(max_length=80)
+    message = models.TextField()
+    evidence = models.JSONField(default=dict, blank=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["sequence_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "sequence_number"],
+                name="unique_deployment_setup_event_sequence",
+            )
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.pk and DeploymentSetupEvent.objects.filter(pk=self.pk).exists():
+            raise ValueError("Deployment setup events are append-only.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError("Deployment setup events are append-only.")
+
+
+class EquipmentTemplateRequest(BaseTeamModel):
+    """Customer request for Novena to create a missing equipment template."""
+
+    class Status(models.TextChoices):
+        OPEN = "open", _("Open")
+        REVIEWING = "reviewing", _("Reviewing")
+        COMPLETED = "completed", _("Completed")
+
+    run = models.ForeignKey(
+        DeploymentSetupRun,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="template_requests",
+    )
+    manufacturer = models.CharField(max_length=200)
+    model_number = models.CharField(max_length=200)
+    protocol = models.CharField(max_length=20, choices=DeviceTemplate.PROTOCOL_CHOICES)
+    documentation_url = models.URLField(blank=True, max_length=500)
+    documentation_file = models.FileField(
+        upload_to="equipment-template-requests/%Y/%m/",
+        blank=True,
+    )
+    discovery_evidence = models.JSONField(default=dict, blank=True)
+    support_reference = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
 
 
 class RpcCommand(BaseTeamModel):

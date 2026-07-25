@@ -1,12 +1,17 @@
 from django.contrib import admin
 
 from .models import (
+    DeploymentSetupEvent,
+    DeploymentSetupItem,
+    DeploymentSetupRun,
     Device,
     DeviceTemplate,
+    EquipmentTemplateRequest,
     FirmwareRelease,
     Gateway,
     GatewayActivation,
     GatewayConfig,
+    GatewayConfigOutbox,
     GatewayInventory,
     RpcCommand,
     Site,
@@ -130,6 +135,48 @@ class GatewayConfigAdmin(admin.ModelAdmin):
     list_filter = ("status", "action")
     search_fields = ("gateway__serial_number", "request_id")
     readonly_fields = ("request_id", "pushed_at")
+
+
+@admin.register(GatewayConfigOutbox)
+class GatewayConfigOutboxAdmin(admin.ModelAdmin):
+    list_display = ("config", "status", "attempt_count", "next_attempt_at", "delivered_at")
+    list_filter = ("status",)
+    readonly_fields = ("config", "attempt_count", "claimed_at", "delivered_at", "dead_lettered_at")
+
+
+@admin.register(DeploymentSetupRun)
+class DeploymentSetupRunAdmin(admin.ModelAdmin):
+    list_display = ("run_id", "team", "site", "gateway", "state", "current_step", "created_at")
+    list_filter = ("state", "team")
+    readonly_fields = ("run_id", "created_at", "updated_at")
+
+
+@admin.register(DeploymentSetupItem)
+class DeploymentSetupItemAdmin(admin.ModelAdmin):
+    list_display = ("run", "device", "selected_template", "confidence_score", "trust_level", "state")
+    list_filter = ("state", "trust_level")
+
+
+@admin.register(DeploymentSetupEvent)
+class DeploymentSetupEventAdmin(admin.ModelAdmin):
+    list_display = ("run", "sequence_number", "event_type", "message", "created_at")
+    readonly_fields = ("run", "item", "sequence_number", "event_type", "message", "evidence", "actor", "created_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(EquipmentTemplateRequest)
+class EquipmentTemplateRequestAdmin(admin.ModelAdmin):
+    list_display = ("support_reference", "team", "manufacturer", "model_number", "protocol", "status")
+    list_filter = ("status", "protocol")
+    search_fields = ("support_reference", "manufacturer", "model_number", "team__name")
 
 
 @admin.register(GatewayActivation)

@@ -52,6 +52,15 @@ COMMAND_CATALOG = {
         "privilege_preflight", RemoteCommand.Risk.DIAGNOSTIC, False, "request_low_risk_commands"
     ),
     "scan_devices": CommandDefinition("scan_devices", RemoteCommand.Risk.LOW, False, "request_low_risk_commands"),
+    "deployment_preflight": CommandDefinition(
+        "deployment_preflight", RemoteCommand.Risk.DIAGNOSTIC, False, "manage_devices"
+    ),
+    "deployment_discover": CommandDefinition(
+        "deployment_discover", RemoteCommand.Risk.DIAGNOSTIC, False, "manage_devices"
+    ),
+    "deployment_validate": CommandDefinition(
+        "deployment_validate", RemoteCommand.Risk.DIAGNOSTIC, False, "manage_devices"
+    ),
     "read_device": CommandDefinition(
         "read_device",
         RemoteCommand.Risk.DIAGNOSTIC,

@@ -464,6 +464,7 @@ class CommissioningContextTest(TestCase):
             device_type="power_meter",
             protocol="modbus_tcp",
             register_map={"active_power": {"unit": "W"}},
+            is_verified=True,
         )
         self.now = timezone.now()
 
@@ -486,7 +487,13 @@ class CommissioningContextTest(TestCase):
         self.gateway.lifecycle_status = "commissioning"
         self.gateway.discovery_data = {
             "devices": [
-                {"interface": "10.0.0.2:502", "signature": "Matched", "matched_template_id": self.template.id},
+                {
+                    "interface": "10.0.0.2:502",
+                    "signature": "Matched",
+                    "matched_template_id": self.template.id,
+                    "matched_template_score": 90,
+                    "matched_template_reasons": ["model"],
+                },
                 {"interface": "10.0.0.3:502", "signature": "Unknown"},
             ]
         }
@@ -515,7 +522,7 @@ class CommissioningContextTest(TestCase):
             gateway=self.gateway,
             config_json={"connectors": []},
             request_id=uuid.uuid4(),
-            status="success",
+            status="active",
         )
         device = Device.objects.create(
             team=self.team,

@@ -19,6 +19,7 @@ DEFAULT_DYNSEC_USER = "dynsec-admin"
 DEFAULT_DYNSEC_PASS = "dynsec-password"
 REQUIRED_HOSTS = {"novenaplatform.com", "app.novenaplatform.com"}
 REQUIRED_CELERY_TASKS = {
+    "apps.devices.tasks.dispatch_due_gateway_config_outboxes",
     "apps.devices.tasks.dispatch_due_remote_command_outboxes",
     "apps.maintenance.tasks.generate_preventive_tickets",
     "apps.telemetry.tasks.flush_telemetry_buffer_task",
@@ -168,6 +169,9 @@ def _check_remote_control_configuration() -> list[CheckResult]:
         _has_value(key_id) and key_id != "unconfigured" and (_has_value(key_map.get(key_id)) or _has_value(legacy_key))
     )
     retention = int(getattr(settings, "REMOTE_CONTROL_AUDIT_RETENTION_DAYS", 0))
+    config_ttl = int(getattr(settings, "GATEWAY_CONFIG_ENVELOPE_TTL_SECONDS", 0))
+    config_attempts = int(getattr(settings, "GATEWAY_CONFIG_OUTBOX_MAX_ATTEMPTS", 0))
+    telemetry_timeout = int(getattr(settings, "GUIDED_SETUP_FIRST_TELEMETRY_TIMEOUT_SECONDS", 0))
     from apps.devices.models import GatewayControlPolicyBundle
     from apps.teams.models import Team
 
@@ -198,6 +202,24 @@ def _check_remote_control_configuration() -> list[CheckResult]:
             "Controlled-team policy acknowledgement",
             "OK" if not unsafe_teams else "FAIL",
             f"unsafe teams={unsafe_teams or 'none'}",
+        ),
+        CheckResult(
+            "Guided Setup",
+            "Configuration envelope lifetime",
+            "OK" if 60 <= config_ttl <= 900 else "FAIL",
+            f"GATEWAY_CONFIG_ENVELOPE_TTL_SECONDS={config_ttl}; expected 60-900 seconds.",
+        ),
+        CheckResult(
+            "Guided Setup",
+            "Configuration delivery retries",
+            "OK" if 1 <= config_attempts <= 10 else "FAIL",
+            f"GATEWAY_CONFIG_OUTBOX_MAX_ATTEMPTS={config_attempts}; expected 1-10.",
+        ),
+        CheckResult(
+            "Guided Setup",
+            "First telemetry timeout",
+            "OK" if 30 <= telemetry_timeout <= 3600 else "FAIL",
+            f"GUIDED_SETUP_FIRST_TELEMETRY_TIMEOUT_SECONDS={telemetry_timeout}; expected 30-3600 seconds.",
         ),
     ]
 

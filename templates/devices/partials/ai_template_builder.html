@@ -5,14 +5,15 @@
                 <i class="fa fa-robot text-xl animate-pulse"></i>
             </div>
             <div class="flex-1">
-                <h4 class="text-lg font-black text-base-content font-heading tracking-tight">AI Template Generator</h4>
+                <h4 class="text-lg font-black text-base-content font-heading tracking-tight">Create from equipment documentation</h4>
                 <p class="text-xs text-base-content/60 mt-1">
-                    Can't find a template for your equipment? Provide the manufacturer and model, and our AI will search the web and compile a complete Modbus register map for you.
+                    Provide the manufacturer, model, and an optional official manual URL or PDF. Novena will prepare a draft Modbus map for your review and live validation.
                 </p>
             </div>
         </div>
 
         <form hx-post="{% url 'web_team:devices:ai_template_generate' request.team.slug %}"
+              enctype="multipart/form-data"
               hx-target="#ai-template-result"
               hx-swap="innerHTML"
               hx-indicator="#ai-gen-indicator"
@@ -48,10 +49,19 @@
                 </span>
             </div>
 
+            <div class="form-control w-full">
+                <label class="label pb-1">
+                    <span class="label-text text-xs font-bold uppercase tracking-widest text-base-content/50">Equipment Manual PDF <span class="text-base-content/30 font-medium">(Optional)</span></span>
+                </label>
+                <input type="file" name="documentation_file" accept="application/pdf,.pdf"
+                       class="file-input file-input-bordered w-full rounded-2xl bg-base-200 border-none">
+                <span class="text-[10px] text-base-content/40 mt-1 block px-1">Maximum 10 MB. The temporary AI copy is deleted after processing.</span>
+            </div>
+
             <div class="pt-2 flex items-center justify-between gap-4">
                 <button type="submit" 
                         class="btn btn-primary rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-primary-500/10 px-6">
-                    <i class="fa fa-sparkles mr-2"></i> Generate with AI
+                    <i class="fa fa-sparkles mr-2"></i> Prepare draft
                 </button>
                 <div id="ai-gen-indicator" class="htmx-indicator flex items-center gap-2 text-xs text-base-content/60">
                     <span class="loading loading-spinner loading-xs text-primary-500"></span>

@@ -37,20 +37,39 @@
                 </a>
                 <a href="{% url 'web_team:onboarding:step_3_discover' request.team.slug %}"
                    id="continue-btn"
-                   class="btn btn-primary btn-sm rounded-md {% if gateway.freshness.status != 'live' %}opacity-50 pointer-events-none{% endif %}"
-                   {% if gateway.freshness.status != 'live' %}aria-disabled="true"{% endif %}>
-                    Continue to Discovery<i class="fa fa-arrow-right ml-2"></i>
+                   class="btn btn-primary btn-sm rounded-md {% if readiness.status != 'ready' %}opacity-50 pointer-events-none{% endif %}"
+                   {% if readiness.status != 'ready' %}aria-disabled="true"{% endif %}>
+                    Continue to Equipment<i class="fa fa-arrow-right ml-2"></i>
                 </a>
             </div>
         </section>
 
         <aside class="rounded-lg border border-base-content/10 bg-base-100 p-5 shadow-sm">
-            <h3 class="text-sm font-bold text-base-content">Connection checklist</h3>
-            <ul class="mt-4 space-y-3 text-sm text-base-content/65">
-                <li class="flex gap-2"><i class="fa fa-plug mt-1 text-base-content/35"></i><span>Power is connected and gateway LEDs are active.</span></li>
-                <li class="flex gap-2"><i class="fa fa-network-wired mt-1 text-base-content/35"></i><span>Ethernet, Wi-Fi, or cellular has internet access.</span></li>
-                <li class="flex gap-2"><i class="fa fa-lock mt-1 text-base-content/35"></i><span>Serial and claim code match the gateway sticker.</span></li>
-            </ul>
+            <h3 class="text-sm font-bold text-base-content">Gateway readiness</h3>
+            <div class="mt-4 space-y-3">
+                {% for check in readiness.checks %}
+                <div class="rounded-lg border p-3 {% if check.status == 'pass' %}border-green-200 bg-green-50/70 dark:border-green-500/30 dark:bg-green-500/10{% elif check.status == 'fail' %}border-red-200 bg-red-50/70 dark:border-red-500/30 dark:bg-red-500/10{% else %}border-amber-200 bg-amber-50/70 dark:border-amber-500/30 dark:bg-amber-500/10{% endif %}">
+                    <div class="flex items-start gap-2">
+                        <i class="fa {% if check.status == 'pass' %}fa-check-circle text-green-600{% elif check.status == 'fail' %}fa-circle-xmark text-red-600{% else %}fa-triangle-exclamation text-amber-600{% endif %} mt-0.5"></i>
+                        <div>
+                            <p class="text-xs font-bold">{{ check.label }}</p>
+                            <p class="mt-1 text-xs text-base-content/60">{{ check.message }}</p>
+                            {% if check.status != 'pass' %}<p class="mt-1 text-xs font-medium">{{ check.action }}</p>{% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <details class="mt-4">
+                <summary class="cursor-pointer text-xs font-bold text-base-content/50">Technical details</summary>
+                <dl class="mt-2 space-y-1 text-xs text-base-content/50">
+                    <div class="flex justify-between"><dt>Internet</dt><dd>{{ readiness.technical_evidence.internet_reachable|yesno:"Reachable,Not confirmed" }}</dd></div>
+                    <div class="flex justify-between"><dt>DNS</dt><dd>{{ readiness.technical_evidence.dns_ok|yesno:"Working,Not confirmed" }}</dd></div>
+                    <div class="flex justify-between"><dt>TLS</dt><dd>{{ readiness.technical_evidence.tls_ok|yesno:"Valid,Not confirmed" }}</dd></div>
+                    {% if readiness.technical_evidence.disk_free_mb != None %}<div class="flex justify-between"><dt>Free storage</dt><dd>{{ readiness.technical_evidence.disk_free_mb }} MB</dd></div>{% endif %}
+                    {% if readiness.technical_evidence.clock_synchronized != None %}<div class="flex justify-between"><dt>Clock</dt><dd>{{ readiness.technical_evidence.clock_synchronized|yesno:"Synchronized,Not synchronized" }}</dd></div>{% endif %}
+                </dl>
+            </details>
         </aside>
     </div>
 </div>

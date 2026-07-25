@@ -1,6 +1,8 @@
+import tempfile
 from unittest.mock import MagicMock, patch
 
 from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
@@ -160,6 +162,31 @@ class TemplateAIViewTest(TestCase):
         self.assertContains(response, "Compiling Register Map")
         self.assertTrue(mock_task.called)
 
+    @patch("apps.devices.views.generate_template_ai_task.delay")
+    def test_ai_template_generate_accepts_temporary_pdf_evidence(self, mock_task):
+        url = reverse("web_team:devices:ai_template_generate", args=[self.team.slug])
+        manual = SimpleUploadedFile(
+            "manual.pdf",
+            b"%PDF-1.4\nminimal-test-document",
+            content_type="application/pdf",
+        )
+        with (
+            tempfile.TemporaryDirectory() as media_root,
+            self.settings(MEDIA_ROOT=media_root),
+        ):
+            response = self.client.post(
+                url,
+                {
+                    "manufacturer": "Schneider Electric",
+                    "model_number": "PDFModel",
+                    "documentation_file": manual,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Compiling Register Map")
+        self.assertTrue(mock_task.call_args.kwargs["doc_storage_path"].endswith(".pdf"))
+
     def test_ai_template_status_view_processing(self):
         task_id = "test-task-123"
         cache.set(f"ai_template:{task_id}", {"status": "processing"}, timeout=300)
@@ -186,7 +213,7 @@ class TemplateAIViewTest(TestCase):
         url = reverse("web_team:devices:ai_template_status", args=[self.team.slug, task_id])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Approve & Save")
+        self.assertContains(response, "Save Private AI Draft")
 
     def test_ai_template_approve_view(self):
         task_id = "test-task-456"

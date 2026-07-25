@@ -3,8 +3,8 @@
     {% if commissioning.ready_candidates %}
     <section>
         <div class="mb-3 flex items-center justify-between">
-            <h3 class="text-xs font-bold uppercase tracking-wide text-green-700 dark:text-green-300">Ready to provision</h3>
-            <span class="text-xs text-base-content/45">{{ commissioning.ready_candidates|length }} recommended</span>
+            <h3 class="text-xs font-black uppercase tracking-widest text-green-700 dark:text-green-300">High-confidence matches</h3>
+            <span class="text-xs text-base-content/45">{{ commissioning.ready_candidates|length }} suggested</span>
         </div>
         <div class="space-y-3">
             {% for candidate in commissioning.ready_candidates %}
@@ -13,12 +13,11 @@
         </div>
     </section>
     {% endif %}
-
     {% if commissioning.needs_template_candidates %}
     <section>
         <div class="mb-3 flex items-center justify-between">
-            <h3 class="text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">Needs template</h3>
-            <span class="text-xs text-base-content/45">Choose before provisioning</span>
+            <h3 class="text-xs font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">Review before validation</h3>
+            <span class="text-xs text-base-content/45">Confirm or choose another template</span>
         </div>
         <div class="space-y-3">
             {% for candidate in commissioning.needs_template_candidates %}
@@ -27,13 +26,9 @@
         </div>
     </section>
     {% endif %}
-
     {% if commissioning.registered_candidates %}
     <section>
-        <div class="mb-3 flex items-center justify-between">
-            <h3 class="text-xs font-bold uppercase tracking-wide text-base-content/45">Already registered</h3>
-            <span class="text-xs text-base-content/45">Skipped automatically</span>
-        </div>
+        <h3 class="mb-3 text-xs font-black uppercase tracking-widest text-base-content/45">Already registered</h3>
         <div class="space-y-3">
             {% for candidate in commissioning.registered_candidates %}
             {% include "onboarding/partials/discovery_device_card.html" with candidate=candidate selected=False templates=templates disabled=True %}
@@ -43,15 +38,11 @@
     {% endif %}
 </div>
 {% else %}
-<div class="py-16 text-center px-6">
-    <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-base-200 text-base-content/35">
+<div class="py-14 text-center px-6">
+    <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-base-200 text-base-content/35">
         <i class="fa fa-search text-2xl"></i>
     </div>
-    <p class="text-sm font-semibold text-base-content/60">Scanning for devices...</p>
-    <p class="mt-1 text-xs text-base-content/45">Devices will appear here as the gateway discovers Modbus or other configured interfaces.</p>
-    <div class="mt-5 flex justify-center gap-3">
-        <span class="loading loading-dots loading-sm text-primary"></span>
-        <a href="{% url 'web_team:onboarding:step_3_device' request.team.slug %}" class="text-xs font-bold text-primary">Add manually</a>
-    </div>
+    <p class="text-sm font-semibold text-base-content/65">No equipment found yet</p>
+    <p class="mt-1 text-xs text-base-content/45">Enter approved Modbus TCP addresses and select Find equipment, or open the manual fallback below.</p>
 </div>
 {% endif %}

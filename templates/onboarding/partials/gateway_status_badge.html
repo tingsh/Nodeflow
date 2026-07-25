@@ -12,9 +12,9 @@
 </div>
 <script>
     const btn = document.getElementById('continue-btn');
-    if (btn) {
-        btn.classList.remove('opacity-50', 'pointer-events-none');
-        btn.removeAttribute('aria-disabled');
+    if (btn && "{{ commissioning.readiness.status }}" === "ready") {
+      btn.classList.remove('opacity-50', 'pointer-events-none');
+      btn.removeAttribute('aria-disabled');
     }
 </script>
 {% else %}

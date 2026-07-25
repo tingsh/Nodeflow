@@ -567,7 +567,7 @@ def _commissioning_candidates(gateway):
     if not gateway:
         return []
 
-    from .models import DeviceTemplate
+    from .deployment_setup import confidence_explanation, confidence_label
 
     registered_ports = {
         str(device.port): device.name for device in gateway.devices.exclude(port__isnull=True).exclude(port="")
@@ -578,8 +578,9 @@ def _commissioning_candidates(gateway):
         matched_template = None
         matched_template_id = discovery.get("matched_template_id")
         if matched_template_id:
-            matched_template = DeviceTemplate.objects.filter(id=matched_template_id).first()
-        status = "ready" if matched_template else "needs_template"
+            matched_template = visible_templates_for_team(gateway.team).filter(id=matched_template_id).first()
+        score = min(100, max(0, int(discovery.get("matched_template_score") or 0)))
+        status = "ready" if matched_template and matched_template.is_verified and score >= 80 else "needs_template"
         if interface and interface in registered_ports:
             status = "registered"
         candidates.append(
@@ -593,6 +594,16 @@ def _commissioning_candidates(gateway):
                 "matched_template": matched_template,
                 "matched_template_name": discovery.get("matched_template_name")
                 or (matched_template.name if matched_template else ""),
+                "confidence_score": score,
+                "confidence_label": confidence_label(score),
+                "confidence_explanation": confidence_explanation(discovery),
+                "trust_label": (
+                    "Novena verified"
+                    if matched_template and matched_template.is_verified
+                    else (
+                        "AI draft" if matched_template and matched_template.source == "ai_generated" else "Unvalidated"
+                    )
+                ),
                 "status": status,
                 "recommended": status == "ready",
                 "raw": discovery,
@@ -609,6 +620,16 @@ def build_commissioning_context(team, gateway=None, session=None):
     candidates = _commissioning_candidates(gateway)
     latest_config = gateway.config_history.first() if gateway else None
     first_live_device = next((device for device in devices if device.last_telemetry_at), None)
+    setup_run = None
+    readiness = None
+    if gateway:
+        from .deployment_setup import gateway_readiness, sync_setup_run
+        from .models import DeploymentSetupRun
+
+        setup_run = DeploymentSetupRun.objects.filter(team=team, gateway=gateway).order_by("-created_at").first()
+        if setup_run:
+            setup_run = sync_setup_run(setup_run)
+        readiness = gateway_readiness(gateway)
 
     completed = []
     if site:
@@ -624,7 +645,7 @@ def build_commissioning_context(team, gateway=None, session=None):
         completed.append("devices_discovered")
     if devices or any(candidate["matched_template"] for candidate in candidates):
         completed.append("templates_selected")
-    if latest_config:
+    if latest_config and latest_config.status in {"accepted", "active"}:
         completed.append("config_pushed")
     if first_live_device:
         completed.append("first_telemetry_received")
@@ -678,6 +699,8 @@ def build_commissioning_context(team, gateway=None, session=None):
         "provisioned_devices": devices,
         "latest_config_status": latest_config.status if latest_config else None,
         "latest_config": latest_config,
+        "setup_run": setup_run,
+        "readiness": readiness,
         "first_live_device": first_live_device,
         "dashboard_ready": current_stage == "dashboard_ready",
     }
