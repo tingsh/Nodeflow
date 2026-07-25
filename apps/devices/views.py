@@ -4,6 +4,7 @@ import uuid
 import csv
 from datetime import datetime
 
+from django.conf import settings
 from django.contrib.auth.hashers import make_password
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
