@@ -101,6 +101,10 @@ class Gateway(BaseTeamModel):
     remote_control_protocol_version = models.PositiveIntegerField(default=0)
     remote_control_local_writeback_enabled = models.BooleanField(default=False)
     remote_control_policy_loaded = models.BooleanField(default=False)
+    remote_control_policy_revision = models.PositiveIntegerField(default=0)
+    remote_control_epoch = models.PositiveBigIntegerField(default=0)
+    remote_control_clock_ready = models.BooleanField(default=False)
+    remote_control_journal_ready = models.BooleanField(default=False)
 
     # Network Watchdog fields
     active_interface = models.CharField(max_length=20, blank=True, default="eth0")
@@ -439,6 +443,111 @@ class DeviceCommand(BaseTeamModel):
         return f"CMD: {self.command_key}={self.value} on {self.device.name} ({self.status})"
 
 
+class TemplateControlDefinition(models.Model):
+    """Novena-verified technical capability; customer policy may only narrow it."""
+
+    template = models.ForeignKey(DeviceTemplate, on_delete=models.CASCADE, related_name="control_definitions")
+    command_key = models.CharField(max_length=100)
+    operation = models.CharField(max_length=64, default="write_device")
+    data_type = models.CharField(max_length=32)
+    unit = models.CharField(max_length=32, blank=True)
+    connector_mapping = models.JSONField(default=dict)
+    technical_limits = models.JSONField(default=dict)
+    prerequisites = models.JSONField(default=list, blank=True)
+    revision = models.PositiveIntegerField(default=1)
+    checksum = models.CharField(max_length=64)
+    is_verified = models.BooleanField(default=False)
+    is_enabled = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["template", "command_key", "revision"],
+                name="unique_template_control_revision",
+            )
+        ]
+
+
+class CommissionedControlEnvelope(BaseTeamModel):
+    """Site-specific limits accepted by a qualified customer commissioner."""
+
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name="commissioned_control_envelopes")
+    command_key = models.CharField(max_length=100)
+    operating_limits = models.JSONField(default=dict)
+    prerequisites = models.JSONField(default=list, blank=True)
+    evidence = models.JSONField(default=dict, blank=True)
+    revision = models.PositiveIntegerField(default=1)
+    checksum = models.CharField(max_length=64)
+    commissioned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="commissioned_control_envelopes",
+    )
+    commissioned_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["device", "command_key", "revision"],
+                name="unique_commissioned_control_revision",
+            )
+        ]
+
+
+class RemoteControlScope(BaseTeamModel):
+    """Emergency/activation state at a customer-owned control boundary."""
+
+    class Mode(models.TextChoices):
+        DISABLED = "disabled", _("Disabled")
+        COMMISSIONING = "commissioning", _("Commissioning")
+        ENABLED = "enabled", _("Enabled")
+        SUSPENDED = "suspended", _("Suspended")
+
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, null=True, blank=True)
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, null=True, blank=True)
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, null=True, blank=True)
+    command_key = models.CharField(max_length=100, blank=True)
+    mode = models.CharField(max_length=20, choices=Mode.choices, default=Mode.DISABLED)
+    control_epoch = models.PositiveBigIntegerField(default=1)
+    reason = models.TextField(blank=True)
+
+
+class CommandPolicy(BaseTeamModel):
+    """Customer-owned operational policy, bounded by technical and commissioned limits."""
+
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, null=True, blank=True)
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, null=True, blank=True)
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, null=True, blank=True)
+    command_key = models.CharField(max_length=100)
+    allowed_roles = models.JSONField(default=list)
+    customer_limits = models.JSONField(default=dict)
+    prerequisites = models.JSONField(default=list, blank=True)
+    approval_required = models.BooleanField(default=False)
+    risk = models.CharField(
+        max_length=16,
+        choices=(
+            ("diagnostic", _("Diagnostic")),
+            ("low", _("Low")),
+            ("high", _("High")),
+            ("critical", _("Critical")),
+        ),
+        default="high",
+    )
+    revision = models.PositiveIntegerField(default=1)
+    checksum = models.CharField(max_length=64)
+    is_enabled = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["device", "command_key", "revision"],
+                name="unique_command_policy_revision",
+            )
+        ]
+
+
 class RemoteCommand(BaseTeamModel):
     """Canonical governed command intent, separate from MQTT transport attempts."""
 
@@ -506,6 +615,13 @@ class RemoteCommand(BaseTeamModel):
     policy_snapshot = models.JSONField(default=dict, blank=True)
     request_payload = models.JSONField(default=dict, blank=True)
     response_payload = models.JSONField(default=dict, blank=True)
+    schema_version = models.PositiveIntegerField(default=1)
+    template_revision = models.PositiveIntegerField(default=0)
+    commissioning_revision = models.PositiveIntegerField(default=0)
+    policy_revision = models.PositiveIntegerField(default=0)
+    policy_checksum = models.CharField(max_length=64, blank=True)
+    signing_key_id = models.CharField(max_length=64, blank=True)
+    signature = models.TextField(blank=True)
     control_epoch = models.PositiveBigIntegerField(default=1)
     sequence_number = models.PositiveBigIntegerField(default=0)
     idempotency_key = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
@@ -570,6 +686,51 @@ class CommandOutbox(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=["status", "available_at"])]
+
+
+class CommandTransportAttempt(models.Model):
+    """One bounded pre-ack publish attempt; no retry is allowed after ambiguity."""
+
+    command = models.ForeignKey(RemoteCommand, on_delete=models.CASCADE, related_name="publish_attempts")
+    outbox = models.ForeignKey(CommandOutbox, on_delete=models.CASCADE, related_name="transport_attempts")
+    attempt_number = models.PositiveIntegerField()
+    request_id = models.UUIDField(null=True, blank=True)
+    state = models.CharField(max_length=32, default="started")
+    broker_message_id = models.PositiveIntegerField(null=True, blank=True)
+    error = models.TextField(blank=True)
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["command", "attempt_number"],
+                name="unique_command_transport_attempt",
+            )
+        ]
+
+
+class GatewayControlPolicyBundle(BaseTeamModel):
+    """Signed retained edge policy and its acknowledgement state."""
+
+    gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="control_policy_bundles")
+    revision = models.PositiveIntegerField()
+    control_epoch = models.PositiveBigIntegerField()
+    payload = models.JSONField(default=dict)
+    checksum = models.CharField(max_length=64)
+    signing_key_id = models.CharField(max_length=64)
+    signature = models.TextField()
+    published_at = models.DateTimeField(null=True, blank=True)
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["gateway", "revision"],
+                name="unique_gateway_policy_bundle_revision",
+            )
+        ]
 
 
 class FirmwareRelease(models.Model):

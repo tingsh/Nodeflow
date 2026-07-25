@@ -11,7 +11,8 @@ from django.utils import timezone
 
 from apps.teams.models import Team
 
-from .models import CommandEvent, CommandOutbox, Device, RemoteCommand
+from .control_governance import GovernanceDenied
+from .models import CommandEvent, CommandOutbox, CommandTransportAttempt, Device, RemoteCommand
 
 
 class CommandDenied(ValueError):
@@ -238,19 +239,66 @@ def _request_remote_command_atomic(
     normalized = _normalize_value(value)
     request_params = dict(params or {})
     policy_snapshot = {
-        "phase": "containment",
+        "phase": "governance",
         "team_mode": team.remote_control_mode,
         "permission": definition.permission,
         "state_changing": definition.state_changing,
     }
+    template_revision = 0
+    commissioning_revision = 0
+    policy_revision = 0
+    policy_checksum = ""
     if device:
         if operation in {"read_device", "write_device"}:
-            request_params, register_snapshot = resolve_device_params(device, command_key, operation, value)
-            policy_snapshot["register"] = register_snapshot
-            normalized = request_params.get("value")
+            try:
+                request_params, register_snapshot = resolve_device_params(device, command_key, operation, value)
+                policy_snapshot["register"] = register_snapshot
+                normalized = request_params.get("value")
+                if operation == "write_device" and team.remote_control_mode == Team.RemoteControlMode.CONTROLLED:
+                    from .control_governance import (
+                        effective_control_envelope,
+                        validate_control_value,
+                    )
+
+                    envelope = effective_control_envelope(
+                        device=device,
+                        command_key=command_key,
+                        user=requested_by,
+                    )
+                    normalized, encoded = validate_control_value(
+                        envelope=envelope,
+                        value=value,
+                        device=device,
+                    )
+                    mapping = envelope.template.connector_mapping
+                    request_params = {
+                        "device_id": str(device.pk),
+                        "device_name": device.name,
+                        "command_key": command_key,
+                        "functionCode": int(mapping["functionCode"]),
+                        "address": int(mapping["address"]),
+                        "value": encoded,
+                        "expected_value": normalized,
+                        "unit": envelope.template.unit,
+                        "data_type": envelope.template.data_type,
+                        "prerequisites": envelope.prerequisites,
+                    }
+                    if mapping.get("type"):
+                        request_params["type"] = mapping["type"]
+                    policy_snapshot["effective_envelope"] = envelope.snapshot()
+                    template_revision = envelope.template.revision
+                    commissioning_revision = envelope.commissioned.revision
+                    policy_revision = envelope.policy.revision
+                    policy_checksum = envelope.policy.checksum
+            except CommandDenied as exc:
+                denial = denial or (exc.code, str(exc))
+            except GovernanceDenied as exc:
+                denial = denial or (exc.code, str(exc))
         request_params["device_id"] = str(device.pk)
         request_params["device_name"] = device.name
 
+    previous = RemoteCommand.objects.filter(device=device).order_by("-sequence_number").first() if device else None
+    sequence_number = (previous.sequence_number + 1) if previous else 1
     status = RemoteCommand.Status.POLICY_DENIED if denial else RemoteCommand.Status.QUEUED
     command = RemoteCommand.objects.create(
         team=team,
@@ -268,7 +316,12 @@ def _request_remote_command_atomic(
         actor_snapshot=actor_snapshot(requested_by),
         policy_snapshot=policy_snapshot,
         request_payload={"method": operation, "params": request_params},
+        template_revision=template_revision,
+        commissioning_revision=commissioning_revision,
+        policy_revision=policy_revision,
+        policy_checksum=policy_checksum,
         control_epoch=team.remote_control_epoch,
+        sequence_number=sequence_number,
         expires_at=timezone.now() + timedelta(seconds=max(5, min(ttl_seconds, 300))),
         error_code=denial[0] if denial else "",
         error_message=denial[1] if denial else "",
@@ -304,7 +357,8 @@ def _schedule_outbox_dispatch(outbox_id: int) -> None:
 
 
 def dispatch_outbox(outbox_id: int) -> RemoteCommand | None:
-    from apps.telemetry.mqtt_publisher import publish_rpc_command
+    from apps.telemetry.mqtt_publisher import MqttPublishOutcomeUnknown, publish_rpc_command
+    from .remote_control_crypto import build_signed_command_envelope
 
     with transaction.atomic():
         outbox = (
@@ -334,18 +388,62 @@ def dispatch_outbox(outbox_id: int) -> RemoteCommand | None:
         outbox.save(update_fields=["status", "claimed_at", "attempt_count", "updated_at"])
         command.status = RemoteCommand.Status.DISPATCHING
         command.save(update_fields=["status", "updated_at"])
+        attempt = CommandTransportAttempt.objects.create(
+            command=command,
+            outbox=outbox,
+            attempt_number=outbox.attempt_count,
+        )
 
     try:
+        envelope = build_signed_command_envelope(command)
+        command.signing_key_id = envelope["signing_key_id"]
+        command.signature = envelope["signature"]
+        command.save(update_fields=["signing_key_id", "signature", "updated_at"])
         rpc = publish_rpc_command(
             command.gateway,
             command.operation,
             command.request_payload.get("params", {}),
             remote_command=command,
+            governed_envelope=envelope,
         )
+    except MqttPublishOutcomeUnknown as exc:
+        with transaction.atomic():
+            outbox = CommandOutbox.objects.select_for_update().get(pk=outbox_id)
+            command = RemoteCommand.objects.select_for_update().get(pk=outbox.command_id)
+            attempt = CommandTransportAttempt.objects.select_for_update().get(pk=attempt.pk)
+            attempt.request_id = exc.rpc_record.request_id
+            attempt.state = "outcome_unknown"
+            attempt.error = str(exc)
+            attempt.completed_at = timezone.now()
+            attempt.save(
+                update_fields=["request_id", "state", "error", "completed_at"]
+            )
+            outbox.status = CommandOutbox.Status.PUBLISHED
+            outbox.last_error = str(exc)
+            command.status = RemoteCommand.Status.OUTCOME_UNKNOWN
+            command.error_code = "broker_ack_unknown"
+            command.error_message = str(exc)
+            outbox.save(update_fields=["status", "last_error", "updated_at"])
+            command.save(
+                update_fields=["status", "error_code", "error_message", "updated_at"]
+            )
+            append_command_event(
+                command,
+                "broker_ack_unknown",
+                from_status=RemoteCommand.Status.DISPATCHING,
+                to_status=RemoteCommand.Status.OUTCOME_UNKNOWN,
+                evidence={"request_id": str(exc.rpc_record.request_id)},
+            )
+        return command
     except Exception as exc:
         with transaction.atomic():
             outbox = CommandOutbox.objects.select_for_update().get(pk=outbox_id)
             command = RemoteCommand.objects.select_for_update().get(pk=outbox.command_id)
+            attempt = CommandTransportAttempt.objects.select_for_update().get(pk=attempt.pk)
+            attempt.state = "failed_before_ack"
+            attempt.error = str(exc)
+            attempt.completed_at = timezone.now()
+            attempt.save(update_fields=["state", "error", "completed_at"])
             outbox.status = CommandOutbox.Status.FAILED
             outbox.last_error = str(exc)
             command.status = RemoteCommand.Status.FAILED
@@ -367,14 +465,20 @@ def dispatch_outbox(outbox_id: int) -> RemoteCommand | None:
         command = RemoteCommand.objects.select_for_update().get(pk=outbox.command_id)
         outbox.status = CommandOutbox.Status.PUBLISHED
         outbox.published_at = timezone.now()
-        command.status = RemoteCommand.Status.PUBLISH_ACCEPTED
+        command.status = RemoteCommand.Status.BROKER_ACKNOWLEDGED
+        command.broker_acknowledged_at = timezone.now()
+        attempt = CommandTransportAttempt.objects.select_for_update().get(pk=attempt.pk)
+        attempt.request_id = rpc.request_id
+        attempt.state = "broker_acknowledged"
+        attempt.completed_at = timezone.now()
+        attempt.save(update_fields=["request_id", "state", "completed_at"])
         outbox.save(update_fields=["status", "published_at", "updated_at"])
-        command.save(update_fields=["status", "updated_at"])
+        command.save(update_fields=["status", "broker_acknowledged_at", "updated_at"])
         append_command_event(
             command,
-            "publish_accepted",
+            "broker_acknowledged",
             from_status=RemoteCommand.Status.DISPATCHING,
-            to_status=RemoteCommand.Status.PUBLISH_ACCEPTED,
+            to_status=RemoteCommand.Status.BROKER_ACKNOWLEDGED,
             evidence={"rpc_request_id": str(rpc.request_id)},
         )
     return command
