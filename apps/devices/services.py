@@ -580,11 +580,7 @@ def _commissioning_candidates(gateway):
         if matched_template_id:
             matched_template = visible_templates_for_team(gateway.team).filter(id=matched_template_id).first()
         score = min(100, max(0, int(discovery.get("matched_template_score") or 0)))
-        status = (
-            "ready"
-            if matched_template and matched_template.is_verified and score >= 80
-            else "needs_template"
-        )
+        status = "ready" if matched_template and matched_template.is_verified and score >= 80 else "needs_template"
         if interface and interface in registered_ports:
             status = "registered"
         candidates.append(
@@ -605,9 +601,7 @@ def _commissioning_candidates(gateway):
                     "Novena verified"
                     if matched_template and matched_template.is_verified
                     else (
-                        "AI draft"
-                        if matched_template and matched_template.source == "ai_generated"
-                        else "Unvalidated"
+                        "AI draft" if matched_template and matched_template.source == "ai_generated" else "Unvalidated"
                     )
                 ),
                 "status": status,
@@ -632,11 +626,7 @@ def build_commissioning_context(team, gateway=None, session=None):
         from .deployment_setup import gateway_readiness, sync_setup_run
         from .models import DeploymentSetupRun
 
-        setup_run = (
-            DeploymentSetupRun.objects.filter(team=team, gateway=gateway)
-            .order_by("-created_at")
-            .first()
-        )
+        setup_run = DeploymentSetupRun.objects.filter(team=team, gateway=gateway).order_by("-created_at").first()
         if setup_run:
             setup_run = sync_setup_run(setup_run)
         readiness = gateway_readiness(gateway)

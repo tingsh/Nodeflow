@@ -441,16 +441,12 @@ class Command(BaseCommand):
                     config_record.status = incoming_status
                     config_record.technical_error = attrs.get("config_update_error", "") or ""
                     config_record.error_message = (
-                        customer_safe_error(config_record.technical_error)
-                        if config_record.technical_error
-                        else ""
+                        customer_safe_error(config_record.technical_error) if config_record.technical_error else ""
                     )
                     config_record.error_code = attrs.get("config_update_error_code", "") or ""
                     config_record.rollback_performed = bool(attrs.get("rollback_performed", False))
                     config_record.connector_results = attrs.get("connector_results", []) or []
-                    config_record.rollback_connector_results = (
-                        attrs.get("rollback_connector_results", []) or []
-                    )
+                    config_record.rollback_connector_results = attrs.get("rollback_connector_results", []) or []
                 config_record.acknowledged_at = timezone.now()
                 config_record.save(
                     update_fields=[

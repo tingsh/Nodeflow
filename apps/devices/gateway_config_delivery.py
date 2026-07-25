@@ -60,9 +60,7 @@ def queue_gateway_config(gateway, action: str, config: dict, *, setup_run=None) 
         .first()
         or 0
     )
-    expires_at = timezone.now() + timedelta(
-        seconds=int(getattr(settings, "GATEWAY_CONFIG_ENVELOPE_TTL_SECONDS", 300))
-    )
+    expires_at = timezone.now() + timedelta(seconds=int(getattr(settings, "GATEWAY_CONFIG_ENVELOPE_TTL_SECONDS", 300)))
     config_record = GatewayConfig.objects.create(
         team=locked_gateway.team,
         gateway=locked_gateway,
@@ -188,9 +186,7 @@ def dispatch_due_gateway_config_outboxes(limit=100) -> int:
             ],
             next_attempt_at__lte=now,
         )
-        .filter(
-            models.Q(lease_expires_at__isnull=True) | models.Q(lease_expires_at__lte=now)
-        )
+        .filter(models.Q(lease_expires_at__isnull=True) | models.Q(lease_expires_at__lte=now))
         .order_by("next_attempt_at")
         .values_list("pk", flat=True)[:limit]
     )

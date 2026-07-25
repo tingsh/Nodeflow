@@ -995,14 +995,18 @@ def htmx_device_create(request, team_slug):
 @require_permission("view_devices")
 def template_library_search(request, team_slug):
     query = request.GET.get("q", "")
-    templates = visible_templates_for_team(request.team).filter(
-        Q(name__icontains=query)
-        | Q(manufacturer__icontains=query)
-        | Q(model_number__icontains=query)
-        | Q(device_type__icontains=query)
-        | Q(protocol__icontains=query)
-        | Q(category__icontains=query)
-    ).order_by("-is_verified", "created_by_team_id", "name")
+    templates = (
+        visible_templates_for_team(request.team)
+        .filter(
+            Q(name__icontains=query)
+            | Q(manufacturer__icontains=query)
+            | Q(model_number__icontains=query)
+            | Q(device_type__icontains=query)
+            | Q(protocol__icontains=query)
+            | Q(category__icontains=query)
+        )
+        .order_by("-is_verified", "created_by_team_id", "name")
+    )
     template_name = (
         "onboarding/partials/template_search_results.html"
         if request.GET.get("context") == "guided_setup"
@@ -1076,10 +1080,14 @@ def ai_template_generate(request, team_slug):
         )
 
     # Check for existing template first (case-insensitive)
-    existing = visible_templates_for_team(request.team).filter(
-        manufacturer__iexact=manufacturer,
-        model_number__iexact=model_number,
-    ).first()
+    existing = (
+        visible_templates_for_team(request.team)
+        .filter(
+            manufacturer__iexact=manufacturer,
+            model_number__iexact=model_number,
+        )
+        .first()
+    )
     if existing:
         return render(
             request, "devices/partials/ai_template_result.html", {"status": "found_existing", "template": existing}
@@ -1092,8 +1100,7 @@ def ai_template_generate(request, team_slug):
         invalid_pdf = (
             not documentation_file.name.lower().endswith(".pdf")
             or documentation_file.size > 10 * 1024 * 1024
-            or documentation_file.content_type
-            not in {"application/pdf", "application/x-pdf"}
+            or documentation_file.content_type not in {"application/pdf", "application/x-pdf"}
         )
         signature = documentation_file.read(5)
         documentation_file.seek(0)

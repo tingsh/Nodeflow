@@ -216,12 +216,8 @@ def human_config_preview(gateway):
                 "protocol": device.get_protocol_display(),
                 "target": device.port or "",
                 "slave_id": (device.connection_config or {}).get("slave_id"),
-                "polling_interval": (
-                    device.template.default_polling_interval if device.template else None
-                ),
-                "telemetry_keys": [
-                    datapoint["key"] for datapoint in normalized_datapoints(device.template)
-                ]
+                "polling_interval": (device.template.default_polling_interval if device.template else None),
+                "telemetry_keys": [datapoint["key"] for datapoint in normalized_datapoints(device.template)]
                 if device.template
                 else [],
             }

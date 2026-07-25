@@ -171,9 +171,7 @@ def _check_remote_control_configuration() -> list[CheckResult]:
     retention = int(getattr(settings, "REMOTE_CONTROL_AUDIT_RETENTION_DAYS", 0))
     config_ttl = int(getattr(settings, "GATEWAY_CONFIG_ENVELOPE_TTL_SECONDS", 0))
     config_attempts = int(getattr(settings, "GATEWAY_CONFIG_OUTBOX_MAX_ATTEMPTS", 0))
-    telemetry_timeout = int(
-        getattr(settings, "GUIDED_SETUP_FIRST_TELEMETRY_TIMEOUT_SECONDS", 0)
-    )
+    telemetry_timeout = int(getattr(settings, "GUIDED_SETUP_FIRST_TELEMETRY_TIMEOUT_SECONDS", 0))
     from apps.devices.models import GatewayControlPolicyBundle
     from apps.teams.models import Team
 
@@ -221,8 +219,7 @@ def _check_remote_control_configuration() -> list[CheckResult]:
             "Guided Setup",
             "First telemetry timeout",
             "OK" if 30 <= telemetry_timeout <= 3600 else "FAIL",
-            "GUIDED_SETUP_FIRST_TELEMETRY_TIMEOUT_SECONDS="
-            f"{telemetry_timeout}; expected 30-3600 seconds.",
+            f"GUIDED_SETUP_FIRST_TELEMETRY_TIMEOUT_SECONDS={telemetry_timeout}; expected 30-3600 seconds.",
         ),
     ]
 

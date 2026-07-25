@@ -315,11 +315,7 @@ def step_3_discover(request, team_slug):
                 )
             else:
                 raw_targets = request.POST.get("tcp_hosts", "")
-                tcp_hosts = [
-                    target.strip()
-                    for target in re.split(r"[\s,]+", raw_targets)
-                    if target.strip()
-                ][:64]
+                tcp_hosts = [target.strip() for target in re.split(r"[\s,]+", raw_targets) if target.strip()][:64]
                 try:
                     from apps.devices.remote_control import request_remote_command
 
@@ -467,8 +463,7 @@ def step_3_discover(request, team_slug):
                     data_type = "uint16"
                 default_count = 2 if data_type in {"float32", "int32"} else 1
                 register_map[key] = {
-                    "label": request.POST.get(f"point_label_{index}", "").strip()
-                    or key.replace("_", " ").title(),
+                    "label": request.POST.get(f"point_label_{index}", "").strip() or key.replace("_", " ").title(),
                     "address": register_address,
                     "functionCode": function_code,
                     "type": data_type,
@@ -693,9 +688,7 @@ def discovery_poll(request, team_slug):
     profile = get_site_profile(gateway.site) if gateway else profile_for_request(request)
     templates = rank_templates_for_profile(visible_templates_for_team(request.team), profile)
     setup_run = (
-        DeploymentSetupRun.objects.filter(team=request.team, gateway=gateway)
-        .order_by("-created_at")
-        .first()
+        DeploymentSetupRun.objects.filter(team=request.team, gateway=gateway).order_by("-created_at").first()
         if gateway
         else None
     )
@@ -712,9 +705,7 @@ def discovery_poll(request, team_slug):
             "gateway": gateway,
             "profile": profile,
             "setup_run": setup_run,
-            "setup_items": setup_run.items.select_related("device", "selected_template")
-            if setup_run
-            else [],
+            "setup_items": setup_run.items.select_related("device", "selected_template") if setup_run else [],
             "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
         },
     )
@@ -754,9 +745,7 @@ def step_4_alert(request, team_slug):
     from apps.devices.deployment_setup import deployment_progress, sync_setup_run
 
     setup_run = (
-        DeploymentSetupRun.objects.filter(team=request.team, gateway=device.gateway)
-        .order_by("-created_at")
-        .first()
+        DeploymentSetupRun.objects.filter(team=request.team, gateway=device.gateway).order_by("-created_at").first()
     )
     if setup_run:
         setup_run = sync_setup_run(setup_run)

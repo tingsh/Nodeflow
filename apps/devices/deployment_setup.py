@@ -43,11 +43,7 @@ def redact_support_evidence(value):
     """Remove credentials while retaining diagnostic structure."""
     if isinstance(value, dict):
         return {
-            key: (
-                "[redacted]"
-                if str(key).lower() in SENSITIVE_EVIDENCE_KEYS
-                else redact_support_evidence(item)
-            )
+            key: ("[redacted]" if str(key).lower() in SENSITIVE_EVIDENCE_KEYS else redact_support_evidence(item))
             for key, item in value.items()
         }
     if isinstance(value, list):
@@ -223,9 +219,7 @@ def gateway_readiness(gateway: Gateway) -> dict:
             "label": "Connection security",
             "status": "pass" if gateway.tls_ok is not False else "fail",
             "message": (
-                "TLS is valid."
-                if gateway.tls_ok is not False
-                else "The secure connection could not be verified."
+                "TLS is valid." if gateway.tls_ok is not False else "The secure connection could not be verified."
             ),
             "action": "Check the Gateway clock and certificate chain.",
             "blocking": True,
@@ -383,11 +377,7 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
     }:
         run.state = DeploymentSetupRun.State.CONFIGURING
         run.current_step = "equipment"
-        event_type = (
-            "discovery_cancelled"
-            if discovery_status == "cancelled"
-            else "discovery_completed"
-        )
+        event_type = "discovery_cancelled" if discovery_status == "cancelled" else "discovery_completed"
         if not run.events.filter(event_type=event_type).exists():
             append_setup_event(
                 run,
@@ -436,9 +426,7 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
                 else:
                     item.state = DeploymentSetupItem.State.NEEDS_ATTENTION
                     message = (
-                        result.get("message")
-                        or rpc.error_message
-                        or "Novena could not validate the selected signals."
+                        result.get("message") or rpc.error_message or "Novena could not validate the selected signals."
                     )
                     event_type = "validation_failed"
                     if item.device:
@@ -449,9 +437,14 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
                 item.save()
                 append_setup_event(run, event_type, message, item=item, evidence=item.validation_result)
 
-        if item.device_id and item.device.last_telemetry_at and item.state in {
-            DeploymentSetupItem.State.APPLIED,
-        }:
+        if (
+            item.device_id
+            and item.device.last_telemetry_at
+            and item.state
+            in {
+                DeploymentSetupItem.State.APPLIED,
+            }
+        ):
             item.state = DeploymentSetupItem.State.TELEMETRY_CONFIRMED
             item.first_telemetry_at = item.device.last_telemetry_at
             item.save(update_fields=["state", "first_telemetry_at", "updated_at"])
@@ -485,9 +478,7 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
                     },
                 )
         elif latest_config.status == "active":
-            run.items.filter(state=DeploymentSetupItem.State.QUEUED).update(
-                state=DeploymentSetupItem.State.APPLIED
-            )
+            run.items.filter(state=DeploymentSetupItem.State.QUEUED).update(state=DeploymentSetupItem.State.APPLIED)
             run.state = DeploymentSetupRun.State.VERIFYING
             run.current_step = "verify"
             if not run.events.filter(event_type="configuration_active").exists():
@@ -507,12 +498,8 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
                     "Recommended alerts are ready for customer review.",
                 )
             telemetry_deadline = latest_config.acknowledged_at or latest_config.pushed_at
-            timeout_seconds = int(
-                getattr(settings, "GUIDED_SETUP_FIRST_TELEMETRY_TIMEOUT_SECONDS", 180)
-            )
-            if telemetry_deadline and timezone.now() >= telemetry_deadline + timedelta(
-                seconds=timeout_seconds
-            ):
+            timeout_seconds = int(getattr(settings, "GUIDED_SETUP_FIRST_TELEMETRY_TIMEOUT_SECONDS", 180))
+            if telemetry_deadline and timezone.now() >= telemetry_deadline + timedelta(seconds=timeout_seconds):
                 for item in run.items.filter(
                     state=DeploymentSetupItem.State.APPLIED,
                     first_telemetry_at__isnull=True,
@@ -531,9 +518,9 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
                             evidence={"retryable": True},
                         )
         elif latest_config.status == "rolled_back":
-            run.items.filter(
-                state__in=[DeploymentSetupItem.State.QUEUED, DeploymentSetupItem.State.APPLIED]
-            ).update(state=DeploymentSetupItem.State.ROLLED_BACK)
+            run.items.filter(state__in=[DeploymentSetupItem.State.QUEUED, DeploymentSetupItem.State.APPLIED]).update(
+                state=DeploymentSetupItem.State.ROLLED_BACK
+            )
             run.state = DeploymentSetupRun.State.FAILED
             if not run.events.filter(event_type="configuration_rolled_back").exists():
                 append_setup_event(
@@ -546,16 +533,13 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
                     },
                 )
         elif latest_config.status == "failed":
-            run.items.filter(state=DeploymentSetupItem.State.QUEUED).update(
-                state=DeploymentSetupItem.State.FAILED
-            )
+            run.items.filter(state=DeploymentSetupItem.State.QUEUED).update(state=DeploymentSetupItem.State.FAILED)
             run.state = DeploymentSetupRun.State.FAILED
             if not run.events.filter(event_type="configuration_failed").exists():
                 append_setup_event(
                     run,
                     "configuration_failed",
-                    latest_config.error_message
-                    or "The Gateway could not activate this configuration.",
+                    latest_config.error_message or "The Gateway could not activate this configuration.",
                     evidence={
                         "request_id": str(latest_config.request_id),
                         "error_code": latest_config.error_code,
@@ -568,7 +552,8 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
         run.current_step = "go_live"
         run.completed_at = timezone.now()
     elif DeploymentSetupItem.State.TELEMETRY_CONFIRMED in states and any(
-        state in {
+        state
+        in {
             DeploymentSetupItem.State.NEEDS_ATTENTION,
             DeploymentSetupItem.State.FAILED,
             DeploymentSetupItem.State.ROLLED_BACK,
@@ -668,20 +653,14 @@ def support_bundle(run: DeploymentSetupRun) -> dict:
             "revision": latest_config.revision if latest_config else None,
             "checksum": latest_config.checksum if latest_config else None,
             "status": latest_config.status if latest_config else None,
-            "connector_results": redact_support_evidence(latest_config.connector_results)
-            if latest_config
-            else [],
-            "rollback_connector_results": redact_support_evidence(
-                latest_config.rollback_connector_results
-            )
+            "connector_results": redact_support_evidence(latest_config.connector_results) if latest_config else [],
+            "rollback_connector_results": redact_support_evidence(latest_config.rollback_connector_results)
             if latest_config
             else [],
             "rollback_performed": latest_config.rollback_performed if latest_config else False,
             "error_code": latest_config.error_code if latest_config else "",
             "error_message": latest_config.error_message if latest_config else "",
-            "technical_error": redact_support_evidence(latest_config.technical_error)
-            if latest_config
-            else "",
+            "technical_error": redact_support_evidence(latest_config.technical_error) if latest_config else "",
         },
         "timeline": [
             {
