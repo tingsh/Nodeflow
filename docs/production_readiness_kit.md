@@ -37,7 +37,7 @@ Production files added by this kit:
 - `deploy/nginx/novena.conf.example`: host Nginx reverse proxy example.
 - `deploy/mosquitto/mosquitto.prod.conf`: Mosquitto production listener config.
 - `deploy/mosquitto/dynamic-security.example.json`: empty seed file; initialize real credentials before production.
-- `deploy/backups/*.sh`: Postgres backup, restore, and retention scripts.
+- `deploy/backups/*.sh`: Postgres and private-report backup, restore, and retention scripts.
 - `deploy/systemd/*.example`: nightly backup timer examples.
 - `docs/production_backup_restore.md`: backup and restore walkthrough.
 
@@ -161,6 +161,7 @@ Minimum routine:
 
 ```bash
 ./deploy/backups/backup_postgres.sh
+./deploy/backups/backup_private_media.sh
 ./deploy/backups/backup_retention.sh
 ```
 
