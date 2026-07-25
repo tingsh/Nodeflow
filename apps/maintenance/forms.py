@@ -23,6 +23,8 @@ class MaintenanceTicketForm(forms.ModelForm):
             "status",
             "assigned_to",
             "due_date",
+            "downtime_minutes",
+            "labor_minutes",
             "send_email_notification",
             "send_whatsapp_notification",
         ]
@@ -43,6 +45,8 @@ class MaintenanceTicketForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         team = kwargs.pop("team", None)
         super().__init__(*args, **kwargs)
+        self.fields["downtime_minutes"].required = False
+        self.fields["labor_minutes"].required = False
         if team:
             self.fields["device"].queryset = self.fields["device"].queryset.filter(team=team)
             self.fields["template"].queryset = TicketTemplate.objects.filter(team=team)
