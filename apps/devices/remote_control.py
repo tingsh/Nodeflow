@@ -348,6 +348,7 @@ def _schedule_outbox_dispatch(outbox_id: int) -> None:
 
 def dispatch_outbox(outbox_id: int) -> RemoteCommand | None:
     from apps.telemetry.mqtt_publisher import MqttPublishOutcomeUnknown, publish_rpc_command
+
     from .remote_control_crypto import build_signed_command_envelope
 
     with transaction.atomic():
@@ -405,18 +406,14 @@ def dispatch_outbox(outbox_id: int) -> RemoteCommand | None:
             attempt.state = "outcome_unknown"
             attempt.error = str(exc)
             attempt.completed_at = timezone.now()
-            attempt.save(
-                update_fields=["request_id", "state", "error", "completed_at"]
-            )
+            attempt.save(update_fields=["request_id", "state", "error", "completed_at"])
             outbox.status = CommandOutbox.Status.PUBLISHED
             outbox.last_error = str(exc)
             command.status = RemoteCommand.Status.OUTCOME_UNKNOWN
             command.error_code = "broker_ack_unknown"
             command.error_message = str(exc)
             outbox.save(update_fields=["status", "last_error", "updated_at"])
-            command.save(
-                update_fields=["status", "error_code", "error_message", "updated_at"]
-            )
+            command.save(update_fields=["status", "error_code", "error_message", "updated_at"])
             append_command_event(
                 command,
                 "broker_ack_unknown",
