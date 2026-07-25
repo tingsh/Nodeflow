@@ -595,9 +595,7 @@ def _cancel_claim_locked(outbox, command, *, code, message):
     command.transport_status = "cancelled"
     command.error_code = code
     command.error_message = message
-    command.save(
-        update_fields=["status", "transport_status", "error_code", "error_message", "updated_at"]
-    )
+    command.save(update_fields=["status", "transport_status", "error_code", "error_message", "updated_at"])
     _append_command_event_locked(
         command,
         "dispatch_cancelled",
@@ -678,9 +676,7 @@ def _record_pre_ack_failure(outbox_id, attempt_id, exc):
                     "updated_at",
                 ]
             )
-            command.save(
-                update_fields=["transport_status", "error_code", "error_message", "updated_at"]
-            )
+            command.save(update_fields=["transport_status", "error_code", "error_message", "updated_at"])
             _append_command_event_locked(
                 command,
                 "outbox_retry_scheduled",
@@ -708,9 +704,7 @@ def dispatch_outbox(outbox_id: int) -> RemoteCommand | None:
             return None
         claimable = outbox.status in {CommandOutbox.Status.PENDING, CommandOutbox.Status.RETRY}
         claimable = claimable or (
-            outbox.status == CommandOutbox.Status.CLAIMED
-            and outbox.lease_expires_at
-            and outbox.lease_expires_at <= now
+            outbox.status == CommandOutbox.Status.CLAIMED and outbox.lease_expires_at and outbox.lease_expires_at <= now
         )
         if not claimable or outbox.next_attempt_at > now:
             return None
@@ -767,9 +761,7 @@ def dispatch_outbox(outbox_id: int) -> RemoteCommand | None:
         outbox.claimed_at = now
         outbox.lease_expires_at = now + timedelta(seconds=lease_seconds)
         outbox.attempt_count += 1
-        outbox.save(
-            update_fields=["status", "claimed_at", "lease_expires_at", "attempt_count", "updated_at"]
-        )
+        outbox.save(update_fields=["status", "claimed_at", "lease_expires_at", "attempt_count", "updated_at"])
         if STATUS_ORDER.get(command.status, -1) < STATUS_ORDER[RemoteCommand.Status.DISPATCHING]:
             previous = command.status
             command.status = RemoteCommand.Status.DISPATCHING
@@ -860,9 +852,7 @@ def dispatch_outbox(outbox_id: int) -> RemoteCommand | None:
         attempt.completed_at = timezone.now()
         attempt.save(update_fields=["request_id", "state", "completed_at"])
         outbox.save(update_fields=["status", "published_at", "lease_expires_at", "updated_at"])
-        command.save(
-            update_fields=["status", "transport_status", "broker_acknowledged_at", "updated_at"]
-        )
+        command.save(update_fields=["status", "transport_status", "broker_acknowledged_at", "updated_at"])
         _append_command_event_locked(
             command,
             "broker_acknowledged",

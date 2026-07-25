@@ -286,9 +286,7 @@ class RemoteControlP1Test(TestCase):
 
 class GovernedEnvelopeContractTest(TestCase):
     def test_fixture_is_exact_hub_produced_payload(self):
-        fixture = json.loads(
-            (Path(settings.BASE_DIR) / "tests/fixtures/governed_command_v1.json").read_text()
-        )
+        fixture = json.loads((Path(settings.BASE_DIR) / "tests/fixtures/governed_command_v1.json").read_text())
         command = SimpleNamespace(
             schema_version=1,
             pk=uuid.UUID("11111111-1111-4111-8111-111111111111"),
