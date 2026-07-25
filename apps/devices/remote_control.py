@@ -294,17 +294,11 @@ def _request_remote_command_atomic(
 
     previous = RemoteCommand.objects.filter(device=device).order_by("-sequence_number").first() if device else None
     sequence_number = (previous.sequence_number + 1) if previous else 1
-    approval_required = bool(
-        policy_snapshot.get("effective_envelope", {}).get("approval_required")
-    )
+    approval_required = bool(policy_snapshot.get("effective_envelope", {}).get("approval_required"))
     status = (
         RemoteCommand.Status.POLICY_DENIED
         if denial
-        else (
-            RemoteCommand.Status.AWAITING_APPROVAL
-            if approval_required
-            else RemoteCommand.Status.QUEUED
-        )
+        else (RemoteCommand.Status.AWAITING_APPROVAL if approval_required else RemoteCommand.Status.QUEUED)
     )
     command = RemoteCommand.objects.create(
         team=team,

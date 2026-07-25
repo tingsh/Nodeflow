@@ -1,5 +1,3 @@
-from datetime import timedelta
-
 from django.test import TestCase
 from django.utils import timezone
 
@@ -25,7 +23,7 @@ from apps.devices.models import (
     Site,
     TemplateControlDefinition,
 )
-from apps.devices.remote_control import request_remote_command
+from apps.devices.remote_control import CommandDenied, request_remote_command
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
 
@@ -250,7 +248,7 @@ class ControlReadinessWorkflowTest(TestCase):
         )
         self.assertEqual(epoch, 2)
         self.assertEqual(RemoteControlScope.objects.get().mode, RemoteControlScope.Mode.SUSPENDED)
-        with self.assertRaises(Exception):
+        with self.assertRaises(CommandDenied):
             request_remote_command(
                 gateway=self.gateway,
                 operation="write_device",

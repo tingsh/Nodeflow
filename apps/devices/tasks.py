@@ -134,9 +134,9 @@ def expire_control_activations():
             mode=RemoteControlScope.Mode.SUSPENDED,
             reason="Annual recommissioning is due",
         )
-        ControlReadinessAssessment.objects.filter(
-            pk=activation.readiness_assessment_id
-        ).update(state=ControlReadinessAssessment.State.RECOMMISSIONING_REQUIRED)
+        ControlReadinessAssessment.objects.filter(pk=activation.readiness_assessment_id).update(
+            state=ControlReadinessAssessment.State.RECOMMISSIONING_REQUIRED
+        )
     return len(expired)
 
 

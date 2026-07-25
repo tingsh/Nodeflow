@@ -1,7 +1,7 @@
+import csv
 import json
 import logging
 import uuid
-import csv
 from datetime import datetime
 
 from django.conf import settings
@@ -23,7 +23,6 @@ from apps.teams.mixins import PermissionRequiredMixin
 
 from .models import (
     ControlActivation,
-    ControlReadinessAssessment,
     Device,
     DeviceTemplate,
     Gateway,
@@ -140,19 +139,23 @@ def command_audit_export(request, format):
         raise Http404
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="remote-command-audit.csv"'
-    fields = list(records[0]) if records else [
-        "command_id",
-        "requested_at",
-        "requester",
-        "gateway",
-        "device",
-        "operation",
-        "command_key",
-        "requested_value",
-        "status",
-        "error_code",
-        "error_message",
-    ]
+    fields = (
+        list(records[0])
+        if records
+        else [
+            "command_id",
+            "requested_at",
+            "requester",
+            "gateway",
+            "device",
+            "operation",
+            "command_key",
+            "requested_value",
+            "status",
+            "error_code",
+            "error_message",
+        ]
+    )
     writer = csv.DictWriter(response, fieldnames=fields)
     writer.writeheader()
     writer.writerows(records)
