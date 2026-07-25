@@ -5,10 +5,12 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from health_check.views import MainView
+from waffle import flag_is_active
 
 from apps.devices.models import Site
 from apps.teams.decorators import require_permission
 from apps.teams.helpers import get_open_invitations_for_user
+from apps.teams.roles import has_permission
 
 
 def home(request):
@@ -42,7 +44,15 @@ def team_home(request, team_slug):
 
     from apps.dashboard.services import build_team_operations_dashboard
 
-    dashboard_context = build_team_operations_dashboard(team)
+    dashboard_context = build_team_operations_dashboard(
+        team,
+        include_impact=bool(flag_is_active(request, "business_impact_roi")),
+        impact_site_ids=[
+            site.id
+            for site in Site.objects.filter(team=team).only("id")
+            if has_permission(request.user, team, "view_business_impact", site=site)
+        ],
+    )
     context = {
         "team": team,
         "active_tab": "dashboard",

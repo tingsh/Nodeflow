@@ -1,0 +1,51 @@
+{% extends "web/app/app_base.html" %}
+{% block app %}
+<div class="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+  <a href="{% url 'web_team:impact:site_detail' request.team.slug site.id %}" class="text-xs font-bold text-primary">← {{ site.name }} impact</a>
+  <h1 class="mt-2 text-2xl font-bold">Trusted business data sources</h1>
+  <p class="mt-1 max-w-3xl text-sm text-base-content/60">Confirm the exact meter or sensor used for each result. A main meter and its submeters are never summed together.</p>
+
+  <div class="mt-6 space-y-4">
+  {% for source in sources %}
+    <form method="post" action="{% url 'web_team:impact:confirm_source' request.team.slug source.id %}" class="rounded-lg border border-base-content/10 bg-base-100 p-5">
+      {% csrf_token %}
+      <div class="flex flex-col gap-4 xl:flex-row xl:items-end">
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="font-bold">{{ source.device.name }} · {{ source.telemetry_key }}</h2>
+            <span class="badge badge-ghost badge-sm">{{ source.get_verification_status_display }}</span>
+            {% if source.device.template.is_verified %}<span class="badge badge-success badge-sm">Verified template</span>{% endif %}
+          </div>
+          <p class="mt-1 text-xs text-base-content/50">{{ source.get_quantity_kind_display }} · raw converted to {{ source.canonical_unit|default:"unitless" }}</p>
+        </div>
+        <label class="min-w-56">
+          <span class="mb-1 block text-xs font-bold text-base-content/50">Meter/source role</span>
+          <select name="source_role" class="select select-bordered select-sm w-full">
+          {% for value, label in source.SourceRole.choices %}<option value="{{ value }}" {% if source.source_role == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="flex items-center gap-2 pb-2 text-sm">
+          <input type="checkbox" name="include_in_totals" class="checkbox checkbox-sm" {% if source.include_in_totals %}checked{% endif %}> Include in totals
+        </label>
+        {% if source.quantity_kind == "temperature" %}
+        <label>
+          <span class="mb-1 block text-xs font-bold text-base-content/50">Calibration</span>
+        <select name="calibration_status" class="select select-bordered select-sm">
+          {% for value, label in source.CalibrationStatus.choices %}<option value="{{ value }}" {% if source.calibration_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        </label>
+        <input type="number" name="calibration_accuracy" min="0" step="0.0001" value="{{ source.calibration_accuracy|default_if_none:'' }}" placeholder="Accuracy ±°C" class="input input-bordered input-sm w-32">
+        <input type="date" name="calibration_expires_at" value="{{ source.calibration_expires_at|date:'Y-m-d' }}" class="input input-bordered input-sm">
+        {% endif %}
+        <button class="btn btn-primary btn-sm rounded-md">Confirm</button>
+      </div>
+    </form>
+  {% empty %}
+    <div class="rounded-lg border border-dashed border-base-content/15 bg-base-100 p-10 text-center">
+      <p class="font-semibold">No trustworthy source suggestions are available.</p>
+      <p class="mt-1 text-sm text-base-content/50">Use a verified equipment template with energy, power, temperature, power-factor, or runtime semantics.</p>
+    </div>
+  {% endfor %}
+  </div>
+</div>
+{% endblock %}

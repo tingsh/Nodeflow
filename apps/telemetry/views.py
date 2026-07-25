@@ -2,7 +2,8 @@ import csv
 
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
+from waffle import flag_is_active
 
 from apps.devices.models import Device, Site
 from apps.devices.solution_profiles import get_site_profile
@@ -331,7 +332,9 @@ def _site_profile_report_rows(site, days):
 
 @login_required
 def site_profile_report(request, team_slug, site_id):
-    site = get_object_or_404(Site, id=site_id, team__slug=team_slug)
+    site = get_object_or_404(Site, id=site_id, team=request.team)
+    if flag_is_active(request, "business_impact_roi"):
+        return redirect("web_team:impact:site_detail", team_slug=team_slug, site_id=site_id)
     days = int(request.GET.get("days", 7))
     context = {
         "site": site,
