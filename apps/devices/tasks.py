@@ -21,6 +21,14 @@ def dispatch_remote_command_outbox(self, outbox_id):
     return str(command.pk) if command else None
 
 
+@shared_task(name="apps.devices.tasks.dispatch_due_remote_command_outboxes")
+def dispatch_due_remote_command_outboxes():
+    """Independent recovery scanner for committed and expired-lease outbox rows."""
+    from .remote_control import dispatch_due_outboxes
+
+    return dispatch_due_outboxes()
+
+
 @shared_task
 def check_device_heartbeats():
     """Persist devices as offline when telemetry freshness exceeds the offline timeout."""

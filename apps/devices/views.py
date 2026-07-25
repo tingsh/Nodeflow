@@ -559,23 +559,37 @@ def gateway_rpc_history(request, team_slug, pk):
 @require_POST
 def device_rpc_command(request, team_slug, gateway_pk, device_pk):
     """Compatibility endpoint: routes customer device RPC through DeviceCommand audit."""
+    from .remote_control_protocol import canonical_device_operation
     from .services import send_device_command
 
-    gateway = Gateway.objects.get(pk=gateway_pk, team=request.team)
-    device = Device.objects.get(pk=device_pk, gateway=gateway)
-
-    method = request.POST.get("method")  # 'write_device' or 'read_device'
-    params = json.loads(request.POST.get("params", "{}"))
-    command_type = "read" if method == "read_device" else "write"
-    key = params.pop("command_key", f"manual_{command_type}")
-    value = params.get("value")
-    command = send_device_command(device, request.user, key, value, command_type=command_type)
+    try:
+        operation = canonical_device_operation(request.POST.get("method"))
+        params = json.loads(request.POST.get("params", "{}"))
+        if not isinstance(params, dict):
+            raise ValueError("Command params must be an object.")
+        if set(params) - {"command_key", "value"}:
+            raise ValueError("Raw register parameters are not accepted.")
+        key = params.get("command_key")
+        if not key:
+            raise ValueError("A mapped canonical device command key is required.")
+        command_type = "write" if operation == "write_device" else "read"
+        gateway = Gateway.objects.get(pk=gateway_pk, team=request.team)
+        device = Device.objects.get(pk=device_pk, gateway=gateway)
+        command = send_device_command(
+            device,
+            request.user,
+            key,
+            params.get("value"),
+            command_type=command_type,
+        )
+    except (ValueError, json.JSONDecodeError) as exc:
+        return JsonResponse({"error": str(exc), "code": getattr(exc, "code", "invalid_request")}, status=400)
 
     return JsonResponse(
         {
             "request_id": str(command.rpc_command.request_id) if command.rpc_command else None,
             "transaction_id": str(command.transaction_id),
-            "method": method,
+            "method": operation,
             "device": device.name,
             "status": command.status,
         }
@@ -688,20 +702,23 @@ class DeviceDetailView(PermissionRequiredMixin, DetailView):
 def device_send_command(request, team_slug, pk):
     from django.shortcuts import get_object_or_404
 
-    device = get_object_or_404(Device, pk=pk, team=request.team)
-    command_type = request.POST.get("command_type") or request.POST.get("type") or "write"
-    method = request.POST.get("method", "")
-    if method == "read_device":
-        command_type = "read"
-    elif method == "write_device":
-        command_type = "write"
-    key = request.POST.get("key") or request.POST.get("command_key") or f"manual_{command_type}"
-    raw_value = request.POST.get("value")
-    if request.POST.get("params"):
-        submitted = json.loads(request.POST.get("params", "{}"))
-        key = submitted.get("command_key", key)
+    from .remote_control_protocol import canonical_device_operation
 
     try:
+        submitted_method = request.POST.get("method") or request.POST.get("command_type") or request.POST.get("type")
+        operation = canonical_device_operation(submitted_method)
+        command_type = "write" if operation == "write_device" else "read"
+        key = request.POST.get("key") or request.POST.get("command_key")
+        raw_value = request.POST.get("value")
+        if request.POST.get("params"):
+            submitted = json.loads(request.POST.get("params", "{}"))
+            if not isinstance(submitted, dict) or set(submitted) - {"command_key", "value"}:
+                raise ValueError("Raw register parameters are not accepted.")
+            key = submitted.get("command_key", key)
+            raw_value = submitted.get("value", raw_value)
+        if not key:
+            raise ValueError("A mapped canonical device command key is required.")
+        device = get_object_or_404(Device, pk=pk, team=request.team)
         from .services import send_device_command
 
         command = send_device_command(

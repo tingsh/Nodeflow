@@ -148,6 +148,7 @@ class DeviceCommandTest(TestCase):
                 "request_id": str(rpc.request_id),
                 "method": "write_device",
                 "status": "success",
+                "stage": "field_execution_verified",
                 "result": {"operation": "write", "response": {"success": True}},
             }
         )
@@ -159,6 +160,40 @@ class DeviceCommandTest(TestCase):
         self.assertEqual(rpc.status, "success")
         self.assertEqual(command.status, "executed")
         self.assertEqual(command.response_payload["result"]["operation"], "write")
+
+    def test_generic_success_without_allowlisted_stage_is_not_called_executed(self):
+        rpc = RpcCommand.objects.create(
+            team=self.team,
+            gateway=self.gateway,
+            request_id="12345678-1234-1234-1234-123456789099",
+            method="write_device",
+            params={"device_name": self.device.name},
+        )
+        command = DeviceCommand.objects.create(
+            team=self.team,
+            device=self.device,
+            command_type="write",
+            command_key="set_speed",
+            value=50,
+            transaction_id="test-tx-generic-success",
+            rpc_command=rpc,
+            status="sent",
+        )
+
+        process_command_response(
+            json.dumps(
+                {
+                    "request_id": str(rpc.request_id),
+                    "method": "write_device",
+                    "status": "success",
+                    "result": {"accepted": True},
+                }
+            )
+        )
+
+        command.refresh_from_db()
+        self.assertEqual(command.status, "sent")
+        self.assertIsNone(command.executed_at)
 
     def test_process_command_response_failure(self):
         command = DeviceCommand.objects.create(

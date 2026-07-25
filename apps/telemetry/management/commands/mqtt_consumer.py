@@ -301,12 +301,15 @@ class Command(BaseCommand):
             "connected_devices": "connected_devices",
             "active_connectors": "active_connectors",
             "remote_control_protocol_version": "remote_control_protocol_version",
+            "remote_control_capabilities": "remote_control_capabilities",
             "remote_control_local_writeback_enabled": "remote_control_local_writeback_enabled",
             "remote_control_policy_loaded": "remote_control_policy_loaded",
             "remote_control_policy_revision": "remote_control_policy_revision",
             "remote_control_epoch": "remote_control_epoch",
             "remote_control_clock_ready": "remote_control_clock_ready",
             "remote_control_journal_ready": "remote_control_journal_ready",
+            "remote_control_event_spool_count": "remote_control_event_spool_count",
+            "remote_control_storage_healthy": "remote_control_storage_healthy",
             "active_interface": "active_interface",
             "failover_count": "failover_count",
             "ethernet_status": "ethernet_status",
@@ -365,6 +368,36 @@ class Command(BaseCommand):
                 acknowledged.acknowledged_at = timezone.now()
                 acknowledged.is_active = True
                 acknowledged.save(update_fields=["acknowledged_at", "is_active", "updated_at"])
+
+        reconciliation = attrs.get("remote_control_reconciliation")
+        if isinstance(reconciliation, list):
+            from apps.devices.models import RemoteCommand
+            from apps.devices.remote_control import transition_command
+
+            for edge_event in reconciliation:
+                command = RemoteCommand.objects.filter(
+                    pk=edge_event.get("command_id"),
+                    gateway=gateway,
+                ).first()
+                if not command:
+                    continue
+                if command.events.filter(
+                    event_type="gateway_journal_reconciled",
+                    evidence=edge_event,
+                ).exists():
+                    continue
+                if edge_event.get("status") == "success" and edge_event.get("stage") == "verified":
+                    target_status = RemoteCommand.Status.RECONCILED_VERIFIED
+                elif edge_event.get("stage") == "rejected":
+                    target_status = RemoteCommand.Status.RECONCILED_NOT_APPLIED
+                else:
+                    target_status = RemoteCommand.Status.RECONCILED_UNRESOLVED
+                transition_command(
+                    command,
+                    target_status,
+                    "gateway_journal_reconciled",
+                    evidence=edge_event,
+                )
 
         # Handle discovery report from Edge auto-scan
         discovery_report = attrs.get("discovery_report")
@@ -429,8 +462,9 @@ class Command(BaseCommand):
 
     def _handle_rpc_response(self, payload, gateway=None):
         """Process RPC command response from a gateway."""
-        from apps.devices.models import RemoteCommand, RpcCommand
-        from apps.devices.remote_control import append_command_event
+        from apps.devices.models import RpcCommand
+        from apps.devices.remote_control import append_command_event, transition_command
+        from apps.devices.remote_control_protocol import GATEWAY_STAGE_TO_COMMAND_STATUS
 
         request_id = payload.get("request_id")
         if not request_id:
@@ -443,26 +477,47 @@ class Command(BaseCommand):
                 rpc_record = RpcCommand.objects.get(request_id=request_id)
             response_status = payload.get("status", "unknown")
             response_stage = payload.get("stage", response_status)
-            if response_status == "received" or response_stage == "gateway_received":
-                if rpc_record.remote_command_id:
-                    command = rpc_record.remote_command
-                    previous = command.status
-                    command.status = RemoteCommand.Status.GATEWAY_RECEIVED
-                    command.gateway_received_at = timezone.now()
-                    command.save(update_fields=["status", "gateway_received_at", "updated_at"])
-                    append_command_event(
-                        command,
-                        "gateway_received",
-                        from_status=previous,
-                        to_status=RemoteCommand.Status.GATEWAY_RECEIVED,
-                        evidence={"request_id": str(request_id)},
-                    )
+            method = payload.get("method")
+            if method and method != rpc_record.method:
+                logger.warning("Rejected mismatched RPC method for request_id %s", request_id)
+                return
+            allowed_stage = response_stage in GATEWAY_STAGE_TO_COMMAND_STATUS
+            if response_stage in {"field_protocol_accepted", "field_execution_verified"}:
+                allowed_stage = rpc_record.method == "write_device"
+            elif response_stage == "ota_initiated":
+                allowed_stage = rpc_record.method == "update_firmware"
+            elif response_stage == "gateway_action_completed":
+                allowed_stage = rpc_record.method not in {"write_device", "update_firmware"}
+
+            if rpc_record.remote_command_id and allowed_stage:
+                target = GATEWAY_STAGE_TO_COMMAND_STATUS[response_stage]
+                updates = {"execution_status": response_stage}
+                if response_stage == "gateway_received":
+                    updates["gateway_received_at"] = timezone.now()
+                transition_command(
+                    rpc_record.remote_command_id,
+                    target,
+                    response_stage,
+                    evidence={"request_id": str(request_id), "status": response_status},
+                    updates=updates,
+                )
+            if response_status in {"received", "processing"}:
                 return
             rpc_record.status = response_status
+            rpc_record.response_stage = response_stage if allowed_stage else ""
             rpc_record.result = payload.get("result")
             rpc_record.error_message = payload.get("error", "") or ""
             rpc_record.responded_at = timezone.now()
-            rpc_record.save()
+            rpc_record.save(
+                update_fields=[
+                    "status",
+                    "response_stage",
+                    "result",
+                    "error_message",
+                    "responded_at",
+                    "updated_at",
+                ]
+            )
             from apps.devices.services import sync_device_command_from_rpc
 
             sync_device_command_from_rpc(rpc_record)

@@ -41,6 +41,14 @@ class GovernedControlPolicyTest(TestCase):
             name="GW",
             serial_number="GW-GOV-001",
             access_token="gov-token",
+            remote_control_protocol_version=1,
+            remote_control_capabilities=[
+                "governed_commands_v1",
+                "local_writeback_v1",
+                "lifecycle_stages_v1",
+                "idempotent_replay_v1",
+            ],
+            remote_control_local_writeback_enabled=True,
         )
         self.template = DeviceTemplate.objects.create(
             name="Exact VFD",

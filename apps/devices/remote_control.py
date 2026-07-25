@@ -3,16 +3,20 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import uuid
 from dataclasses import dataclass
 from datetime import timedelta
 
+from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.teams.models import Team
 
 from .control_governance import GovernanceDenied
 from .models import CommandEvent, CommandOutbox, CommandTransportAttempt, Device, RemoteCommand
+from .remote_control_protocol import state_change_capability_error
 
 
 class CommandDenied(ValueError):
@@ -73,6 +77,47 @@ COMMAND_CATALOG = {
     ),
 }
 
+STATUS_ORDER = {
+    RemoteCommand.Status.REQUESTED: 0,
+    RemoteCommand.Status.AWAITING_APPROVAL: 1,
+    RemoteCommand.Status.APPROVED: 2,
+    RemoteCommand.Status.QUEUED: 3,
+    RemoteCommand.Status.DISPATCHING: 4,
+    RemoteCommand.Status.PUBLISH_ACCEPTED: 5,
+    RemoteCommand.Status.OUTCOME_UNKNOWN: 5,
+    RemoteCommand.Status.BROKER_ACKNOWLEDGED: 6,
+    RemoteCommand.Status.GATEWAY_RECEIVED: 7,
+    RemoteCommand.Status.EXECUTING: 8,
+    RemoteCommand.Status.FIELD_PROTOCOL_ACCEPTED: 9,
+    RemoteCommand.Status.ACTION_INITIATED: 9,
+    RemoteCommand.Status.VERIFICATION_PENDING: 10,
+    RemoteCommand.Status.VERIFIED: 11,
+    RemoteCommand.Status.ACTION_COMPLETED: 11,
+    RemoteCommand.Status.POLICY_DENIED: 100,
+    RemoteCommand.Status.REJECTED: 100,
+    RemoteCommand.Status.FAILED: 100,
+    RemoteCommand.Status.EXPIRED: 100,
+    RemoteCommand.Status.TIMED_OUT: 100,
+    RemoteCommand.Status.CANCELLED: 100,
+    RemoteCommand.Status.RECONCILED_VERIFIED: 110,
+    RemoteCommand.Status.RECONCILED_NOT_APPLIED: 110,
+    RemoteCommand.Status.RECONCILED_UNRESOLVED: 110,
+}
+
+TERMINAL_STATUSES = {
+    RemoteCommand.Status.POLICY_DENIED,
+    RemoteCommand.Status.REJECTED,
+    RemoteCommand.Status.FAILED,
+    RemoteCommand.Status.EXPIRED,
+    RemoteCommand.Status.TIMED_OUT,
+    RemoteCommand.Status.CANCELLED,
+    RemoteCommand.Status.VERIFIED,
+    RemoteCommand.Status.ACTION_COMPLETED,
+    RemoteCommand.Status.RECONCILED_VERIFIED,
+    RemoteCommand.Status.RECONCILED_NOT_APPLIED,
+    RemoteCommand.Status.RECONCILED_UNRESOLVED,
+}
+
 
 def actor_snapshot(user) -> dict:
     if not user or not getattr(user, "is_authenticated", False):
@@ -86,7 +131,7 @@ def actor_snapshot(user) -> dict:
     }
 
 
-def append_command_event(
+def _append_command_event_locked(
     command: RemoteCommand,
     event_type: str,
     *,
@@ -95,9 +140,11 @@ def append_command_event(
     to_status: str = "",
     evidence: dict | None = None,
 ) -> CommandEvent:
-    previous = command.events.order_by("-happened_at", "-id").first()
+    previous = command.events.order_by("-sequence_number").first()
+    sequence_number = previous.sequence_number + 1 if previous else 1
     payload = {
         "command": str(command.pk),
+        "sequence_number": sequence_number,
         "event_type": event_type,
         "from_status": from_status,
         "to_status": to_status,
@@ -108,6 +155,7 @@ def append_command_event(
     checksum = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
     return CommandEvent.objects.create(
         command=command,
+        sequence_number=sequence_number,
         event_type=event_type,
         from_status=from_status,
         to_status=to_status,
@@ -116,6 +164,67 @@ def append_command_event(
         evidence=evidence or {},
         checksum=checksum,
     )
+
+
+def append_command_event(
+    command: RemoteCommand,
+    event_type: str,
+    *,
+    actor=None,
+    from_status: str = "",
+    to_status: str = "",
+    evidence: dict | None = None,
+) -> CommandEvent:
+    """Append hash-chained evidence while serializing on the parent command."""
+    with transaction.atomic():
+        locked = RemoteCommand.objects.select_for_update().get(pk=command.pk)
+        return _append_command_event_locked(
+            locked,
+            event_type,
+            actor=actor,
+            from_status=from_status,
+            to_status=to_status,
+            evidence=evidence,
+        )
+
+
+def transition_command(
+    command: RemoteCommand | str,
+    to_status: str,
+    event_type: str,
+    *,
+    actor=None,
+    evidence: dict | None = None,
+    updates: dict | None = None,
+) -> tuple[RemoteCommand, bool]:
+    """Atomically apply an idempotent, monotonic lifecycle transition and event."""
+    command_id = command.pk if isinstance(command, RemoteCommand) else command
+    with transaction.atomic():
+        locked = RemoteCommand.objects.select_for_update().get(pk=command_id)
+        previous = locked.status
+        if previous == to_status:
+            if updates:
+                for field, value in updates.items():
+                    setattr(locked, field, value)
+                locked.save(update_fields=[*updates.keys(), "updated_at"])
+            return locked, False
+        if previous in TERMINAL_STATUSES or STATUS_ORDER.get(to_status, -1) < STATUS_ORDER.get(previous, -1):
+            return locked, False
+        locked.status = to_status
+        update_fields = ["status", "updated_at"]
+        for field, value in (updates or {}).items():
+            setattr(locked, field, value)
+            update_fields.append(field)
+        locked.save(update_fields=list(dict.fromkeys(update_fields)))
+        _append_command_event_locked(
+            locked,
+            event_type,
+            actor=actor,
+            from_status=previous,
+            to_status=to_status,
+            evidence=evidence,
+        )
+        return locked, True
 
 
 def _has_permission(user, team, permission: str, *, site=None) -> bool:
@@ -214,8 +323,13 @@ def _request_remote_command_atomic(
     definition = COMMAND_CATALOG.get(operation)
     if not definition:
         raise CommandDenied(f"Unsupported remote operation '{operation}'.", code="unsupported_operation")
+    gateway = gateway.__class__.objects.select_for_update().get(pk=gateway.pk)
+    if device:
+        device = Device.objects.select_for_update().select_related("template").get(pk=device.pk)
     if definition.device_required and not device:
         raise CommandDenied("This operation requires an exact device target.", code="device_required")
+    if operation == "write_device" and not command_key:
+        raise CommandDenied("A canonical writable command key is required.", code="command_key_required")
     if device and (device.team_id != gateway.team_id or device.gateway_id != gateway.id):
         raise CommandDenied("The target device does not belong to this Gateway.", code="target_mismatch")
 
@@ -230,6 +344,8 @@ def _request_remote_command_atomic(
         denial = ("permission_denied", "You do not have permission to request this command.")
     elif definition.state_changing and team.remote_control_mode != Team.RemoteControlMode.CONTROLLED:
         denial = ("monitoring_only", "Remote state-changing commands are disabled for this team.")
+    elif definition.state_changing and (capability_denial := state_change_capability_error(gateway)):
+        denial = capability_denial
 
     normalized = _normalize_value(value)
     request_params = dict(params or {})
@@ -361,39 +477,303 @@ def _schedule_outbox_dispatch(outbox_id: int) -> None:
     dispatch_remote_command_outbox.delay(outbox_id)
 
 
+def _dispatch_revalidation_error(command, team, gateway, device) -> tuple[str, str] | None:
+    definition = COMMAND_CATALOG.get(command.operation)
+    if not definition:
+        return ("unsupported_operation", "The command operation is no longer supported.")
+    if command.expires_at <= timezone.now():
+        return ("command_expired", "The command expired before dispatch.")
+    if command.gateway_id != gateway.pk or command.team_id != team.pk:
+        return ("gateway_identity_changed", "The command Gateway identity is no longer valid.")
+    if definition.state_changing:
+        if team.remote_control_mode != Team.RemoteControlMode.CONTROLLED:
+            return ("remote_control_revoked", "Remote control was disabled before dispatch.")
+        if command.control_epoch != team.remote_control_epoch:
+            return ("control_epoch_changed", "The control epoch changed before dispatch.")
+        if capability_denial := state_change_capability_error(gateway):
+            return capability_denial
+    if command.operation != "write_device":
+        return None
+    if not device or device.gateway_id != gateway.pk or device.team_id != team.pk:
+        return ("device_identity_changed", "The canonical device no longer belongs to this Gateway.")
+    params = command.request_payload.get("params", {})
+    if params.get("device_id") != str(device.pk) or not command.command_key:
+        return ("canonical_target_invalid", "The command does not contain one canonical device and writable key.")
+    if (
+        not gateway.remote_control_policy_loaded
+        or gateway.remote_control_epoch != command.control_epoch
+        or gateway.remote_control_policy_revision != command.policy_revision
+        or not gateway.remote_control_clock_ready
+        or not gateway.remote_control_journal_ready
+        or not gateway.remote_control_storage_healthy
+    ):
+        return ("gateway_readiness_stale", "The Gateway has not advertised matching governed-control readiness.")
+
+    from .models import (
+        CommandPolicy,
+        CommissionedControlEnvelope,
+        ControlActivation,
+        RemoteControlScope,
+        TemplateControlDefinition,
+    )
+
+    scope = (
+        RemoteControlScope.objects.select_for_update()
+        .filter(
+            team=team,
+            gateway=gateway,
+            device=device,
+            command_key=command.command_key,
+            mode=RemoteControlScope.Mode.ENABLED,
+            control_epoch=command.control_epoch,
+        )
+        .first()
+    )
+    definition_row = (
+        TemplateControlDefinition.objects.select_for_update()
+        .filter(
+            template_id=device.template_id,
+            command_key=command.command_key,
+            revision=command.template_revision,
+            is_verified=True,
+            is_enabled=True,
+        )
+        .first()
+    )
+    commissioned = (
+        CommissionedControlEnvelope.objects.select_for_update()
+        .filter(
+            team=team,
+            device=device,
+            command_key=command.command_key,
+            revision=command.commissioning_revision,
+            is_active=True,
+        )
+        .first()
+    )
+    policy = (
+        CommandPolicy.objects.select_for_update()
+        .filter(
+            team=team,
+            gateway=gateway,
+            device=device,
+            command_key=command.command_key,
+            revision=command.policy_revision,
+            checksum=command.policy_checksum,
+            is_enabled=True,
+        )
+        .first()
+    )
+    activation = (
+        ControlActivation.objects.select_for_update()
+        .filter(
+            team=team,
+            device=device,
+            command_key=command.command_key,
+            status=ControlActivation.Status.ACTIVE,
+            control_epoch=command.control_epoch,
+        )
+        .first()
+    )
+    if not all([scope, definition_row, commissioned, policy, activation]):
+        return ("governance_changed", "The command's governing records changed before dispatch.")
+    if commissioned.expires_at and commissioned.expires_at <= timezone.now():
+        return ("commissioning_expired", "The commissioned control envelope expired before dispatch.")
+    if activation.expires_at <= timezone.now():
+        return ("activation_expired", "The control activation expired before dispatch.")
+    return None
+
+
+def _cancel_claim_locked(outbox, command, *, code, message):
+    previous = command.status
+    target = RemoteCommand.Status.EXPIRED if code == "command_expired" else RemoteCommand.Status.CANCELLED
+    outbox.status = CommandOutbox.Status.CANCELLED
+    outbox.last_error = message
+    outbox.lease_expires_at = None
+    outbox.save(update_fields=["status", "last_error", "lease_expires_at", "updated_at"])
+    command.status = target
+    command.transport_status = "cancelled"
+    command.error_code = code
+    command.error_message = message
+    command.save(update_fields=["status", "transport_status", "error_code", "error_message", "updated_at"])
+    _append_command_event_locked(
+        command,
+        "dispatch_cancelled",
+        from_status=previous,
+        to_status=target,
+        evidence={"code": code, "message": message},
+    )
+
+
+def _retry_delay(attempt_count: int) -> timedelta:
+    base = int(getattr(settings, "REMOTE_CONTROL_OUTBOX_RETRY_BASE_SECONDS", 5))
+    maximum = int(getattr(settings, "REMOTE_CONTROL_OUTBOX_RETRY_MAX_SECONDS", 300))
+    return timedelta(seconds=min(maximum, base * (2 ** max(0, attempt_count - 1))))
+
+
+def _record_pre_ack_failure(outbox_id, attempt_id, exc):
+    now = timezone.now()
+    max_attempts = int(getattr(settings, "REMOTE_CONTROL_OUTBOX_MAX_ATTEMPTS", 5))
+    with transaction.atomic():
+        outbox = CommandOutbox.objects.select_for_update().get(pk=outbox_id)
+        command = RemoteCommand.objects.select_for_update().get(pk=outbox.command_id)
+        attempt = CommandTransportAttempt.objects.select_for_update().get(pk=attempt_id)
+        attempt.state = "failed_before_ack"
+        attempt.error = str(exc)
+        attempt.completed_at = now
+        attempt.save(update_fields=["state", "error", "completed_at"])
+        outbox.last_error = str(exc)
+        outbox.claimed_at = None
+        outbox.lease_expires_at = None
+        if outbox.attempt_count >= max_attempts:
+            previous = command.status
+            outbox.status = CommandOutbox.Status.DEAD_LETTER
+            outbox.dead_lettered_at = now
+            if STATUS_ORDER.get(command.status, -1) <= STATUS_ORDER[RemoteCommand.Status.DISPATCHING]:
+                command.status = RemoteCommand.Status.FAILED
+            command.transport_status = "dead_letter"
+            command.error_code = "publish_attempts_exhausted"
+            command.error_message = str(exc)
+            outbox.save(
+                update_fields=[
+                    "status",
+                    "last_error",
+                    "claimed_at",
+                    "lease_expires_at",
+                    "dead_lettered_at",
+                    "updated_at",
+                ]
+            )
+            command.save(
+                update_fields=[
+                    "status",
+                    "transport_status",
+                    "error_code",
+                    "error_message",
+                    "updated_at",
+                ]
+            )
+            _append_command_event_locked(
+                command,
+                "outbox_dead_lettered",
+                from_status=previous,
+                to_status=command.status,
+                evidence={"attempt": outbox.attempt_count, "error": str(exc)},
+            )
+        else:
+            outbox.status = CommandOutbox.Status.RETRY
+            outbox.next_attempt_at = now + _retry_delay(outbox.attempt_count)
+            command.transport_status = "retry_scheduled"
+            command.error_code = "publish_failed_before_ack"
+            command.error_message = str(exc)
+            outbox.save(
+                update_fields=[
+                    "status",
+                    "next_attempt_at",
+                    "last_error",
+                    "claimed_at",
+                    "lease_expires_at",
+                    "updated_at",
+                ]
+            )
+            command.save(update_fields=["transport_status", "error_code", "error_message", "updated_at"])
+            _append_command_event_locked(
+                command,
+                "outbox_retry_scheduled",
+                from_status=command.status,
+                to_status=command.status,
+                evidence={
+                    "attempt": outbox.attempt_count,
+                    "next_attempt_at": outbox.next_attempt_at.isoformat(),
+                    "error": str(exc),
+                },
+            )
+        return command
+
+
 def dispatch_outbox(outbox_id: int) -> RemoteCommand | None:
     from apps.telemetry.mqtt_publisher import MqttPublishOutcomeUnknown, publish_rpc_command
 
     from .remote_control_crypto import build_signed_command_envelope
 
+    now = timezone.now()
+    lease_seconds = int(getattr(settings, "REMOTE_CONTROL_OUTBOX_LEASE_SECONDS", 60))
     with transaction.atomic():
-        outbox = (
-            CommandOutbox.objects.select_for_update(skip_locked=True)
-            .select_related("command__gateway")
-            .filter(pk=outbox_id, status=CommandOutbox.Status.PENDING)
-            .first()
-        )
+        outbox = CommandOutbox.objects.select_for_update(skip_locked=True).filter(pk=outbox_id).first()
         if not outbox:
             return None
-        command = outbox.command
-        if command.expires_at <= timezone.now():
-            outbox.status = CommandOutbox.Status.CANCELLED
-            command.status = RemoteCommand.Status.EXPIRED
-            outbox.save(update_fields=["status", "updated_at"])
-            command.save(update_fields=["status", "updated_at"])
-            append_command_event(
+        claimable = outbox.status in {CommandOutbox.Status.PENDING, CommandOutbox.Status.RETRY}
+        claimable = claimable or (
+            outbox.status == CommandOutbox.Status.CLAIMED and outbox.lease_expires_at and outbox.lease_expires_at <= now
+        )
+        if not claimable or outbox.next_attempt_at > now:
+            return None
+        command = RemoteCommand.objects.select_for_update().get(pk=outbox.command_id)
+        max_attempts = int(getattr(settings, "REMOTE_CONTROL_OUTBOX_MAX_ATTEMPTS", 5))
+        if outbox.attempt_count >= max_attempts:
+            previous = command.status
+            outbox.status = CommandOutbox.Status.DEAD_LETTER
+            outbox.dead_lettered_at = now
+            outbox.lease_expires_at = None
+            outbox.last_error = outbox.last_error or "Expired worker leases exhausted dispatch attempts."
+            if STATUS_ORDER.get(command.status, -1) <= STATUS_ORDER[RemoteCommand.Status.DISPATCHING]:
+                command.status = RemoteCommand.Status.FAILED
+            command.transport_status = "dead_letter"
+            command.error_code = "dispatch_attempts_exhausted"
+            command.error_message = outbox.last_error
+            outbox.save(
+                update_fields=[
+                    "status",
+                    "dead_lettered_at",
+                    "lease_expires_at",
+                    "last_error",
+                    "updated_at",
+                ]
+            )
+            command.save(
+                update_fields=[
+                    "status",
+                    "transport_status",
+                    "error_code",
+                    "error_message",
+                    "updated_at",
+                ]
+            )
+            _append_command_event_locked(
                 command,
-                "command_expired",
-                from_status=RemoteCommand.Status.QUEUED,
-                to_status=RemoteCommand.Status.EXPIRED,
+                "outbox_dead_lettered",
+                from_status=previous,
+                to_status=command.status,
+                evidence={"attempt": outbox.attempt_count, "reason": "expired_worker_lease"},
             )
             return command
+        team = Team.objects.select_for_update().get(pk=command.team_id)
+        gateway = command.gateway.__class__.objects.select_for_update().get(pk=command.gateway_id)
+        device = (
+            Device.objects.select_for_update().select_related("template").filter(pk=command.device_id).first()
+            if command.device_id
+            else None
+        )
+        if denial := _dispatch_revalidation_error(command, team, gateway, device):
+            _cancel_claim_locked(outbox, command, code=denial[0], message=denial[1])
+            return command
         outbox.status = CommandOutbox.Status.CLAIMED
-        outbox.claimed_at = timezone.now()
+        outbox.claimed_at = now
+        outbox.lease_expires_at = now + timedelta(seconds=lease_seconds)
         outbox.attempt_count += 1
-        outbox.save(update_fields=["status", "claimed_at", "attempt_count", "updated_at"])
-        command.status = RemoteCommand.Status.DISPATCHING
-        command.save(update_fields=["status", "updated_at"])
+        outbox.save(update_fields=["status", "claimed_at", "lease_expires_at", "attempt_count", "updated_at"])
+        if STATUS_ORDER.get(command.status, -1) < STATUS_ORDER[RemoteCommand.Status.DISPATCHING]:
+            previous = command.status
+            command.status = RemoteCommand.Status.DISPATCHING
+            _append_command_event_locked(
+                command,
+                "dispatch_claimed",
+                from_status=previous,
+                to_status=command.status,
+                evidence={"attempt": outbox.attempt_count},
+            )
+        command.transport_status = "dispatching"
+        command.save(update_fields=["status", "transport_status", "updated_at"])
         attempt = CommandTransportAttempt.objects.create(
             command=command,
             outbox=outbox,
@@ -401,15 +781,18 @@ def dispatch_outbox(outbox_id: int) -> RemoteCommand | None:
         )
 
     try:
-        envelope = build_signed_command_envelope(command)
-        command.signing_key_id = envelope["signing_key_id"]
-        command.signature = envelope["signature"]
-        command.save(update_fields=["signing_key_id", "signature", "updated_at"])
+        request_id = uuid.uuid4()
+        envelope = build_signed_command_envelope(command, request_id=request_id)
+        RemoteCommand.objects.filter(pk=command.pk).update(
+            signing_key_id=envelope["signing_key_id"],
+            signature=envelope["signature"],
+        )
         rpc = publish_rpc_command(
             command.gateway,
             command.operation,
             command.request_payload.get("params", {}),
             remote_command=command,
+            request_id=request_id,
             governed_envelope=envelope,
         )
     except MqttPublishOutcomeUnknown as exc:
@@ -424,63 +807,76 @@ def dispatch_outbox(outbox_id: int) -> RemoteCommand | None:
             attempt.save(update_fields=["request_id", "state", "error", "completed_at"])
             outbox.status = CommandOutbox.Status.PUBLISHED
             outbox.last_error = str(exc)
-            command.status = RemoteCommand.Status.OUTCOME_UNKNOWN
+            outbox.lease_expires_at = None
+            previous = command.status
+            if STATUS_ORDER.get(command.status, -1) <= STATUS_ORDER[RemoteCommand.Status.OUTCOME_UNKNOWN]:
+                command.status = RemoteCommand.Status.OUTCOME_UNKNOWN
+            command.transport_status = "outcome_unknown"
             command.error_code = "broker_ack_unknown"
             command.error_message = str(exc)
-            outbox.save(update_fields=["status", "last_error", "updated_at"])
-            command.save(update_fields=["status", "error_code", "error_message", "updated_at"])
-            append_command_event(
+            outbox.save(update_fields=["status", "last_error", "lease_expires_at", "updated_at"])
+            command.save(
+                update_fields=[
+                    "status",
+                    "transport_status",
+                    "error_code",
+                    "error_message",
+                    "updated_at",
+                ]
+            )
+            _append_command_event_locked(
                 command,
                 "broker_ack_unknown",
-                from_status=RemoteCommand.Status.DISPATCHING,
-                to_status=RemoteCommand.Status.OUTCOME_UNKNOWN,
+                from_status=previous,
+                to_status=command.status,
                 evidence={"request_id": str(exc.rpc_record.request_id)},
             )
         return command
     except Exception as exc:
-        with transaction.atomic():
-            outbox = CommandOutbox.objects.select_for_update().get(pk=outbox_id)
-            command = RemoteCommand.objects.select_for_update().get(pk=outbox.command_id)
-            attempt = CommandTransportAttempt.objects.select_for_update().get(pk=attempt.pk)
-            attempt.state = "failed_before_ack"
-            attempt.error = str(exc)
-            attempt.completed_at = timezone.now()
-            attempt.save(update_fields=["state", "error", "completed_at"])
-            outbox.status = CommandOutbox.Status.FAILED
-            outbox.last_error = str(exc)
-            command.status = RemoteCommand.Status.FAILED
-            command.error_code = "publish_failed_before_ack"
-            command.error_message = str(exc)
-            outbox.save(update_fields=["status", "last_error", "updated_at"])
-            command.save(update_fields=["status", "error_code", "error_message", "updated_at"])
-            append_command_event(
-                command,
-                "publish_failed",
-                from_status=RemoteCommand.Status.DISPATCHING,
-                to_status=RemoteCommand.Status.FAILED,
-                evidence={"error": str(exc)},
-            )
-        return command
+        return _record_pre_ack_failure(outbox_id, attempt.pk, exc)
 
     with transaction.atomic():
         outbox = CommandOutbox.objects.select_for_update().get(pk=outbox_id)
         command = RemoteCommand.objects.select_for_update().get(pk=outbox.command_id)
         outbox.status = CommandOutbox.Status.PUBLISHED
         outbox.published_at = timezone.now()
-        command.status = RemoteCommand.Status.BROKER_ACKNOWLEDGED
+        outbox.lease_expires_at = None
+        previous = command.status
+        if STATUS_ORDER.get(command.status, -1) < STATUS_ORDER[RemoteCommand.Status.BROKER_ACKNOWLEDGED]:
+            command.status = RemoteCommand.Status.BROKER_ACKNOWLEDGED
+        command.transport_status = "broker_acknowledged"
         command.broker_acknowledged_at = timezone.now()
         attempt = CommandTransportAttempt.objects.select_for_update().get(pk=attempt.pk)
         attempt.request_id = rpc.request_id
         attempt.state = "broker_acknowledged"
         attempt.completed_at = timezone.now()
         attempt.save(update_fields=["request_id", "state", "completed_at"])
-        outbox.save(update_fields=["status", "published_at", "updated_at"])
-        command.save(update_fields=["status", "broker_acknowledged_at", "updated_at"])
-        append_command_event(
+        outbox.save(update_fields=["status", "published_at", "lease_expires_at", "updated_at"])
+        command.save(update_fields=["status", "transport_status", "broker_acknowledged_at", "updated_at"])
+        _append_command_event_locked(
             command,
             "broker_acknowledged",
-            from_status=RemoteCommand.Status.DISPATCHING,
-            to_status=RemoteCommand.Status.BROKER_ACKNOWLEDGED,
+            from_status=previous,
+            to_status=command.status,
             evidence={"rpc_request_id": str(rpc.request_id)},
         )
     return command
+
+
+def dispatch_due_outboxes(*, limit=100) -> int:
+    """Recover and dispatch committed, retriable, or expired-lease outbox rows."""
+    now = timezone.now()
+    due_ids = list(
+        CommandOutbox.objects.filter(next_attempt_at__lte=now)
+        .filter(
+            Q(status__in=[CommandOutbox.Status.PENDING, CommandOutbox.Status.RETRY])
+            | Q(status=CommandOutbox.Status.CLAIMED, lease_expires_at__lte=now)
+        )
+        .order_by("next_attempt_at", "pk")
+        .values_list("pk", flat=True)[:limit]
+    )
+    dispatched = 0
+    for outbox_id in due_ids:
+        if dispatch_outbox(outbox_id):
+            dispatched += 1
+    return dispatched

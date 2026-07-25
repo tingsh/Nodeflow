@@ -10,6 +10,7 @@ from apps.devices.control_readiness import (
     emergency_disable,
     open_commissioning_session,
 )
+from apps.devices.control_recovery import disaster_recovery_control_reset
 from apps.devices.models import (
     CommandPolicy,
     CommissionedControlEnvelope,
@@ -43,12 +44,19 @@ class ControlReadinessWorkflowTest(TestCase):
             serial_number="GW-READY-001",
             access_token="ready-token",
             remote_control_protocol_version=1,
+            remote_control_capabilities=[
+                "governed_commands_v1",
+                "local_writeback_v1",
+                "lifecycle_stages_v1",
+                "idempotent_replay_v1",
+            ],
             remote_control_local_writeback_enabled=True,
             remote_control_policy_loaded=True,
             remote_control_policy_revision=1,
             remote_control_epoch=1,
             remote_control_clock_ready=True,
             remote_control_journal_ready=True,
+            remote_control_storage_healthy=True,
         )
         self.template = DeviceTemplate.objects.create(
             name="Chiller",
@@ -257,3 +265,22 @@ class ControlReadinessWorkflowTest(TestCase):
                 command_key="setpoint",
                 value=5,
             )
+
+    def test_restore_reset_cancels_pending_approval_and_locks_control(self):
+        self._activate()
+        command = request_remote_command(
+            gateway=self.gateway,
+            operation="write_device",
+            requested_by=self.manager,
+            device=self.device,
+            command_key="setpoint",
+            value=5,
+        )
+        self.assertEqual(command.status, RemoteCommand.Status.AWAITING_APPROVAL)
+        disaster_recovery_control_reset(reason="restore test")
+        command.refresh_from_db()
+        self.team.refresh_from_db()
+        self.assertEqual(command.status, RemoteCommand.Status.CANCELLED)
+        self.assertEqual(command.approval.status, command.approval.Status.INVALIDATED)
+        self.assertEqual(self.team.remote_control_mode, Team.RemoteControlMode.LOCKED_DOWN)
+        self.assertEqual(self.team.remote_control_epoch, 2)

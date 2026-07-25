@@ -176,10 +176,8 @@ def validate_control_value(*, envelope: EffectiveControlEnvelope, value, device)
     if (
         current is not None
         and limits.get("max_delta") is not None
-        and (
-            abs(_number(normalized, "Value") - _number(current, "Current value"))
-            > _number(limits["max_delta"], "Maximum delta")
-        )
+        and abs(_number(normalized, "Value") - _number(current, "Current value"))
+        > _number(limits["max_delta"], "Maximum delta")
     ):
         raise GovernanceDenied("Requested change exceeds the effective delta limit.", code="delta_exceeded")
     if limits.get("cooldown_seconds"):

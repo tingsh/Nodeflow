@@ -99,12 +99,15 @@ class Gateway(BaseTeamModel):
     active_connectors = models.JSONField(default=list, blank=True)
     connected_devices = models.JSONField(default=list, blank=True)
     remote_control_protocol_version = models.PositiveIntegerField(default=0)
+    remote_control_capabilities = models.JSONField(default=list, blank=True)
     remote_control_local_writeback_enabled = models.BooleanField(default=False)
     remote_control_policy_loaded = models.BooleanField(default=False)
     remote_control_policy_revision = models.PositiveIntegerField(default=0)
     remote_control_epoch = models.PositiveBigIntegerField(default=0)
     remote_control_clock_ready = models.BooleanField(default=False)
     remote_control_journal_ready = models.BooleanField(default=False)
+    remote_control_event_spool_count = models.PositiveIntegerField(default=0)
+    remote_control_storage_healthy = models.BooleanField(default=False)
 
     # Network Watchdog fields
     active_interface = models.CharField(max_length=20, blank=True, default="eth0")
@@ -375,6 +378,7 @@ class RpcCommand(BaseTeamModel):
     params = models.JSONField(default=dict)
     sent_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    response_stage = models.CharField(max_length=40, blank=True)
     result = models.JSONField(null=True, blank=True)
     error_message = models.TextField(blank=True)
     responded_at = models.DateTimeField(null=True, blank=True)
@@ -403,6 +407,7 @@ class DeviceCommand(BaseTeamModel):
     STATUS_CHOICES = (
         ("pending", _("Pending")),
         ("sent", _("Sent to Gateway")),
+        ("accepted", _("Accepted by Field Protocol")),
         ("executed", _("Executed Successfully")),
         ("failed", _("Failed")),
         ("timed_out", _("Timed Out")),
@@ -682,6 +687,8 @@ class RemoteCommand(BaseTeamModel):
         FIELD_PROTOCOL_ACCEPTED = "field_protocol_accepted", _("Field protocol accepted")
         VERIFICATION_PENDING = "verification_pending", _("Verification pending")
         VERIFIED = "verified", _("Verified")
+        ACTION_INITIATED = "action_initiated", _("Action initiated")
+        ACTION_COMPLETED = "action_completed", _("Action completed")
         REJECTED = "rejected", _("Rejected")
         FAILED = "failed", _("Failed")
         EXPIRED = "expired", _("Expired")
@@ -716,6 +723,8 @@ class RemoteCommand(BaseTeamModel):
     reason = models.TextField(blank=True)
     risk = models.CharField(max_length=16, choices=Risk.choices)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.REQUESTED)
+    transport_status = models.CharField(max_length=32, default="request_accepted")
+    execution_status = models.CharField(max_length=32, default="not_started")
     actor_snapshot = models.JSONField(default=dict, blank=True)
     policy_snapshot = models.JSONField(default=dict, blank=True)
     request_payload = models.JSONField(default=dict, blank=True)
@@ -750,23 +759,52 @@ class RemoteCommand(BaseTeamModel):
         return f"{self.operation} -> {target} ({self.status})"
 
 
+class CommandEventQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise TypeError("CommandEvent rows are append-only.")
+
+    def delete(self):
+        raise TypeError("CommandEvent rows are append-only.")
+
+
 class CommandEvent(models.Model):
     """Append-only evidence for a governed command lifecycle transition."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    command = models.ForeignKey(RemoteCommand, on_delete=models.CASCADE, related_name="events")
+    command = models.ForeignKey(RemoteCommand, on_delete=models.PROTECT, related_name="events")
+    sequence_number = models.PositiveBigIntegerField(default=0)
     event_type = models.CharField(max_length=80)
     from_status = models.CharField(max_length=32, blank=True)
     to_status = models.CharField(max_length=32, blank=True)
-    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True)
     actor_snapshot = models.JSONField(default=dict, blank=True)
     evidence = models.JSONField(default=dict, blank=True)
     checksum = models.CharField(max_length=64, blank=True)
     happened_at = models.DateTimeField(auto_now_add=True)
+    objects = CommandEventQuerySet.as_manager()
 
     class Meta:
-        ordering = ["happened_at", "id"]
-        indexes = [models.Index(fields=["command", "happened_at"])]
+        ordering = ["sequence_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["command", "sequence_number"],
+                name="unique_command_event_sequence",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["command", "sequence_number"],
+                name="devices_com_command_5dc736_idx",
+            )
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise TypeError("CommandEvent rows are append-only.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise TypeError("CommandEvent rows are append-only.")
 
 
 class RemoteCommandApproval(models.Model):
@@ -803,21 +841,31 @@ class CommandOutbox(models.Model):
         PENDING = "pending", _("Pending")
         CLAIMED = "claimed", _("Claimed")
         PUBLISHED = "published", _("Published")
+        RETRY = "retry", _("Retry scheduled")
         FAILED = "failed", _("Failed")
+        DEAD_LETTER = "dead_letter", _("Dead letter")
         CANCELLED = "cancelled", _("Cancelled")
 
     command = models.OneToOneField(RemoteCommand, on_delete=models.CASCADE, related_name="outbox")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
     attempt_count = models.PositiveIntegerField(default=0)
     available_at = models.DateTimeField(default=timezone.now)
+    next_attempt_at = models.DateTimeField(default=timezone.now)
     claimed_at = models.DateTimeField(null=True, blank=True)
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
     published_at = models.DateTimeField(null=True, blank=True)
+    dead_lettered_at = models.DateTimeField(null=True, blank=True)
     last_error = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        indexes = [models.Index(fields=["status", "available_at"])]
+        indexes = [
+            models.Index(
+                fields=["status", "next_attempt_at"],
+                name="devices_com_status_797fed_idx",
+            )
+        ]
 
 
 class CommandTransportAttempt(models.Model):
@@ -863,6 +911,38 @@ class GatewayControlPolicyBundle(BaseTeamModel):
                 name="unique_gateway_policy_bundle_revision",
             )
         ]
+
+
+class RemoteControlSigningKey(models.Model):
+    class Status(models.TextChoices):
+        ACTIVE = "active", _("Active")
+        NEXT = "next", _("Next")
+        RETIRED = "retired", _("Retired")
+        REVOKED = "revoked", _("Revoked")
+
+    key_id = models.CharField(max_length=64, unique=True)
+    public_key = models.TextField()
+    status = models.CharField(max_length=16, choices=Status.choices)
+    private_key_reference = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Reference to a managed secret; private key material is never stored here."),
+    )
+    activated_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class CommandAuditLegalHold(BaseTeamModel):
+    command = models.ForeignKey(RemoteCommand, on_delete=models.PROTECT, related_name="legal_holds")
+    reason = models.TextField()
+    placed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="command_audit_legal_holds",
+    )
+    placed_at = models.DateTimeField(default=timezone.now)
+    released_at = models.DateTimeField(null=True, blank=True)
 
 
 class FirmwareRelease(models.Model):
