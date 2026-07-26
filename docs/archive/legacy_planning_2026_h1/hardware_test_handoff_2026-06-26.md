@@ -1,3 +1,5 @@
+> **Historical reference — do not use as current implementation guidance.** See the [current hardware replay runbook](../../hardware_replay_runbook_2026-07-09.md).
+
 # Hardware Test Handoff - 2026-06-26
 
 This note captures the local end-to-end hardware test performed with Laptop 1, Raspberry Pi CM4, and Laptop 2. Use it to resume in a fresh Codex chat.

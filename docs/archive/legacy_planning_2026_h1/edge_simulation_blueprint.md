@@ -1,3 +1,5 @@
+> **Historical reference — do not use as current implementation guidance.** See the [current hardware replay runbook](../../hardware_replay_runbook_2026-07-09.md).
+
 # Edge Simulation Strategy & Integration Blueprint
 
 > **Date:** April 14, 2026

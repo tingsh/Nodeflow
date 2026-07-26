@@ -1,3 +1,5 @@
+> **Historical reference — do not use as current implementation guidance.** See the [documentation authority index](../../README.md).
+
 # Walkthrough: Sprint 1 â€” Role-Based Access Control (RBAC)
 
 We have successfully overhauled the Novena access control system from a simple Admin/Member model to a robust, 5-tier industrial-grade RBAC system. This foundation ensures that plant managers, operators, and viewers only see and do what they are authorized to.

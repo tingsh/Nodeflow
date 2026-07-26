@@ -1,3 +1,5 @@
+> **Historical reference — do not use as current implementation guidance.** See the [documentation authority index](../../README.md).
+
 # Novena Feature Deep Dive — How to Build the "IIoT Shopify" Moat
 
 > **Date:** April 17, 2026  

@@ -2,7 +2,7 @@
 
 > **Date:** 18 July 2026  
 > **Scope:** Current Novena Hub and Novena Gateway codebases, including the latest uncommitted Gateway hardening work  
-> **Previous full-stack review:** [27 April 2026](progress_review_april_27.md)  
+> **Previous full-stack review:** [27 April 2026](archive/progress_reviews_2026_h1/progress_review_april_27.md)  
 > **Launch execution plan:** [20-customer pilot checklist](20_customer_pilot_launch_checklist_2026-07-31.md)
 
 ## Executive Decision

@@ -1,3 +1,5 @@
+> **Historical reference — do not use as current implementation guidance.** See the [documentation authority index](../../README.md).
+
 # Strategy Brainstorm: The Edge Gateway & Next Features
 
 > **Date:** April 13, 2026

@@ -1,3 +1,5 @@
+> **Historical reference — do not use as current implementation guidance.** Use the active `novena-hub-development-workflow` and `novena-local-dev` skills listed in the [documentation authority index](../../README.md).
+
 # Novena Native WSL2 Local Development Runbook
 
 This is the current local development path for hardware testing. It mirrors the production service topology without requiring Docker on the laptop.

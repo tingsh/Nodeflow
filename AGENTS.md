@@ -9,6 +9,9 @@ Create Novena Platform, an AI-powered industrial IoT SaaS platform tailored for 
 ## Codex Skills
 Use the relevant repo-local Codex skills in .agents/skills/ when the task matches their descriptions. The readable source files live in docs/agent_context/skills/ and .agents/skills/ contains symlinks for Codex discovery. These skills replace the old Antigravity files and are the active source for project context, architecture, development workflow, telemetry protocol, UI/product design, and project status.
 
+## Documentation Authority
+Start with `docs/README.md` when choosing project documentation. Files under `docs/archive/` are historical records and must not be treated as current implementation guidance unless the task explicitly asks for history. Prefer the current repo skills, current project status and active operator runbooks over brainstorms or completed plans.
+
 ## Development Mode
 We are currently developing and testing locally. Use local PostgreSQL and Redis. Docker is reserved for deployment only.
 

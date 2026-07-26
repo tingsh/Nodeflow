@@ -1,3 +1,5 @@
+> **Historical reference — do not use as current implementation guidance.** Use the active Hub and Gateway telemetry-protocol skills listed in the [documentation authority index](../../README.md).
+
 # Novena Hub — Bidirectional MQTT Implementation Spec
 
 This document is a complete implementation guide for adding bidirectional MQTT support to the **Novena Hub** Django backend. The edge gateway (Novena Gateway) has already implemented its side. Your job is to build the cloud side so that the two systems can communicate bidirectionally over MQTT.

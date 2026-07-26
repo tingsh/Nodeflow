@@ -1,3 +1,5 @@
+> **Historical reference — do not use as current implementation guidance.** See the [documentation authority index](../../README.md).
+
 # Architecture Brainstorm: SaaS Pegasus + ThingsBoard vs Build Custom
 
 > **Date:** April 2026  
