@@ -700,9 +700,7 @@ def build_impact_readiness(site_profile, summary):
     latest = site_profile.assumption_revisions.order_by("-revision").first()
     if site_profile.vertical_profile == "cold_chain":
         assumptions_ready = bool(
-            latest
-            and latest.cold_min_temperature is not None
-            and latest.cold_max_temperature is not None
+            latest and latest.cold_min_temperature is not None and latest.cold_max_temperature is not None
         )
         assumption_detail = "Configured temperature range"
     else:
