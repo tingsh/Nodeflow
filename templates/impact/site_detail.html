@@ -1,0 +1,146 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+{% block app %}
+<div class="px-4 py-6 sm:px-6 lg:px-8">
+  <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+    <div>
+      <a href="{% url 'web_team:impact:overview' request.team.slug %}" class="text-xs font-bold text-primary">← Business Impact</a>
+      <h1 class="mt-2 text-2xl font-bold">{{ site.name }}</h1>
+      <p class="mt-1 text-sm text-base-content/60">{{ site.get_solution_profile_display }} · {{ profile.get_calculation_status_display }}</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <a href="{% url 'web_team:impact:sources' request.team.slug site.id %}" class="btn btn-outline btn-sm rounded-md">Data sources</a>
+      <a href="{% url 'web_team:impact:settings' request.team.slug site.id %}" class="btn btn-primary btn-sm rounded-md">Assumptions</a>
+      <a href="{% url 'web_team:impact:site_csv' request.team.slug site.id %}" class="btn btn-ghost btn-sm rounded-md">Export CSV</a>
+    </div>
+  </div>
+
+  {% if summary.status != "ready" %}
+  <div class="mt-5 rounded-lg border border-amber-300/50 bg-amber-50 p-4 text-amber-900">
+    <p class="font-bold">Impact calculation is not fully ready</p>
+    <p class="mt-1 text-sm">Status: {{ profile.get_calculation_status_display }}. Confirm trusted data sources, assumptions, and sufficient data coverage before relying on financial estimates.</p>
+    <ul class="mt-3 grid grid-cols-1 gap-2 text-sm md:grid-cols-2 xl:grid-cols-5">
+      {% for item in readiness %}
+      <li class="rounded-md border border-amber-900/10 bg-white/60 p-3">
+        <p class="font-semibold">{% if item.ready %}✓{% else %}○{% endif %} {{ item.label }}</p>
+        <p class="mt-1 text-xs text-amber-900/70">{{ item.detail }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
+    <div class="rounded-lg border border-base-content/10 bg-base-100 p-4">
+      <p class="text-[10px] font-bold uppercase text-base-content/45">Estimated realized</p>
+      <p class="mt-2 text-xl font-bold font-mono">{{ summary.currency }} {{ summary.estimated_realized_value|default_if_none:"—" }}</p>
+    </div>
+    <div class="rounded-lg border border-base-content/10 bg-base-100 p-4">
+      <p class="text-[10px] font-bold uppercase text-base-content/45">Open opportunity</p>
+      <p class="mt-2 text-xl font-bold font-mono">{{ summary.currency }} {{ summary.estimated_opportunity|default_if_none:"—" }}</p>
+    </div>
+    <div class="rounded-lg border border-base-content/10 bg-base-100 p-4">
+      <p class="text-[10px] font-bold uppercase text-base-content/45">Estimated net</p>
+      <p class="mt-2 text-xl font-bold font-mono">{{ summary.currency }} {{ summary.net_benefit|default_if_none:"—" }}</p>
+    </div>
+    <div class="rounded-lg border border-base-content/10 bg-base-100 p-4">
+      <p class="text-[10px] font-bold uppercase text-base-content/45">Estimated ROI</p>
+      <p class="mt-2 text-xl font-bold font-mono">{{ summary.roi_pct|default_if_none:"—" }}{% if summary.roi_pct != None %}%{% endif %}</p>
+    </div>
+    <div class="rounded-lg border border-base-content/10 bg-base-100 p-4">
+      <p class="text-[10px] font-bold uppercase text-base-content/45">Data coverage</p>
+      <p class="mt-2 text-xl font-bold font-mono">{{ summary.coverage_pct }}%</p>
+    </div>
+  </div>
+
+  <div class="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-3">
+    <section class="overflow-hidden rounded-lg border border-base-content/10 bg-base-100 xl:col-span-2">
+      <div class="border-b border-base-content/10 px-5 py-4">
+        <h2 class="font-bold">Measured and estimated outcomes</h2>
+        <p class="mt-1 text-xs text-base-content/50">Financial estimates are withheld below 80% valid data coverage.</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="table table-sm">
+          <thead><tr><th>Outcome</th><th>Result</th><th>Evidence</th><th>Coverage</th></tr></thead>
+          <tbody>
+          {% for metric in summary.metrics %}
+            <tr>
+              <td>
+                <p class="font-semibold">{{ metric.label }}</p>
+                {% for warning in metric.warnings %}<p class="mt-1 text-xs text-amber-700">{{ warning }}</p>{% endfor %}
+                {% if metric.evidence == "estimated" or metric.monetary_value != None %}
+                <a href="{% url 'web_team:impact:settings' request.team.slug site.id %}" class="mt-1 inline-block text-xs font-semibold text-primary">View assumptions</a>
+                {% endif %}
+              </td>
+              <td class="font-mono">
+                {% if metric.monetary_value != None %}{{ metric.currency }} {{ metric.monetary_value }}{% elif metric.value != None %}{{ metric.value }} {{ metric.unit }}{% else %}—{% endif %}
+              </td>
+              <td><span class="badge badge-ghost badge-sm">{{ metric.evidence|title }}</span></td>
+              <td>{{ metric.coverage_pct }}%</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="py-10 text-center text-base-content/50">No calculated outcomes yet. Confirm a data source to begin.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="overflow-hidden rounded-lg border border-base-content/10 bg-base-100">
+      <div class="border-b border-base-content/10 px-5 py-4">
+        <h2 class="font-bold">Opportunities and actions</h2>
+      </div>
+      <div class="divide-y divide-base-content/10">
+      {% for opportunity in opportunities %}
+        <a href="{% url 'web_team:impact:opportunity_detail' request.team.slug opportunity.id %}" class="block px-5 py-4 hover:bg-base-200/40">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-sm font-semibold">{{ opportunity.title }}</p>
+              <p class="mt-1 text-xs text-base-content/50">{{ opportunity.get_status_display }}</p>
+            </div>
+            {% if opportunity.estimated_value != None %}<span class="font-mono text-sm font-bold">{{ opportunity.currency }} {{ opportunity.estimated_value }}</span>{% endif %}
+          </div>
+        </a>
+      {% empty %}
+        <p class="px-5 py-10 text-center text-sm text-base-content/50">No business opportunities detected for this period.</p>
+      {% endfor %}
+      </div>
+    </section>
+  </div>
+
+  {% if summary.top_contributors %}
+  <section class="mt-6 overflow-hidden rounded-lg border border-base-content/10 bg-base-100">
+    <div class="border-b border-base-content/10 px-5 py-4">
+      <h2 class="font-bold">Top energy contributors</h2>
+      <p class="mt-1 text-xs text-base-content/50">Confirmed, non-overlapping sources only. Abnormal excess compares each source with its own rolling baseline.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead><tr><th>Device</th><th>Consumption</th><th>Abnormal excess</th><th>Coverage</th></tr></thead>
+        <tbody>
+        {% for contributor in summary.top_contributors %}
+          <tr>
+            <td class="font-semibold">{{ contributor.device_name }}</td>
+            <td class="font-mono">{{ contributor.value }} {{ contributor.unit }}</td>
+            <td class="font-mono">{{ contributor.abnormal_excess|default_if_none:"Establishing baseline" }}</td>
+            <td>{{ contributor.coverage_pct }}%</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if assumption %}
+  <details class="mt-6 rounded-lg border border-base-content/10 bg-base-100 p-5">
+    <summary class="cursor-pointer font-bold">Assumptions and methodology</summary>
+    <div class="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
+      <p><span class="text-base-content/50">Revision</span><br>v{{ assumption.revision }}</p>
+      <p><span class="text-base-content/50">Tariff</span><br>{{ assumption.currency }} {{ assumption.tariff_per_kwh|default_if_none:"Not configured" }}/kWh</p>
+      <p><span class="text-base-content/50">After-hours base</span><br>{{ assumption.expected_after_hours_base_kw|default_if_none:"Not configured" }} kW</p>
+    </div>
+  </details>
+  {% endif %}
+</div>
+{% endblock %}

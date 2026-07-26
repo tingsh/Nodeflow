@@ -1,4 +1,4 @@
-{% load i18n %}
+{% load i18n waffle_tags %}
 {% if team %}
 <li class="menu-title">
   <span>{% translate "IoT Monitoring" %}</span>
@@ -39,6 +39,14 @@
     {% translate "Alerts" %}
   </a>
 </li>
+{% flag "business_impact_roi" %}
+<li>
+  <a href="{% url 'web_team:impact:overview' team.slug %}" {% if active_tab == 'impact' %}class="menu-active"{% endif %}>
+    <i class="fa fa-chart-line h-4 w-4"></i>
+    {% translate "Business Impact" %}
+  </a>
+</li>
+{% endflag %}
 
 <li>
   <a href="{% url 'web_team:dashboard_team:list' team.slug %}" {% if active_tab == 'shared-links' %}class="menu-active"{% endif %}>

@@ -28,6 +28,10 @@ REQUIRED_CELERY_TASKS = {
     "apps.devices.tasks.check_gateway_heartbeats",
     "apps.devices.tasks.expire_and_retry_gateway_activations",
     "apps.devices.tasks.expire_control_activations",
+    "apps.impact.tasks.dispatch_impact_refreshes",
+    "apps.impact.tasks.dispatch_daily_impact_finalization",
+    "apps.impact.tasks.dispatch_monthly_impact_reports",
+    "apps.impact.tasks.cleanup_impact_history",
 }
 SHARED_GATEWAY_INBOUND_TOPICS = {
     "v1/gateway/telemetry",
@@ -224,6 +228,37 @@ def _check_remote_control_configuration() -> list[CheckResult]:
     ]
 
 
+def _check_business_impact_reporting() -> list[CheckResult]:
+    storage_config = settings.STORAGES.get("impact_reports", {})
+    backend = storage_config.get("BACKEND", "")
+    private_root = Path(getattr(settings, "PRIVATE_MEDIA_ROOT", settings.BASE_DIR / "private_media"))
+    media_root = Path(settings.MEDIA_ROOT)
+    storage_private = bool(backend) and backend != "apps.web.storage_backends.PublicMediaStorage"
+    filesystem_separate = private_root.resolve() != media_root.resolve()
+    try:
+        import weasyprint  # noqa: F401
+
+        pdf_ready = True
+        pdf_detail = "WeasyPrint imported successfully."
+    except Exception as exc:
+        pdf_ready = False
+        pdf_detail = str(exc)
+    return [
+        CheckResult(
+            "Business impact",
+            "Private report storage",
+            "OK" if storage_private and filesystem_separate else "FAIL",
+            f"backend={backend or 'missing'}; private_root={private_root}",
+        ),
+        CheckResult(
+            "Business impact",
+            "PDF rendering",
+            "OK" if pdf_ready else "FAIL",
+            pdf_detail,
+        ),
+    ]
+
+
 def build_checks() -> list[CheckResult]:
     settings_module = os.environ.get("DJANGO_SETTINGS_MODULE", "")
     hosts = set(settings.ALLOWED_HOSTS)
@@ -380,6 +415,7 @@ def build_checks() -> list[CheckResult]:
     checks.extend([_check_database(), _check_timescale(), _check_redis(), _check_mqtt()])
     checks.extend([_check_legacy_shared_inbound_disabled(), _check_gateway_shared_inbound_acls()])
     checks.extend(_check_remote_control_configuration())
+    checks.extend(_check_business_impact_reporting())
     return checks
 
 

@@ -1,0 +1,69 @@
+{% extends "web/app/app_base.html" %}
+{% block app %}
+<div class="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
+  <a href="{% url 'web_team:impact:site_detail' request.team.slug site.id %}" class="text-xs font-bold text-primary">← {{ site.name }} impact</a>
+  <h1 class="mt-2 text-2xl font-bold">Business assumptions</h1>
+  <p class="mt-1 text-sm text-base-content/60">Each save creates a new effective-dated revision. Reports keep the assumptions that produced them.</p>
+
+  <form method="post" class="mt-6 space-y-6">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="alert alert-error">{{ form.non_field_errors }}</div>{% endif %}
+
+    <section class="rounded-lg border border-base-content/10 bg-base-100 p-5">
+      <h2 class="font-bold">Investment and reporting</h2>
+      <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+        {% for field in form %}
+          {% if field.name in "currency,one_time_investment,amortization_months,recurring_monthly_cost,use_subscription_cost,email_reports,report_recipients" %}
+          <label class="{% if field.name == 'report_recipients' %}md:col-span-3{% endif %}">
+            <span class="mb-1 block text-xs font-bold uppercase tracking-wide text-base-content/50">{{ field.label }}</span>
+            {{ field }}
+            {% if field.help_text %}<span class="mt-1 block text-xs text-base-content/45">{{ field.help_text }}</span>{% endif %}
+            {% for error in field.errors %}<span class="mt-1 block text-xs text-error">{{ error }}</span>{% endfor %}
+          </label>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="rounded-lg border border-base-content/10 bg-base-100 p-5">
+      <h2 class="font-bold">Operating context</h2>
+      <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div class="md:col-span-2">{{ form.operating_days.label_tag }}{{ form.operating_days }}</div>
+        <label>{{ form.operating_start.label_tag }}{{ form.operating_start }}</label>
+        <label>{{ form.operating_end.label_tag }}{{ form.operating_end }}</label>
+      </div>
+    </section>
+
+    <section class="rounded-lg border border-base-content/10 bg-base-100 p-5">
+      <h2 class="font-bold">Value assumptions</h2>
+      <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+        {% for field in form %}
+          {% if field.name in "tariff_per_kwh,expected_after_hours_base_kw,abnormal_tolerance_pct,downtime_cost_per_hour,labor_cost_per_hour,cold_min_temperature,cold_max_temperature,excursion_delay_minutes,cold_loss_per_critical_excursion,cold_critical_duration_minutes" %}
+          <label>
+            <span class="mb-1 block text-xs font-bold uppercase tracking-wide text-base-content/50">{{ field.label }}</span>
+            {{ field }}
+            {% for error in field.errors %}<span class="mt-1 block text-xs text-error">{{ error }}</span>{% endfor %}
+          </label>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="rounded-lg border border-base-content/10 bg-base-100 p-5">
+      <h2 class="font-bold">Comparison baseline</h2>
+      <p class="mt-1 text-xs text-base-content/50">A rolling baseline needs at least 14 comparable days. A supplied baseline is labeled as customer-provided.</p>
+      <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
+        <label>{{ form.baseline_strategy.label_tag }}{{ form.baseline_strategy }}{% for error in form.baseline_strategy.errors %}<span class="text-xs text-error">{{ error }}</span>{% endfor %}</label>
+        <label>{{ form.supplied_monthly_energy_kwh.label_tag }}{{ form.supplied_monthly_energy_kwh }}</label>
+        <label>{{ form.supplied_monthly_downtime_minutes.label_tag }}{{ form.supplied_monthly_downtime_minutes }}</label>
+        <label>{{ form.supplied_monthly_labor_minutes.label_tag }}{{ form.supplied_monthly_labor_minutes }}</label>
+      </div>
+    </section>
+
+    <div class="flex justify-end gap-2">
+      <a href="{% url 'web_team:impact:site_detail' request.team.slug site.id %}" class="btn btn-ghost">Cancel</a>
+      <button class="btn btn-primary">Save assumptions</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

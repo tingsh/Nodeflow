@@ -1,5 +1,5 @@
 [Unit]
-Description=Novena Postgres backup
+Description=Novena database and private report backup
 Wants=network-online.target
 After=network-online.target docker.service
 
@@ -10,4 +10,5 @@ WorkingDirectory=/opt/novena/Novena-Hub
 Environment=NOVENA_ROOT=/opt/novena/Novena-Hub
 Environment=NOVENA_ENV_FILE=/opt/novena/Novena-Hub/deploy/env/production.env
 ExecStart=/opt/novena/Novena-Hub/deploy/backups/backup_postgres.sh
+ExecStart=/opt/novena/Novena-Hub/deploy/backups/backup_private_media.sh
 ExecStartPost=/opt/novena/Novena-Hub/deploy/backups/backup_retention.sh

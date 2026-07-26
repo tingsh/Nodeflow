@@ -31,6 +31,21 @@ class RegisterDefinition(BaseModel):
     min: float | None = Field(None, description="Minimum allowed value for controls.")
     max: float | None = Field(None, description="Maximum allowed value for controls.")
     labels: list[str] | None = Field(None, description="Labels for toggle or boolean values, e.g. ['Stop', 'Start'].")
+    quantity_kind: (
+        Literal["power", "energy", "power_factor", "temperature", "runtime", "status", "generation"] | None
+    ) = Field(
+        None,
+        description="Protocol-neutral physical meaning used for verified business-impact calculations.",
+    )
+    aggregation: Literal["instantaneous", "cumulative_counter", "interval_total", "state", "event"] | None = Field(
+        None,
+        description="How readings should be aggregated over time.",
+    )
+    canonical_unit: str | None = Field(None, description="Canonical unit, such as kW, kWh, °C, h, or unitless.")
+    conversion_factor: float | None = Field(
+        None,
+        description="Multiplier converting the reported unit into the canonical unit.",
+    )
 
 
 class AlertPresetDefinition(BaseModel):
@@ -117,6 +132,8 @@ def _build_generation_prompt(
         "(e.g., over-temperature, under-voltage) if reasonable.\n"
         "7. Estimate your extraction confidence (0.0 to 1.0) and include the source URL where the map was found. "
         "For an attached manual without a URL, use 'uploaded-equipment-manual' as source_url.\n\n"
+        "8. Where the documentation is explicit, provide quantity_kind, aggregation, canonical_unit, and "
+        "conversion_factor. Do not guess these fields when the manual is ambiguous.\n\n"
         "Return the output strictly in the requested JSON structure."
     )
     return prompt

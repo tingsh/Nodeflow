@@ -425,7 +425,7 @@ def _build_attention_items(devices, gateways, active_alerts, open_tickets, overd
     return items[:8]
 
 
-def build_team_operations_dashboard(team):
+def build_team_operations_dashboard(team, *, include_impact=False, impact_site_ids=None):
     from apps.alerts.models import Alert
     from apps.automations.models import Automation
     from apps.devices.models import Device, Gateway, Site
@@ -482,6 +482,12 @@ def build_team_operations_dashboard(team):
             }
         )
 
+    impact_summary = None
+    if include_impact:
+        from apps.impact.services import build_team_impact_summary
+
+        impact_summary = build_team_impact_summary(team, site_ids=impact_site_ids)
+
     return {
         "sites": sites,
         "sites_count": len(sites),
@@ -507,6 +513,7 @@ def build_team_operations_dashboard(team):
         "top_devices": top_devices,
         "attention_items": _build_attention_items(devices, gateways, active_alerts, open_tickets, overdue_pms),
         "logs": ActivityLog.objects.filter(team=team).order_by("-timestamp")[:15],
+        "impact_summary": impact_summary,
     }
 
 

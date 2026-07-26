@@ -78,5 +78,17 @@
             <i class="fa fa-plus text-indigo-500"></i><h3 class="mt-4 font-black">Set up more equipment</h3><p class="mt-1 text-sm text-base-content/55">Start another Guided Setup run.</p>
         </a>
     </div>
+    {% if impact_profile %}
+    <section class="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-6 dark:border-indigo-500/20 dark:bg-indigo-500/10">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <p class="text-xs font-black uppercase tracking-widest text-indigo-600">Business impact</p>
+                <h2 class="mt-1 text-xl font-black">Confirm which readings drive business value</h2>
+                <p class="mt-1 text-sm text-base-content/60">Novena suggested sources from the verified equipment template. Confirm the main meter or temperature sensor before financial estimates begin.</p>
+            </div>
+            <a href="{% url 'web_team:impact:sources' request.team.slug impact_profile.site_id %}" class="btn btn-primary rounded-lg">Review data sources</a>
+        </div>
+    </section>
+    {% endif %}
 </div>
 {% endblock %}

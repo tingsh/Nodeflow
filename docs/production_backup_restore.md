@@ -6,18 +6,19 @@ This guide is for the first low-cost production deployment where Novena runs Pos
 
 ## Mental Model
 
-A backup is a copy of the database at a point in time. A restore is the act of loading that backup into a database again.
+A backup is a copy of the database and private report files at a point in time. A restore is the act of loading those copies again.
 
 The important part is the restore. Until we have restored a backup once, we only have a file that we hope is useful.
 
 ## What The Scripts Do
 
 - `deploy/backups/backup_postgres.sh` creates a compressed custom-format `pg_dump`.
+- `deploy/backups/backup_private_media.sh` creates an atomic archive of confidential Business Impact PDFs.
 - `deploy/backups/restore_postgres.sh` restores one selected backup into a target database.
-- `deploy/backups/backup_retention.sh` keeps local backup storage from growing forever.
+- `deploy/backups/backup_retention.sh` applies the same daily, weekly, and monthly retention to both backup sets.
 - The systemd examples run the backup nightly.
 
-The backup script reads `DATABASE_URL` from `deploy/env/production.env` by default. If `BACKUP_RCLONE_REMOTE` is set, it also uploads the backup tree with `rclone`.
+The database backup reads `DATABASE_URL` from `deploy/env/production.env` by default. `BACKUP_RCLONE_REMOTE` uploads database backups. `PRIVATE_MEDIA_BACKUP_RCLONE_REMOTE` separately uploads confidential report archives; use a private bucket and restricted credentials.
 
 ## First Setup
 
@@ -34,12 +35,14 @@ Create the first backup manually:
 
 ```bash
 NOVENA_ROOT=/opt/novena/Novena-Hub ./deploy/backups/backup_postgres.sh
+NOVENA_ROOT=/opt/novena/Novena-Hub ./deploy/backups/backup_private_media.sh
 ```
 
 If using Cloudflare R2 or Backblaze B2, configure `rclone` and add this to `deploy/env/production.env`:
 
 ```env
 BACKUP_RCLONE_REMOTE=novena-r2:novena-production-backups/postgres
+PRIVATE_MEDIA_BACKUP_RCLONE_REMOTE=novena-r2:novena-production-backups/private-media
 ```
 
 ## Restore Drill
@@ -67,7 +70,19 @@ Check that important tables exist:
 select count(*) from teams_team;
 select count(*) from devices_gateway;
 select count(*) from telemetry_telemetrydata;
+select count(*) from impact_impactreport;
 ```
+
+Restore private reports into a disposable directory and compare it with the restored `impact_impactreport.private_file_name` rows:
+
+```bash
+mkdir -p /tmp/novena-private-media-restore
+tar -xzf /opt/novena/Novena-Hub/backups/private_media/daily/<backup-file>.tar.gz \
+  -C /tmp/novena-private-media-restore
+find /tmp/novena-private-media-restore -type f -name '*.pdf'
+```
+
+Do not extract an unverified archive over the live directory. For a production recovery, stop web and Celery, restore into a new directory, verify filenames against the restored database, then atomically switch the directory into place. If reports use S3 instead of the local filesystem, enable bucket versioning and private cross-region or cross-account backup rather than this local archive.
 
 Drop the disposable database only after the restore is verified:
 
@@ -109,6 +124,7 @@ Before production restore:
 
 1. Stop `web`, `celery-worker`, `celery-beat`, and `mqtt-consumer`.
 2. Take one final backup of the current broken state.
-3. Restore the selected backup with `RESTORE_CONFIRM=restore-now`.
-4. Run migrations only if the code version requires them.
-5. Start services and run `python manage.py production_readiness_check`.
+3. Restore the selected database backup with `RESTORE_CONFIRM=restore-now`.
+4. Restore the matching private-report archive into a new directory and verify it before switching it live.
+5. Run migrations only if the code version requires them.
+6. Start services and run `python manage.py production_readiness_check`.

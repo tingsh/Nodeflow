@@ -3,9 +3,11 @@ import json
 import re
 
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from waffle import flag_is_active
 
 from apps.alerts.models import AlertRule
 from apps.devices.models import (
@@ -115,6 +117,63 @@ def step_1_site(request, team_slug):
                 )
             request.session["onboarding_site_id"] = site.id
             request.session["solution_profile"] = site.solution_profile
+            if flag_is_active(request, "business_impact_roi"):
+                from apps.impact.services import (
+                    create_assumption_revision,
+                    ensure_business_profile,
+                    ensure_site_profile,
+                )
+
+                impact_profile = ensure_site_profile(site)
+                currency = request.POST.get("impact_currency", "SGD").strip().upper() or "SGD"
+                if len(currency) != 3 or not currency.isalpha():
+                    currency = "SGD"
+                business_profile = ensure_business_profile(request.team)
+                business_profile.currency = currency
+                business_profile.full_clean()
+                business_profile.save(update_fields=["currency", "updated_at"])
+                operating_start = request.POST.get("operating_start", "08:00")
+                operating_end = request.POST.get("operating_end", "18:00")
+                if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", operating_start):
+                    operating_start = "08:00"
+                if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", operating_end):
+                    operating_end = "18:00"
+                weekdays = {"monday", "tuesday", "wednesday", "thursday", "friday"}
+                impact_profile.operating_schedule = {
+                    day: ([[operating_start, operating_end]] if day in weekdays else [])
+                    for day in (
+                        "monday",
+                        "tuesday",
+                        "wednesday",
+                        "thursday",
+                        "friday",
+                        "saturday",
+                        "sunday",
+                    )
+                }
+                impact_profile.save(update_fields=["operating_schedule", "updated_at"])
+                assumption_inputs = {
+                    "currency": currency,
+                    "tariff_per_kwh": request.POST.get("tariff_per_kwh") or None,
+                    "downtime_cost_per_hour": request.POST.get("downtime_cost_per_hour") or None,
+                    "labor_cost_per_hour": request.POST.get("labor_cost_per_hour") or None,
+                    "cold_min_temperature": request.POST.get("cold_min_temperature") or None,
+                    "cold_max_temperature": request.POST.get("cold_max_temperature") or None,
+                }
+                if any(value is not None for key, value in assumption_inputs.items() if key != "currency"):
+                    try:
+                        create_assumption_revision(
+                            impact_profile,
+                            assumption_inputs,
+                            user=request.user,
+                            change_note="Captured during site onboarding",
+                        )
+                    except ValidationError:
+                        messages.warning(
+                            request,
+                            "The site was saved, but some optional business inputs were invalid. "
+                            "You can correct them later in Business Impact settings.",
+                        )
             if request.session.get("setup_mode"):
                 return redirect("web_team:onboarding:step_connectivity", team_slug=team_slug)
             return redirect("web_team:onboarding:step_2_gateway", team_slug=team_slug)
@@ -821,6 +880,7 @@ def step_4_alert(request, team_slug):
 
 @require_permission("manage_devices")
 def complete(request, team_slug):
+    site_id = request.session.get("onboarding_site_id")
     gateway_id = request.session.get("onboarding_gateway_id")
     device_id = request.session.get("onboarding_device_id")
     gateway = Gateway.objects.filter(id=gateway_id, team=request.team).first() if gateway_id else None
@@ -835,6 +895,15 @@ def complete(request, team_slug):
             "Guided Setup is still verifying the Gateway and first live data.",
         )
         return redirect("web_team:onboarding:step_4_alert", team_slug=team_slug)
+
+    impact_profile = None
+    if site_id and flag_is_active(request, "business_impact_roi"):
+        from apps.impact.services import ensure_site_profile, suggest_data_sources
+
+        site = Site.objects.filter(id=site_id, team=request.team).first()
+        if site:
+            impact_profile = ensure_site_profile(site)
+            suggest_data_sources(site)
 
     for key in [
         "onboarding_site_id",
@@ -857,6 +926,7 @@ def complete(request, team_slug):
             "device_id": device_id,
             "commissioning": commissioning,
             "setup_run": setup_run,
+            "impact_profile": impact_profile,
         },
     )
 

@@ -1,0 +1,49 @@
+<div style="padding: 20px">
+  <p class="eyebrow">Novena Platform · Business Impact</p>
+  <h1>{{ period_label }} Review</h1>
+  <p class="muted">{{ team.name }}{% if site %} · {{ site.name }}{% endif %} · Generated {{ generated_at|date:"d M Y H:i" }}</p>
+
+  <div class="notice">Financial figures are estimates based on configured assumptions and valid operational data. Open opportunities are kept separate from estimated realized value.</div>
+
+  <div class="grid">
+    <div class="card"><div class="label">Estimated realized</div><div class="value">{{ summary.currency }} {{ summary.estimated_realized_value|default_if_none:"—" }}</div></div>
+    <div class="card"><div class="label">Open opportunity</div><div class="value">{{ summary.currency }} {{ summary.estimated_opportunity|default_if_none:"—" }}</div></div>
+    <div class="card"><div class="label">Novena cost</div><div class="value">{{ summary.currency }} {{ summary.investment_cost|default_if_none:"—" }}</div></div>
+    <div class="card"><div class="label">Net benefit</div><div class="value">{{ summary.currency }} {{ summary.net_benefit|default_if_none:"—" }}</div></div>
+    <div class="card"><div class="label">Estimated ROI</div><div class="value">{{ summary.roi_pct|default_if_none:"—" }}{% if summary.roi_pct != None %}%{% endif %}</div></div>
+  </div>
+
+  {% if summary.sites %}
+  {% for site_summary in summary.sites %}
+    <h2>{{ site_summary.site_name }} · {{ site_summary.vertical_profile }}</h2>
+    <p>Coverage: {{ site_summary.coverage_pct }}% · Status: {{ site_summary.status }}</p>
+    <table>
+      <thead><tr><th>Metric</th><th>Result</th><th>Evidence</th><th>Coverage</th></tr></thead>
+      <tbody>
+      {% for metric in site_summary.metrics %}
+        <tr>
+          <td>{{ metric.label|default:metric.key }}{% for warning in metric.warnings %}<br><span class="muted">{{ warning }}</span>{% endfor %}</td>
+          <td>{% if metric.monetary_value != None %}{{ metric.currency }} {{ metric.monetary_value }}{% else %}{{ metric.value|default_if_none:"—" }} {{ metric.unit }}{% endif %}</td>
+          <td><span class="badge">{{ metric.evidence }}</span></td>
+          <td>{{ metric.coverage_pct }}%</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% endfor %}
+  {% else %}
+  <h2>Measured and estimated outcomes</h2>
+  <table>
+    <thead><tr><th>Metric</th><th>Result</th><th>Evidence</th><th>Coverage</th></tr></thead>
+    <tbody>
+    {% for metric in summary.metrics %}
+      <tr><td>{{ metric.label|default:metric.key }}</td><td>{% if metric.monetary_value != None %}{{ metric.currency }} {{ metric.monetary_value }}{% else %}{{ metric.value|default_if_none:"—" }} {{ metric.unit }}{% endif %}</td><td><span class="badge">{{ metric.evidence }}</span></td><td>{{ metric.coverage_pct }}%</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <h2>Assumptions and methodology</h2>
+  <p>Methodology version {{ methodology_version }}. Measured, calculated, and estimated results remain distinct. Estimates below 80% data coverage are withheld, 80–95% is low confidence, and at least 95% is normal confidence. Different currencies are not combined.</p>
+  <p>Each estimate retains its immutable assumption revision, calculation inputs, data coverage, warnings, and methodology in the report snapshot and CSV export.</p>
+</div>

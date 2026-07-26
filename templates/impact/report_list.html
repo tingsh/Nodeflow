@@ -1,0 +1,37 @@
+{% extends "web/app/app_base.html" %}
+{% block app %}
+<div class="px-4 py-6 sm:px-6 lg:px-8">
+  <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <div>
+      <a href="{% url 'web_team:impact:overview' request.team.slug %}" class="text-xs font-bold text-primary">← Business Impact</a>
+      <h1 class="mt-2 text-2xl font-bold">Monthly business reviews</h1>
+      <p class="mt-1 text-sm text-base-content/60">Frozen, versioned reports with assumptions and methodology preserved.</p>
+    </div>
+    <form method="post" action="{% url 'web_team:impact:report_generate' request.team.slug %}" class="flex flex-wrap items-end gap-2">
+      {% csrf_token %}
+      <label><span class="block text-xs text-base-content/50">Year</span><input type="number" name="year" value="{% now 'Y' %}" class="input input-bordered input-sm w-24"></label>
+      <label><span class="block text-xs text-base-content/50">Month</span><input type="number" name="month" value="{% now 'n' %}" min="1" max="12" class="input input-bordered input-sm w-20"></label>
+      <button class="btn btn-primary btn-sm">Generate</button>
+    </form>
+  </div>
+
+  <div class="mt-6 overflow-hidden rounded-lg border border-base-content/10 bg-base-100">
+    <table class="table">
+      <thead><tr><th>Period</th><th>Scope</th><th>Revision</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for report in reports %}
+        <tr>
+          <td class="font-semibold">{{ report.period_start|date:"F Y" }}</td>
+          <td>{{ report.site.name|default:request.team.name }}</td>
+          <td>v{{ report.revision }}</td>
+          <td><span class="badge badge-ghost">{{ report.get_status_display }}</span></td>
+          <td class="text-right"><a href="{% url 'web_team:impact:report_detail' request.team.slug report.id %}" class="btn btn-ghost btn-xs">Open</a></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="py-10 text-center text-base-content/50">No monthly business reviews generated yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

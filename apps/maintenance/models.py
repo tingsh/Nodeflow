@@ -106,6 +106,11 @@ class MaintenanceTicket(BaseTeamModel):
     due_date = models.DateTimeField(null=True, blank=True)
     resolution_notes = models.TextField(blank=True)
     downtime_minutes = models.PositiveIntegerField(default=0)
+    labor_minutes = models.PositiveIntegerField(
+        default=0,
+        blank=True,
+        help_text=_("Actual hands-on labor recorded for this work item."),
+    )
 
     # Template instances mapping
     checklist_state = models.JSONField(

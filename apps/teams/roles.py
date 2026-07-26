@@ -52,6 +52,10 @@ PERMISSIONS = {
     "manage_shared_links": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER],
     "manage_maintenance": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER],
     "view_maintenance": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER, ROLE_OPERATOR, ROLE_VIEWER],
+    "view_business_impact": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER, ROLE_OPERATOR, ROLE_VIEWER],
+    "manage_business_impact": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER],
+    "manage_impact_reports": [ROLE_OWNER, ROLE_ADMIN],
+    "download_impact_reports": [ROLE_OWNER, ROLE_ADMIN, ROLE_MANAGER, ROLE_OPERATOR, ROLE_VIEWER],
 }
 
 

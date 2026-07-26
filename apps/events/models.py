@@ -39,6 +39,7 @@ class EmailDelivery(models.Model):
         MAINTENANCE_RESOLUTION = "maintenance_resolution", "Maintenance resolution"
         SUPPORT_REQUEST = "support_request", "Support request"
         SALES_INQUIRY = "sales_inquiry", "Sales inquiry"
+        IMPACT_REPORT = "impact_report", "Business impact report"
         TEST_EMAIL = "test_email", "Test email"
         UNKNOWN = "unknown", "Unknown"
 

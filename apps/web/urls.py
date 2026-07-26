@@ -30,6 +30,7 @@ team_urlpatterns = (
         path("shared-links/", include("apps.dashboard.team_urls")),
         path("maintenance/", include("apps.maintenance.urls")),
         path("automations/", include("apps.automations.urls")),
+        path("impact/", include("apps.impact.urls")),
     ],
     "web_team",
 )

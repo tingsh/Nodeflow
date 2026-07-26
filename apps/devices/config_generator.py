@@ -171,26 +171,34 @@ def _default_objects_count(type_name):
 
 def normalized_datapoints(template):
     """Expose the legacy register map through a versioned protocol-neutral shape."""
+    from apps.impact.services import semantic_datapoint_metadata
+
     datapoints = []
     for key, register in (template.register_map or {}).items():
         if not isinstance(register, dict):
             continue
-        datapoints.append(
-            {
-                "key": key,
-                "label": register.get("label") or key.replace("_", " ").title(),
-                "address": register.get("address", 0),
-                "functionCode": register.get("functionCode", 3),
-                "objectsCount": register.get("objectsCount", _default_objects_count(register.get("type"))),
-                "data_type": register.get("type", "uint16"),
-                "access": "write" if register.get("writable") else "read",
-                "scale": register.get("scale", register.get("multiplier", 1)),
-                "offset": register.get("offset", 0),
-                "unit": register.get("unit", ""),
-                "quality": register.get("quality", {}),
-                "protocol_metadata": register.get("protocol_metadata", {}),
-            }
+        datapoint = {
+            "key": key,
+            "label": register.get("label") or key.replace("_", " ").title(),
+            "address": register.get("address", 0),
+            "functionCode": register.get("functionCode", 3),
+            "objectsCount": register.get("objectsCount", _default_objects_count(register.get("type"))),
+            "data_type": register.get("type", "uint16"),
+            "access": "write" if register.get("writable") else "read",
+            "scale": register.get("scale", register.get("multiplier", 1)),
+            "offset": register.get("offset", 0),
+            "unit": register.get("unit", ""),
+            "quality": register.get("quality", {}),
+            "protocol_metadata": register.get("protocol_metadata", {}),
+        }
+        datapoint.update(
+            semantic_datapoint_metadata(
+                key,
+                register,
+                expected_interval=template.default_polling_interval,
+            )
         )
+        datapoints.append(datapoint)
     return datapoints
 
 

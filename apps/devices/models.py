@@ -257,7 +257,7 @@ class DeviceTemplate(models.Model):
     alert_presets = models.JSONField(default=list, blank=True)
     is_verified = models.BooleanField(default=False)
     datapoint_schema_version = models.PositiveSmallIntegerField(
-        default=1,
+        default=2,
         help_text=_("Version of the normalized datapoint representation stored in register_map."),
     )
 

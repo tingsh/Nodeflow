@@ -1,0 +1,86 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+{% block app %}
+<div class="px-4 py-6 sm:px-6 lg:px-8">
+  <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <div>
+      <p class="text-xs font-bold uppercase tracking-widest text-primary">Business Impact</p>
+      <h1 class="mt-2 text-2xl font-bold text-base-content">Is Novena paying for itself?</h1>
+      <p class="mt-1 max-w-3xl text-sm text-base-content/60">Measured operations, estimated value, and the assumptions behind every financial figure.</p>
+    </div>
+    <a href="{% url 'web_team:impact:report_list' request.team.slug %}" class="btn btn-outline btn-sm rounded-md">
+      <i class="fa fa-file-lines mr-2"></i>Monthly reviews
+    </a>
+  </div>
+
+  <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+    <div class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm">
+      <p class="text-[11px] font-bold uppercase tracking-wide text-base-content/50">Estimated realized</p>
+      <p class="mt-2 text-2xl font-bold font-mono">{{ team_summary.currency }} {{ team_summary.estimated_realized_value|default_if_none:"—" }}</p>
+      <p class="mt-1 text-xs text-base-content/50">Observed improvement vs baseline</p>
+    </div>
+    <div class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm">
+      <p class="text-[11px] font-bold uppercase tracking-wide text-base-content/50">Open opportunity</p>
+      <p class="mt-2 text-2xl font-bold font-mono">{{ team_summary.currency }} {{ team_summary.estimated_opportunity|default_if_none:"—" }}</p>
+      <p class="mt-1 text-xs text-base-content/50">Potential, not counted as realized</p>
+    </div>
+    <div class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm">
+      <p class="text-[11px] font-bold uppercase tracking-wide text-base-content/50">Novena cost</p>
+      <p class="mt-2 text-2xl font-bold font-mono">{{ team_summary.currency }} {{ team_summary.investment_cost|default_if_none:"—" }}</p>
+      <p class="mt-1 text-xs text-base-content/50">Monthly plus amortized setup</p>
+    </div>
+    <div class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm">
+      <p class="text-[11px] font-bold uppercase tracking-wide text-base-content/50">Estimated net benefit</p>
+      <p class="mt-2 text-2xl font-bold font-mono">{{ team_summary.currency }} {{ team_summary.net_benefit|default_if_none:"—" }}</p>
+      <p class="mt-1 text-xs text-base-content/50">Realized estimate less cost</p>
+    </div>
+    <div class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm">
+      <p class="text-[11px] font-bold uppercase tracking-wide text-base-content/50">Estimated ROI</p>
+      <p class="mt-2 text-2xl font-bold font-mono">{{ team_summary.roi_pct|default_if_none:"—" }}{% if team_summary.roi_pct != None %}%{% endif %}</p>
+      <p class="mt-1 text-xs text-base-content/50">Coverage {{ team_summary.coverage_pct }}%</p>
+    </div>
+  </div>
+
+  {% if team_summary.mixed_currency %}
+  <div class="alert alert-warning mt-5 rounded-lg text-sm">
+    Sites using different currencies remain separate; Novena will not create an invalid combined total.
+  </div>
+  {% endif %}
+
+  <div class="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-2">
+    {% for card in profiles %}
+    <a href="{% url 'web_team:impact:site_detail' request.team.slug card.profile.site_id %}" class="rounded-lg border border-base-content/10 bg-base-100 p-5 shadow-sm transition hover:border-primary/40">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="text-xs font-bold uppercase tracking-wide text-base-content/45">{{ card.profile.get_calculation_status_display }}</p>
+          <h2 class="mt-1 text-lg font-bold">{{ card.profile.site.name }}</h2>
+          <p class="mt-1 text-sm text-base-content/55">{{ card.profile.site.get_solution_profile_display }}</p>
+        </div>
+        <span class="badge {% if card.summary.status == 'ready' %}badge-success{% elif card.summary.status == 'low_coverage' %}badge-warning{% else %}badge-ghost{% endif %}">
+          {{ card.summary.coverage_pct }}% coverage
+        </span>
+      </div>
+      <div class="mt-5 grid grid-cols-3 gap-3">
+        <div>
+          <p class="text-[10px] font-bold uppercase text-base-content/40">Realized</p>
+          <p class="mt-1 font-mono font-bold">{{ card.summary.currency }} {{ card.summary.estimated_realized_value|default_if_none:"—" }}</p>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold uppercase text-base-content/40">Opportunity</p>
+          <p class="mt-1 font-mono font-bold">{{ card.summary.currency }} {{ card.summary.estimated_opportunity|default_if_none:"—" }}</p>
+        </div>
+        <div>
+          <p class="text-[10px] font-bold uppercase text-base-content/40">Estimated ROI</p>
+          <p class="mt-1 font-mono font-bold">{{ card.summary.roi_pct|default_if_none:"—" }}{% if card.summary.roi_pct != None %}%{% endif %}</p>
+        </div>
+      </div>
+    </a>
+    {% empty %}
+    <div class="rounded-lg border border-dashed border-base-content/15 bg-base-100 p-10 text-center xl:col-span-2">
+      <p class="font-semibold">No sites are available yet.</p>
+      <p class="mt-1 text-sm text-base-content/50">Complete Location setup before configuring business impact.</p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

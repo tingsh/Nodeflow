@@ -1,6 +1,7 @@
 {% extends "web/app/app_base.html" %}
 {% load i18n %}
 {% load team_permissions %}
+{% load waffle_tags %}
 
 {% block app %}
 <div class="px-4 sm:px-6 lg:px-8 py-6">
@@ -70,6 +71,31 @@
                 <p class="mt-1 text-xs text-base-content/50">of {{ total_automations }} active</p>
             </a>
         </div>
+
+        {% flag "business_impact_roi" %}
+        <a href="{% url 'web_team:impact:overview' team.slug %}" class="mb-5 block rounded-lg border border-primary/20 bg-primary/5 p-5 transition hover:border-primary/40">
+            <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <div>
+                    <p class="text-[11px] font-bold uppercase tracking-widest text-primary">Business Impact</p>
+                    <h2 class="mt-1 text-lg font-bold">Operational value this month</h2>
+                    <p class="mt-1 text-xs text-base-content/50">Measured outcomes and transparent estimates from your own site data.</p>
+                    <p class="mt-2 text-xs font-semibold text-base-content/65">
+                        Coverage {{ impact_summary.coverage_pct }}% · {{ impact_summary.confidence|title }} confidence
+                        {% if impact_summary.leading_opportunity %}
+                        · Leading issue: {{ impact_summary.leading_opportunity.site_name }} — {{ impact_summary.leading_opportunity.title }}
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="grid grid-cols-2 gap-4 sm:grid-cols-5">
+                    <div><p class="text-[9px] font-bold uppercase text-base-content/40">Estimated realized</p><p class="mt-1 font-mono font-bold">{{ impact_summary.currency }} {{ impact_summary.estimated_realized_value|default_if_none:"—" }}</p></div>
+                    <div><p class="text-[9px] font-bold uppercase text-base-content/40">Open opportunity</p><p class="mt-1 font-mono font-bold">{{ impact_summary.currency }} {{ impact_summary.estimated_opportunity|default_if_none:"—" }}</p></div>
+                    <div><p class="text-[9px] font-bold uppercase text-base-content/40">Novena cost</p><p class="mt-1 font-mono font-bold">{{ impact_summary.currency }} {{ impact_summary.investment_cost|default_if_none:"—" }}</p></div>
+                    <div><p class="text-[9px] font-bold uppercase text-base-content/40">Estimated net</p><p class="mt-1 font-mono font-bold">{{ impact_summary.currency }} {{ impact_summary.net_benefit|default_if_none:"—" }}</p></div>
+                    <div><p class="text-[9px] font-bold uppercase text-base-content/40">Estimated ROI</p><p class="mt-1 font-mono font-bold">{{ impact_summary.roi_pct|default_if_none:"—" }}{% if impact_summary.roi_pct != None %}%{% endif %}</p></div>
+                </div>
+            </div>
+        </a>
+        {% endflag %}
 
         <div class="grid grid-cols-1 gap-5 xl:grid-cols-3 mb-5">
             <section class="xl:col-span-2 rounded-lg border border-base-content/10 bg-base-100 p-5 shadow-sm">
