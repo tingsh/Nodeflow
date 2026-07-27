@@ -62,14 +62,14 @@
                     hx-swap="outerHTML"
                     class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 font-semibold"
                 >
-                    Acknowledge
+                    Acknowledge alert
                 </button>
                 {% else %}
                 <span class="text-xs text-gray-400 italic">Pending Ack</span>
                 {% endif %}
             {% elif alert.status == 'acknowledged' %}
             <span class="text-xs text-gray-400">
-                Ack by {{ alert.acknowledged_by.get_full_name|default:alert.acknowledged_by.username }}
+                Seen by {{ alert.acknowledged_by.get_full_name|default:alert.acknowledged_by.username }} · acknowledgment does not mark the issue resolved
             </span>
             {% endif %}
         </div>

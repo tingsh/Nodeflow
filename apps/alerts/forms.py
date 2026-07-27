@@ -33,6 +33,30 @@ class AlertRuleForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         team = kwargs.pop("team", None)
         super().__init__(*args, **kwargs)
+        labels = {
+            "name": "Alert name",
+            "device": "Equipment",
+            "site": "Site",
+            "telemetry_key": "Reading to monitor",
+            "condition": "Alert when the reading is",
+            "threshold": "Limit",
+            "severity": "Urgency",
+            "duration_seconds": "How long the limit must be exceeded (seconds)",
+            "cooldown_minutes": "Wait before sending another notification (minutes)",
+            "recipients": "People to notify",
+            "create_maintenance_ticket": "Create a maintenance ticket when triggered",
+            "maintenance_template": "Maintenance checklist",
+        }
+        for field_name, label in labels.items():
+            self.fields[field_name].label = label
+        self.fields["condition"].choices = (
+            ("gt", "above"),
+            ("gte", "at or above"),
+            ("lt", "below"),
+            ("lte", "at or below"),
+            ("eq", "equal to"),
+            ("neq", "not equal to"),
+        )
         if team:
             self.fields["device"].queryset = Device.objects.filter(team=team)
             self.fields["site"].queryset = Site.objects.filter(team=team)

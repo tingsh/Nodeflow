@@ -46,10 +46,10 @@
         </div>
         <div class="mt-5 flex lg:ml-4 lg:mt-0 space-x-3">
             <a href="{% url 'web_team:devices:gateway_control_center' request.team.slug gateway.pk %}" class="btn btn-warning btn-sm rounded-xl text-sm font-bold">
-                <i class="fa fa-shield mr-1.5"></i> Governed Control
+                <i class="fa fa-shield mr-1.5"></i> Remote Control Safety
             </a>
             <a href="{% url 'web_team:devices:gateway_logs' request.team.slug gateway.pk %}" class="btn btn-ghost btn-sm rounded-xl text-sm font-bold">
-                <i class="fa fa-scroll mr-1.5"></i> Logs
+                <i class="fa fa-scroll mr-1.5"></i> Technician Logs
             </a>
             <a href="{% url 'web_team:devices:gateway_rpc_history' request.team.slug gateway.pk %}" class="btn btn-ghost btn-sm rounded-xl text-sm font-bold">
                 <i class="fa fa-history mr-1.5"></i> Command History
@@ -77,7 +77,7 @@
                 <div class="p-6">
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
                         <div>
-                            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">IP Address</div>
+                            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Network address <span class="normal-case tracking-normal">(technician)</span></div>
                             <div class="text-sm font-mono text-gray-900 dark:text-white">{{ gateway.ip_address|default:"—" }}</div>
                         </div>
                         <div>
@@ -106,11 +106,11 @@
                             <div class="text-sm text-gray-900 dark:text-white truncate">{{ gateway.platform_info|default:"—" }}</div>
                         </div>
                         <div>
-                            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Python</div>
+                            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Software runtime <span class="normal-case tracking-normal">(technician)</span></div>
                             <div class="text-sm font-mono text-gray-900 dark:text-white">{{ gateway.python_version|default:"—" }}</div>
                         </div>
                         <div>
-                            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">TLS Mode</div>
+                            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Secure connection</div>
                             <div class="text-sm text-gray-900 dark:text-white">{{ gateway.get_tls_mode_display }}</div>
                         </div>
                         <div>
@@ -196,8 +196,8 @@
                             <i class="fa fa-terminal"></i>
                         </div>
                         <div>
-                            <h3 class="font-bold text-gray-900 dark:text-white leading-none">Remote Commands</h3>
-                            <p class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mt-1">Send a command to this gateway</p>
+                            <h3 class="font-bold text-gray-900 dark:text-white leading-none">Gateway checks and actions</h3>
+                            <p class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mt-1">Use with an authorised technician</p>
                         </div>
                     </div>
                 </div>
@@ -210,7 +210,7 @@
                             body: 'method=ping&params={}'
                         }).then(r => r.json()).then(d => { rpcResult = d; loading = false; }).catch(() => { loading = false; })
                     " class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition text-sm font-bold text-gray-700 dark:text-gray-300">
-                        <span><i class="fa fa-wifi mr-2 text-green-500"></i> Ping</span>
+                        <span><i class="fa fa-wifi mr-2 text-green-500"></i> Check connection</span>
                         <i class="fa fa-play text-xs text-gray-400"></i>
                     </button>
                     <button @click="
@@ -221,7 +221,7 @@
                             body: 'method=scan_devices&params={}'
                         }).then(r => r.json()).then(d => { rpcResult = d; loading = false; }).catch(() => { loading = false; })
                     " class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition text-sm font-bold text-gray-700 dark:text-gray-300">
-                        <span><i class="fa fa-search mr-2 text-emerald-500"></i> Scan Ports for Devices</span>
+                        <span><i class="fa fa-search mr-2 text-emerald-500"></i> Find connected equipment</span>
                         <i class="fa fa-play text-xs text-gray-400"></i>
                     </button>
                     <button @click="
@@ -232,7 +232,7 @@
                             body: 'method=get_status&params={}'
                         }).then(r => r.json()).then(d => { rpcResult = d; loading = false; }).catch(() => { loading = false; })
                     " class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition text-sm font-bold text-gray-700 dark:text-gray-300">
-                        <span><i class="fa fa-info-circle mr-2 text-blue-500"></i> Get Status</span>
+                        <span><i class="fa fa-info-circle mr-2 text-blue-500"></i> Refresh gateway status</span>
                         <i class="fa fa-play text-xs text-gray-400"></i>
                     </button>
                     <button @click="
@@ -243,7 +243,7 @@
                             body: 'method=restart_all&params={}'
                         }).then(r => r.json()).then(d => { rpcResult = d; loading = false; }).catch(() => { loading = false; })
                     " class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition text-sm font-bold text-gray-700 dark:text-gray-300">
-                        <span><i class="fa fa-rotate mr-2 text-amber-500"></i> Restart All Connectors</span>
+                        <span><i class="fa fa-rotate mr-2 text-amber-500"></i> Restart equipment connections</span>
                         <i class="fa fa-play text-xs text-gray-400"></i>
                     </button>
                     <button @click="
@@ -255,7 +255,7 @@
                             body: 'method=reboot&params=%7B%22delay_seconds%22%3A5%7D'
                         }).then(r => r.json()).then(d => { rpcResult = d; loading = false; }).catch(() => { loading = false; })
                     " class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700 hover:bg-red-50 dark:hover:bg-red-900/20 transition text-sm font-bold text-gray-700 dark:text-gray-300">
-                        <span><i class="fa fa-power-off mr-2 text-red-500"></i> Reboot Gateway</span>
+                        <span><i class="fa fa-power-off mr-2 text-red-500"></i> Restart gateway</span>
                         <i class="fa fa-play text-xs text-gray-400"></i>
                     </button>
 
@@ -272,9 +272,9 @@
                             </button>
                             <p class="text-[10px] text-base-content/50 leading-relaxed">
                                 {% if ota_signing_ready %}
-                                Signed Novena release. Gateway will verify the manifest before downloading and installing.
+                                Verified Novena software. The Gateway checks the update before installing it.
                                 {% else %}
-                                Release signing is not configured yet. Add the Novena OTA signing key before dispatching this update.
+                                Software updates are not ready. Ask a Novena administrator to finish secure update setup.
                                 {% endif %}
                             </p>
                         </form>
@@ -321,13 +321,13 @@
                                             this.otaStatus = 'Failed';
                                             this.otaProgress = 0;
                                             this.otaBusy = false;
-                                            this.otaMessage = data.error || 'Failed to dispatch OTA command.';
+                                            this.otaMessage = data.error || 'The Gateway could not start the software update.';
                                         }
                                     } catch (e) {
                                         this.otaStatus = 'Failed';
                                         this.otaProgress = 0;
                                         this.otaBusy = false;
-                                        this.otaMessage = 'Error sending command: ' + e.message;
+                                        this.otaMessage = 'The update request could not be sent. Check the Gateway connection and retry.';
                                     }
                                 },
                                 async pollUpdateResult(requestId) {
@@ -340,9 +340,9 @@
                                             const data = await res.json();
                                             
                                             if (data.status === 'success') {
-                                                this.otaStatus = 'Swapping';
+                                                this.otaStatus = 'Installing';
                                                 this.otaProgress = 80;
-                                                this.otaMessage = 'Download complete. Performing atomic swap and restarting daemon...';
+                                                this.otaMessage = 'Download complete. Installing safely and restarting the Gateway...';
                                                 
                                                 await new Promise(r => setTimeout(r, 3000));
                                                 this.otaStatus = 'Success';
@@ -372,7 +372,7 @@
                                     this.otaStatus = 'Timeout';
                                     this.otaProgress = 0;
                                     this.otaBusy = false;
-                                    this.otaMessage = 'OTA operation timed out.';
+                                    this.otaMessage = 'The Gateway did not confirm the update in time. Check its status before retrying.';
                                 }
                             }
                         }
@@ -388,17 +388,17 @@
                     </template>
                     <template x-if="rpcResult && !loading">
                         <div class="mt-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-xl">
-                            <div class="text-[10px] font-black uppercase tracking-widest text-green-600 mb-1">Command Sent</div>
-                            <div class="text-xs font-mono text-green-700 dark:text-green-400" x-text="JSON.stringify(rpcResult)"></div>
+                            <div class="text-[10px] font-black uppercase tracking-widest text-green-600 mb-1">Request received</div>
+                            <div class="text-xs text-green-700 dark:text-green-400" x-text="rpcResult.error || 'The request was recorded. Check command history for confirmation.'"></div>
                         </div>
                     </template>
                 </div>
             </div>
 
-            <!-- Active Connectors -->
+            <!-- Active equipment connections -->
             <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                 <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
-                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Active Connectors</h3>
+                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Active equipment connections</h3>
                 </div>
                 <div class="p-6">
                     {% if gateway.active_connectors %}
@@ -411,7 +411,7 @@
                         {% endfor %}
                         </div>
                     {% else %}
-                        <p class="text-xs text-gray-400 italic text-center py-4">No connector data received yet.</p>
+                        <p class="text-xs text-gray-400 italic text-center py-4">No equipment connection details received yet. Check that the Gateway is online.</p>
                     {% endif %}
                 </div>
             </div>
@@ -425,25 +425,25 @@
                         </div>
                         <div>
                             <h3 class="font-bold text-gray-900 dark:text-white leading-none">Security</h3>
-                            <p class="text-[10px] font-bold text-amber-500 uppercase tracking-widest mt-1">MQTT Credentials</p>
+                            <p class="text-[10px] font-bold text-amber-500 uppercase tracking-widest mt-1">Technician access credentials</p>
                         </div>
                     </div>
                 </div>
                 <div class="p-6">
                     <div class="mb-4">
-                        <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">MQTT Username</div>
+                        <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Gateway service username <span class="normal-case tracking-normal">(MQTT)</span></div>
                         <div class="text-sm font-mono text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 px-3 py-2 rounded-lg">{{ gateway.mqtt_username|default:"—" }}</div>
                     </div>
                     <div id="rotate-result"></div>
                     <form hx-post="{% url 'web_team:devices:gateway_rotate_password' request.team.slug gateway.pk %}"
                           hx-target="#rotate-result"
                           hx-swap="innerHTML"
-                          hx-confirm="This will immediately change the gateway's MQTT password. The gateway will reconnect with the new credentials. Continue?">
+                          hx-confirm="Change the Gateway service password now? The Gateway will briefly disconnect and reconnect. Continue?">
                         {% csrf_token %}
                         <button type="submit" 
                                 class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-200 dark:border-amber-800 transition text-sm font-bold text-amber-700 dark:text-amber-400 {% if gateway.status != 'online' %}opacity-50 cursor-not-allowed{% endif %}"
                                 {% if gateway.status != "online" %}disabled title="Gateway must be online"{% endif %}>
-                            <span><i class="fa fa-key mr-2"></i> Rotate MQTT Password</span>
+                            <span><i class="fa fa-key mr-2"></i> Change gateway service password</span>
                             <i class="fa fa-refresh text-xs"></i>
                         </button>
                     </form>
@@ -453,10 +453,10 @@
                 </div>
             </div>
 
-            <!-- Config Push History -->
+            <!-- Settings delivery history -->
             <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                 <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
-                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Config Push History</h3>
+                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Gateway settings history</h3>
                 </div>
                 <div class="divide-y divide-gray-50 dark:divide-gray-700">
                     {% for cfg in recent_configs %}
@@ -476,7 +476,7 @@
                         {% endif %}
                     </div>
                     {% empty %}
-                    <div class="px-6 py-8 text-center text-xs text-gray-400 italic">No config pushes yet.</div>
+                    <div class="px-6 py-8 text-center text-xs text-gray-400 italic">No gateway settings have been sent yet.</div>
                     {% endfor %}
                 </div>
             </div>
@@ -493,7 +493,7 @@
                             <dd class="text-xs text-gray-900 dark:text-white font-mono font-bold">{{ gateway.serial_number }}</dd>
                         </div>
                         <div class="flex justify-between border-t border-gray-50 dark:border-gray-700 pt-3">
-                            <dt class="text-[10px] font-black text-gray-400 uppercase tracking-tight">MQTT Username</dt>
+                            <dt class="text-[10px] font-black text-gray-400 uppercase tracking-tight">Service username <span class="normal-case">(technician)</span></dt>
                             <dd class="text-xs text-gray-900 dark:text-white font-mono font-bold">{{ gateway.mqtt_username|default:"—" }}</dd>
                         </div>
                         <div class="flex justify-between border-t border-gray-50 dark:border-gray-700 pt-3">
@@ -501,7 +501,7 @@
                             <dd class="text-xs text-gray-900 dark:text-white font-bold">{{ gateway.site.name }}</dd>
                         </div>
                         <div class="flex justify-between border-t border-gray-50 dark:border-gray-700 pt-3">
-                            <dt class="text-[10px] font-black text-gray-400 uppercase tracking-tight">Access Token</dt>
+                            <dt class="text-[10px] font-black text-gray-400 uppercase tracking-tight">Support access ID</dt>
                             <dd class="text-xs text-gray-900 dark:text-white font-mono font-bold">{{ gateway.access_token|truncatechars:12 }}</dd>
                         </div>
                     </dl>

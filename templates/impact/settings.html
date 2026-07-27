@@ -2,8 +2,8 @@
 {% block app %}
 <div class="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
   <a href="{% url 'web_team:impact:site_detail' request.team.slug site.id %}" class="text-xs font-bold text-primary">← {{ site.name }} impact</a>
-  <h1 class="mt-2 text-2xl font-bold">Business assumptions</h1>
-  <p class="mt-1 text-sm text-base-content/60">Each save creates a new effective-dated revision. Reports keep the assumptions that produced them.</p>
+  <h1 class="mt-2 text-2xl font-bold">Business inputs</h1>
+  <p class="mt-1 text-sm text-base-content/60">Enter the costs and normal operating conditions used for estimates. Previous reports keep the inputs used at the time.</p>
 
   <form method="post" class="mt-6 space-y-6">
     {% csrf_token %}
@@ -35,7 +35,7 @@
     </section>
 
     <section class="rounded-lg border border-base-content/10 bg-base-100 p-5">
-      <h2 class="font-bold">Value assumptions</h2>
+      <h2 class="font-bold">Costs and operating limits</h2>
       <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
         {% for field in form %}
           {% if field.name in "tariff_per_kwh,expected_after_hours_base_kw,abnormal_tolerance_pct,downtime_cost_per_hour,labor_cost_per_hour,cold_min_temperature,cold_max_temperature,excursion_delay_minutes,cold_loss_per_critical_excursion,cold_critical_duration_minutes" %}
@@ -50,8 +50,8 @@
     </section>
 
     <section class="rounded-lg border border-base-content/10 bg-base-100 p-5">
-      <h2 class="font-bold">Comparison baseline</h2>
-      <p class="mt-1 text-xs text-base-content/50">A rolling baseline needs at least 14 comparable days. A supplied baseline is labeled as customer-provided.</p>
+      <h2 class="font-bold">Normal comparison period</h2>
+      <p class="mt-1 text-xs text-base-content/50">Novena can learn from at least 14 comparable measured days, or use the usual monthly figures entered by your team. Reports identify which option was used.</p>
       <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
         <label>{{ form.baseline_strategy.label_tag }}{{ form.baseline_strategy }}{% for error in form.baseline_strategy.errors %}<span class="text-xs text-error">{{ error }}</span>{% endfor %}</label>
         <label>{{ form.supplied_monthly_energy_kwh.label_tag }}{{ form.supplied_monthly_energy_kwh }}</label>
@@ -62,7 +62,7 @@
 
     <div class="flex justify-end gap-2">
       <a href="{% url 'web_team:impact:site_detail' request.team.slug site.id %}" class="btn btn-ghost">Cancel</a>
-      <button class="btn btn-primary">Save assumptions</button>
+      <button class="btn btn-primary">Save business inputs</button>
     </div>
   </form>
 </div>

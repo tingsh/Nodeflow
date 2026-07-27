@@ -10,6 +10,7 @@ from apps.impact.models import (
     ImpactMetricSnapshot,
 )
 from apps.impact.services import (
+    build_impact_readiness,
     build_site_impact_summary,
     build_team_impact_summary,
     confirm_data_source,
@@ -23,6 +24,17 @@ from .base import ImpactTestCase
 
 
 class SemanticAndTopologyServiceTests(ImpactTestCase):
+    def test_impact_readiness_uses_operator_language(self):
+        summary = build_site_impact_summary(self.profile, 2026, 7)
+        readiness = build_impact_readiness(self.profile, summary)
+        labels = {item["label"] for item in readiness}
+        details = " ".join(item["detail"] for item in readiness)
+
+        self.assertIn("Meter or sensor confirmed", labels)
+        self.assertIn("Usable operating data", labels)
+        self.assertIn("usable readings", details)
+        self.assertNotIn("semantic mapping", details)
+
     def test_semantic_unit_conversion_requires_known_units(self):
         semantics = infer_datapoint_semantics("active_power", {"unit": "W"})
         self.assertEqual(semantics[:3], ("power", "instantaneous", "kW"))

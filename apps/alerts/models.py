@@ -65,6 +65,34 @@ class AlertRule(BaseTeamModel):
     def __str__(self):
         return f"{self.name} ({self.device.name if self.device else 'Site: ' + self.site.name})"
 
+    @property
+    def metric_config(self):
+        register_map = getattr(getattr(self.device, "template", None), "register_map", None) or {}
+        config = register_map.get(self.telemetry_key, {})
+        return config if isinstance(config, dict) else {}
+
+    @property
+    def metric_label(self):
+        return self.metric_config.get("label") or self.telemetry_key.replace("_", " ").title()
+
+    @property
+    def metric_unit(self):
+        return self.metric_config.get("unit", "")
+
+    @property
+    def threshold_display(self):
+        condition_labels = {
+            "gt": "above",
+            "gte": "at or above",
+            "lt": "below",
+            "lte": "at or below",
+            "eq": "equal to",
+            "neq": "not equal to",
+        }
+        unit = f" {self.metric_unit}" if self.metric_unit else ""
+        condition = condition_labels.get(self.condition, "outside the expected range")
+        return f"{condition} {self.threshold:g}{unit}"
+
 
 class Alert(BaseTeamModel):
     """A triggered alert instance."""
@@ -95,31 +123,19 @@ class Alert(BaseTeamModel):
 
     @property
     def metric_config(self):
-        register_map = getattr(getattr(self.device, "template", None), "register_map", None) or {}
-        config = register_map.get(self.rule.telemetry_key, {})
-        return config if isinstance(config, dict) else {}
+        return self.rule.metric_config
 
     @property
     def metric_label(self):
-        return self.metric_config.get("label") or self.rule.telemetry_key.replace("_", " ").title()
+        return self.rule.metric_label
 
     @property
     def metric_unit(self):
-        return self.metric_config.get("unit", "")
+        return self.rule.metric_unit
 
     @property
     def threshold_display(self):
-        condition_labels = {
-            "gt": "above",
-            "gte": "at or above",
-            "lt": "below",
-            "lte": "at or below",
-            "eq": "equal to",
-            "neq": "not equal to",
-        }
-        unit = f" {self.metric_unit}" if self.metric_unit else ""
-        condition = condition_labels.get(self.rule.condition, self.rule.get_condition_display())
-        return f"{condition} {self.rule.threshold:g}{unit}"
+        return self.rule.threshold_display
 
     @property
     def trigger_value_display(self):

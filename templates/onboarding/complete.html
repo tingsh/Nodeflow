@@ -16,11 +16,11 @@
         </h1>
         <p class="mx-auto mt-3 max-w-2xl text-base-content/60">
             {% if setup_run.state == "completed" %}
-            The Gateway accepted the setup, telemetry arrived, and Novena generated the equipment dashboard.
+            The Gateway accepted the setup, live readings arrived, and Novena generated the equipment dashboard.
             {% elif setup_run.state == "completed_attention" %}
             Working equipment remains online. Review the items below without repeating successful setup.
             {% else %}
-            Configuration delivery and connector state are shown below. This page can be reopened without losing progress.
+            Gateway settings and equipment connection progress are shown below. This page can be reopened without losing progress.
             {% endif %}
         </p>
     </section>
@@ -39,7 +39,7 @@
         </div>
         <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div class="rounded-xl bg-base-200/50 p-4"><p class="text-xs text-base-content/45">Gateway</p><p class="mt-1 font-bold">{{ gateway.name|default:"Not available" }}</p></div>
-            <div class="rounded-xl bg-base-200/50 p-4"><p class="text-xs text-base-content/45">Configuration</p><p class="mt-1 font-bold">{{ commissioning.latest_config.get_status_display|default:"Not queued" }}</p></div>
+            <div class="rounded-xl bg-base-200/50 p-4"><p class="text-xs text-base-content/45">Gateway settings</p><p class="mt-1 font-bold">{{ commissioning.latest_config.get_status_display|default:"Not sent" }}</p></div>
             <div class="rounded-xl bg-base-200/50 p-4"><p class="text-xs text-base-content/45">Equipment</p><p class="mt-1 font-bold">{{ commissioning.provisioned_devices|length }}</p></div>
             <div class="rounded-xl bg-base-200/50 p-4"><p class="text-xs text-base-content/45">Live data</p><p class="mt-1 font-bold">{% if commissioning.first_live_device %}Received{% else %}Waiting{% endif %}</p></div>
         </div>
@@ -59,7 +59,7 @@
             legacy or manually managed Gateway.
         </p>
         <div class="mt-4 rounded-xl bg-base-200/60 p-4 font-mono text-sm break-all">
-            Broker: {{ public_mqtt_broker.url }}
+            Technician connection address (MQTT): {{ public_mqtt_broker.url }}
         </div>
     </details>
 
@@ -71,7 +71,7 @@
         {% endif %}
         {% if gateway %}
         <a href="{% url 'web_team:devices:gateway_detail' request.team.slug gateway.pk %}" class="rounded-2xl border border-base-content/10 bg-base-100 p-6 transition hover:border-indigo-500/40">
-            <i class="fa fa-server text-indigo-500"></i><h3 class="mt-4 font-black">Gateway details</h3><p class="mt-1 text-sm text-base-content/55">Review health and connector results.</p>
+            <i class="fa fa-server text-indigo-500"></i><h3 class="mt-4 font-black">Gateway details</h3><p class="mt-1 text-sm text-base-content/55">Review health and equipment connection results.</p>
         </a>
         {% endif %}
         <a href="{% url 'web_team:onboarding:setup_start' request.team.slug %}" class="rounded-2xl border border-base-content/10 bg-base-100 p-6 transition hover:border-indigo-500/40">
@@ -84,9 +84,9 @@
             <div>
                 <p class="text-xs font-black uppercase tracking-widest text-indigo-600">Business impact</p>
                 <h2 class="mt-1 text-xl font-black">Confirm which readings drive business value</h2>
-                <p class="mt-1 text-sm text-base-content/60">Novena suggested sources from the verified equipment template. Confirm the main meter or temperature sensor before financial estimates begin.</p>
+                <p class="mt-1 text-sm text-base-content/60">Novena suggested readings from the verified equipment profile. Confirm the main meter or temperature sensor before financial estimates begin.</p>
             </div>
-            <a href="{% url 'web_team:impact:sources' request.team.slug impact_profile.site_id %}" class="btn btn-primary rounded-lg">Review data sources</a>
+            <a href="{% url 'web_team:impact:sources' request.team.slug impact_profile.site_id %}" class="btn btn-primary rounded-lg">Review meters and sensors</a>
         </div>
     </section>
     {% endif %}

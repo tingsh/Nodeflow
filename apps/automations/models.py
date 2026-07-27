@@ -56,6 +56,25 @@ class AutomationCondition(BaseTeamModel):
     def __str__(self):
         return f"{self.device.name}.{self.telemetry_key} {self.operator} {self.threshold}"
 
+    @property
+    def reading_label(self):
+        register_map = getattr(getattr(self.device, "template", None), "register_map", None) or {}
+        config = register_map.get(self.telemetry_key, {})
+        return config.get("label") or self.telemetry_key.replace("_", " ").title()
+
+    @property
+    def operator_label(self):
+        return {
+            "gt": "above",
+            "lt": "below",
+            "gte": "at or above",
+            "lte": "at or below",
+            "eq": "equal to",
+            "neq": "not equal to",
+            "is_true": "is on / true",
+            "is_false": "is off / false",
+        }.get(self.operator, "matches")
+
 
 class AutomationAction(BaseTeamModel):
     """An action executed when the automation triggers."""

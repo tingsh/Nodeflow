@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.devices.control_readiness import (
@@ -138,6 +141,39 @@ class ControlReadinessWorkflowTest(TestCase):
         )
         self.assertEqual(assessment.state, assessment.State.EVIDENCE_COLLECTING)
         self.assertTrue(any("clock" in blocker.lower() for blocker in assessment.blockers))
+
+    def test_control_center_renders_operator_safe_readiness_and_history(self):
+        self.gateway.remote_control_epoch = 0
+        self.gateway.save(update_fields=["remote_control_epoch"])
+        assess_control_readiness(
+            gateway=self.gateway,
+            assessed_by=self.manager,
+            observation_days=3,
+            telemetry_coverage_percent=70,
+        )
+        RemoteCommand.objects.create(
+            team=self.team,
+            gateway=self.gateway,
+            requested_by=self.manager,
+            operation="write_device",
+            command_key="setpoint",
+            risk="high",
+            status="policy_denied",
+            expires_at=timezone.now() + timedelta(minutes=5),
+        )
+        self.client.force_login(self.owner)
+
+        response = self.client.get(
+            reverse("web_team:devices:gateway_control_center", args=[self.team.slug, self.gateway.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Remote Equipment Control")
+        self.assertContains(response, "More operating data needed")
+        self.assertContains(response, "Gateway has not confirmed the latest safety settings")
+        self.assertContains(response, "Blocked by safety settings")
+        self.assertNotContains(response, "control epoch")
+        self.assertNotContains(response, "write-back")
 
     def _activate(self):
         assessment = assess_control_readiness(

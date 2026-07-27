@@ -30,7 +30,7 @@
                 </div>
                 <h2 class="text-3xl font-black text-base-content font-heading mb-6">Real-Time Dashboards & Vision</h2>
                 <p class="text-lg text-base-content/70 leading-relaxed mb-8">
-                    See your facility's energy profile in high definition. Our Command Center uses TimescaleDB for sub-second telemetry ingestion and pixel-perfect data visualization.
+                    See live and historical facility readings in one clear view, with fast updates and practical trends for your team.
                 </p>
                 <ul class="space-y-4">
                     <li class="flex items-start"><i class="fa fa-check text-indigo-500 mt-1 mr-3"></i> <span>Custom KPI strips for power, energy, and efficiency metrics.</span></li>
@@ -55,7 +55,7 @@
                     </div>
                     <h2 class="text-3xl font-black text-base-content font-heading mb-6">Chat With Your Fleet</h2>
                     <p class="text-lg text-base-content/70 leading-relaxed mb-8">
-                        Ask natural language questions about your facility's performance. Our AI Assistant understands your telemetry keys and can generate instant reports.
+                        Ask natural-language questions about your facility's performance. Our AI Assistant understands your equipment readings and can generate instant reports.
                     </p>
                     <div class="p-6 bg-base-100 rounded-2xl border border-base-content/5 shadow-sm italic text-sm text-base-content/60 border-l-4 border-l-purple-500">
                         "Which site used the most energy last Saturday between 2pm and 4pm?"
@@ -75,14 +75,14 @@
                 <div class="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg shadow-emerald-500/20">
                     <i class="fa fa-toggle-on text-lg"></i>
                 </div>
-                <h2 class="text-3xl font-black text-base-content font-heading mb-6">Write-Back & Remote Control</h2>
+                <h2 class="text-3xl font-black text-base-content font-heading mb-6">Safe Remote Equipment Control</h2>
                 <p class="text-lg text-base-content/70 leading-relaxed mb-8">
-                    Don't just watch—take action. Securely toggle loads, adjust setpoints, and send commands back to your PLCs (Siemens S7, Modbus) directly from the cloud.
+                    For commissioned equipment, authorised teams can request bounded changes such as toggling a load or adjusting an approved setting, with safety checks and a full record.
                 </p>
                 <ul class="space-y-4">
-                    <li class="flex items-start"><i class="fa fa-shield-halved text-emerald-500 mt-1 mr-3"></i> <span>RBAC protection for critical control actions.</span></li>
-                    <li class="flex items-start"><i class="fa fa-shield-halved text-emerald-500 mt-1 mr-3"></i> <span>Full audit trail of who sent what command and when.</span></li>
-                    <li class="flex items-start"><i class="fa fa-shield-halved text-emerald-500 mt-1 mr-3"></i> <span>ThingsBoard Gateway compliant MQTT protocol.</span></li>
+                    <li class="flex items-start"><i class="fa fa-shield-halved text-emerald-500 mt-1 mr-3"></i> <span>Permission and identity checks protect critical actions.</span></li>
+                    <li class="flex items-start"><i class="fa fa-shield-halved text-emerald-500 mt-1 mr-3"></i> <span>Full audit trail of who requested each change and when.</span></li>
+                    <li class="flex items-start"><i class="fa fa-shield-halved text-emerald-500 mt-1 mr-3"></i> <span>On-site enablement and gateway confirmation keep control conservative.</span></li>
                 </ul>
             </div>
             <div class="mt-12 lg:mt-0 relative aspect-video rounded-3xl bg-base-100 border border-base-content/5 shadow-2xl overflow-hidden" data-aos="fade-left">
@@ -103,7 +103,7 @@
                     <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform">
                         <i class="fa fa-code-fork"></i>
                     </div>
-                    <h4 class="text-xl font-bold text-white mb-4">IFTTT Conditionals</h4>
+                    <h4 class="text-xl font-bold text-white mb-4">Multi-condition rules</h4>
                     <p class="text-white/60 text-sm leading-relaxed">Build complex logic like "If Solar Power < 5kW for 10 mins AND Consumption > 50kW, then shed Load A."</p>
                 </div>
                 <div class="bg-white/10 backdrop-blur-md p-8 rounded-3xl border border-white/10 hover:bg-white/20 transition-all group" data-aos="fade-up" data-aos-delay="100">
@@ -111,14 +111,14 @@
                         <i class="fa fa-clock"></i>
                     </div>
                     <h4 class="text-xl font-bold text-white mb-4">Duration Tracking</h4>
-                    <p class="text-white/60 text-sm leading-relaxed">Prevent false triggers with Redis-backed state tracking. Ensure conditions stay active for X minutes before firing.</p>
+                    <p class="text-white/60 text-sm leading-relaxed">Reduce false alerts by requiring a condition to remain active for a chosen number of minutes.</p>
                 </div>
                 <div class="bg-white/10 backdrop-blur-md p-8 rounded-3xl border border-white/10 hover:bg-white/20 transition-all group" data-aos="fade-up" data-aos-delay="200">
                     <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform">
                         <i class="fa fa-paper-plane"></i>
                     </div>
                     <h4 class="text-xl font-bold text-white mb-4">Multi-Action Output</h4>
-                    <p class="text-white/60 text-sm leading-relaxed">Simultaneously send remote commands, trigger webhooks to ERPs, and notify the team via WhatsApp or Email.</p>
+                    <p class="text-white/60 text-sm leading-relaxed">Notify the team, create maintenance work, update connected business systems, or prepare an equipment action proposal for approval.</p>
                 </div>
             </div>
         </div>
@@ -156,12 +156,12 @@
                     </div>
                     <h2 class="text-3xl font-black text-base-content font-heading mb-6">Hardened Edge & Network Resilience</h2>
                     <p class="text-lg text-base-content/70 leading-relaxed mb-8">
-                        Our industrial gateway runs directly on Raspberry Pi CM4 architectures, engineered specifically to prevent telemetry data loss on unstable factory floors.
+                        Our industrial Gateway is designed to protect equipment readings during unstable site internet connections.
                     </p>
                     <ul class="space-y-4">
                         <li class="flex items-start"><i class="fa fa-check text-emerald-500 mt-1 mr-3"></i> <span><strong>3-Tier Multi-WAN Watchdog:</strong> Automatically switches route metrics between Ethernet (primary), Wi-Fi (backup), and 4G/LTE (fallback) using nmcli routing.</span></li>
-                        <li class="flex items-start"><i class="fa fa-check text-emerald-500 mt-1 mr-3"></i> <span><strong>Zero-Downtime Blue/Green OTA:</strong> Upgrade edge logic configurations side-by-side without interrupting Modbus TCP polling loops.</span></li>
-                        <li class="flex items-start"><i class="fa fa-check text-emerald-500 mt-1 mr-3"></i> <span><strong>Offline Telemetry Cache:</strong> Spool data to local storage during WAN disconnects and sync back to TimescaleDB automatically upon healing.</span></li>
+                        <li class="flex items-start"><i class="fa fa-check text-emerald-500 mt-1 mr-3"></i> <span><strong>Safe Gateway Updates:</strong> Install verified software while protecting ongoing equipment monitoring.</span></li>
+                        <li class="flex items-start"><i class="fa fa-check text-emerald-500 mt-1 mr-3"></i> <span><strong>Offline Data Buffer:</strong> Keep readings locally during an internet outage and upload them after the connection recovers.</span></li>
                     </ul>
                 </div>
                 <div class="mt-12 lg:mt-0 relative aspect-video rounded-3xl bg-slate-950 border border-slate-800 shadow-2xl overflow-hidden flex items-center justify-center" data-aos="fade-left">

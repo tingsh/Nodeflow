@@ -57,13 +57,13 @@ class OnboardingConnectionTest(TestCase):
         self.assertEqual(response.headers.get("HX-Trigger"), "infrastructureChanged")
 
         # Check that success view content is rendered
-        self.assertContains(response, "Device Registered!")
+        self.assertContains(response, "Equipment added")
         self.assertContains(response, "New Test Device")
         self.assertContains(response, "Live Connection Test")
 
         # Check that first readable register is identified and details shown
         self.assertContains(response, "voltage")
-        self.assertContains(response, "(Address: 3028, FC: 3)")
+        self.assertContains(response, "Technician details: address 3028, function 3")
 
         # Check that writable active_power is NOT chosen as test_register
         self.assertNotContains(response, "active_power")
@@ -92,7 +92,7 @@ class OnboardingConnectionTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         # Renders success page cleanly, saying no readable registers
-        self.assertContains(response, "No readable registers found in this template to test")
+        self.assertContains(response, "This equipment profile has no safe test reading")
 
     def test_htmx_device_create_rejects_cross_tenant_gateway_and_site(self):
         _, victim_site, victim_gateway = self._victim_infrastructure()

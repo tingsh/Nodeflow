@@ -57,6 +57,10 @@ class MaintenanceTests(TestCase):
         self.assertTrue(ticket.send_email_notification)
         self.assertFalse(ticket.send_whatsapp_notification)
         self.assertIn("High Temp", ticket.title)
+        self.assertIn("Observed value: 105", ticket.description)
+        self.assertIn("Alert limit: above 100", ticket.description)
+        self.assertIn("confirm the reading on site", ticket.description)
+        self.assertNotIn("Threshold: gt", ticket.description)
 
     def test_auto_create_ticket_with_template(self):
         template = TicketTemplate.objects.create(

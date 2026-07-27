@@ -24,7 +24,7 @@
         <div class="bg-base-100 rounded-3xl border border-base-content/5 shadow-sm p-8">
             <div class="flex items-center space-x-3 mb-8">
                 <div class="w-8 h-8 rounded-full bg-indigo-500 text-white flex items-center justify-center font-black text-xs">1</div>
-                <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">Rule Narrative</h3>
+                <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">What should this alert tell the team?</h3>
             </div>
             
             <div class="space-y-6">
@@ -58,7 +58,7 @@
         <div class="bg-base-100 rounded-3xl border border-base-content/5 shadow-sm p-8">
             <div class="flex items-center space-x-3 mb-8">
                 <div class="w-8 h-8 rounded-full bg-indigo-500 text-white flex items-center justify-center font-black text-xs">2</div>
-                <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">Detection Logic</h3>
+                <h3 class="text-sm font-black uppercase tracking-widest text-base-content/40">When should the alert start?</h3>
             </div>
             
             <div class="space-y-6">
@@ -86,7 +86,7 @@
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
                     <!-- Telemetry Key -->
                     <div>
-                        <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Telemetry Key</label>
+                        <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Reading to monitor</label>
                         <input type="text" name="telemetry_key" value="{{ form.telemetry_key.value|default:'' }}" class="input input-bordered w-full rounded-2xl font-bold font-mono text-sm" placeholder="e.g., active_power" required>
                     </div>
                     <!-- Condition -->
@@ -105,7 +105,7 @@
                     </div>
                     <!-- Duration (Seconds) -->
                     <div>
-                        <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Duration (Seconds)</label>
+                        <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Must remain outside the limit for (seconds)</label>
                         <input type="number" name="duration_seconds" value="{{ form.duration_seconds.value|default:0 }}" class="input input-bordered w-full rounded-2xl font-bold" min="0" required>
                     </div>
                 </div>
@@ -128,7 +128,7 @@
                                 <i class="fa-solid fa-envelope text-base-content/40 group-hover:text-indigo-500"></i>
                             </div>
                             <div>
-                                <h4 class="text-sm font-bold text-base-content">Email Dashboard</h4>
+                                <h4 class="text-sm font-bold text-base-content">Email notification</h4>
                                 <p class="text-[10px] text-base-content/40 uppercase font-black">Standard Notifications</p>
                             </div>
                         </div>
@@ -141,8 +141,8 @@
                                 <i class="fa-brands fa-whatsapp text-base-content/40 group-hover:text-green-500"></i>
                             </div>
                             <div>
-                                <h4 class="text-sm font-bold text-base-content">WhatsApp Push</h4>
-                                <p class="text-[10px] text-base-content/40 uppercase font-black">Industrial Mobile Delivery</p>
+                                <h4 class="text-sm font-bold text-base-content">WhatsApp notification</h4>
+                                <p class="text-[10px] text-base-content/40 uppercase font-black">Send to the selected team members</p>
                             </div>
                         </div>
                         <input type="checkbox" name="notify_whatsapp" class="checkbox checkbox-success" {% if form.notify_whatsapp.value %}checked{% endif %}>
@@ -163,7 +163,7 @@
                 </div>
 
                 <div x-show="webhookEnabled" x-transition class="mt-4" style="display: none;">
-                    <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">Integration Link (Webhook URL)</label>
+                    <label class="block text-xs font-black uppercase tracking-widest text-base-content/40 mb-2">External system notification URL (technician setup)</label>
                     <input type="url" name="notify_webhook" id="webhook-url-input" value="{{ form.notify_webhook.value|default:'' }}" class="input input-bordered w-full rounded-2xl font-bold font-mono text-sm" placeholder="https://hooks.slack.com/services/... or https://hooks.zapier.com/..." :required="webhookEnabled">
                     <p class="text-[10px] text-base-content/30 mt-2">Paste the incoming integration link from Zapier, Slack, Microsoft Teams, Make, or your custom server. Novena will send alert details directly to this address.</p>
                 </div>

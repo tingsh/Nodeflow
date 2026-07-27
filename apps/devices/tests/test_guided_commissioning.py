@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from apps.devices.deployment_setup import (
     confidence_label,
+    customer_safe_error,
     gateway_readiness,
     get_or_create_setup_run,
     support_bundle,
@@ -129,6 +130,17 @@ class DeploymentSetupWorkflowTest(TestCase):
         self.assertEqual(confidence_label(45), "Possible match")
         self.assertEqual(confidence_label(44), "Needs setup")
         self.assertEqual(gateway_readiness(self.gateway)["status"], "ready")
+
+    def test_setup_failures_and_actions_do_not_require_broker_or_modbus_knowledge(self):
+        self.gateway.mqtt_connected = False
+        self.gateway.save(update_fields=["mqtt_connected"])
+        readiness = gateway_readiness(self.gateway)
+        cloud_check = next(item for item in readiness["checks"] if item["key"] == "mqtt_connected")
+
+        self.assertEqual(readiness["status"], "blocked")
+        self.assertIn("site internet connection", cloud_check["action"])
+        self.assertNotIn("broker", cloud_check["action"].lower())
+        self.assertNotIn("Modbus", customer_safe_error("connection refused"))
 
     def test_successful_validation_then_telemetry_completes_run_and_dashboard(self):
         run = get_or_create_setup_run(team=self.team, gateway=self.gateway, initiated_by=self.user)
