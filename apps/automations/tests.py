@@ -7,6 +7,7 @@ from apps.devices.models import Device, Site
 from apps.teams.models import Team
 
 from .engine import evaluate_automations, evaluate_condition
+from .forms import AutomationActionForm
 from .models import Automation, AutomationAction, AutomationCondition, AutomationLog
 
 
@@ -36,6 +37,15 @@ class AutomationsEngineTests(TestCase):
         self.assertTrue(evaluate_condition(condition, 105.0))
         # Should not be met
         self.assertFalse(evaluate_condition(condition, 99.0))
+        self.assertEqual(condition.reading_label, "Temp")
+        self.assertEqual(condition.operator_label, "above")
+
+    def test_equipment_action_is_labelled_as_a_proposal(self):
+        form = AutomationActionForm(team=self.team)
+        choices = dict(form.fields["action_type"].choices)
+
+        self.assertEqual(choices["send_command"], "Create an equipment action proposal")
+        self.assertIn("does not automatically control equipment", form.fields["command_payload"].help_text)
 
     def test_evaluate_condition_is_true(self):
         condition = AutomationCondition.objects.create(

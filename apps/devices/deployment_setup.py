@@ -66,7 +66,10 @@ def customer_safe_error(error: str, *, target: str = "") -> str:
             else "The Gateway could not reach the equipment in time. Check its address, wiring, and power."
         )
     if "connection refused" in normalized or "refused" in normalized:
-        return "The equipment address is reachable, but its Modbus service is not accepting connections."
+        return (
+            "The equipment address is reachable, but it is not accepting a connection. "
+            "Check its communication settings."
+        )
     if "serial interface" in normalized or "no such file" in normalized:
         return "The selected RS485 interface is not available. Check the adapter and wiring, then retry."
     if "permission" in normalized:
@@ -211,7 +214,7 @@ def gateway_readiness(gateway: Gateway) -> dict:
                 if gateway.mqtt_connected
                 else "The Gateway is not connected to the Novena service."
             ),
-            "action": "Check the site internet connection and firewall access to the Novena broker.",
+            "action": "Check the site internet connection and ask IT to allow secure Novena traffic.",
             "blocking": True,
         },
         {
@@ -219,9 +222,14 @@ def gateway_readiness(gateway: Gateway) -> dict:
             "label": "Connection security",
             "status": "pass" if gateway.tls_ok is not False else "fail",
             "message": (
-                "TLS is valid." if gateway.tls_ok is not False else "The secure connection could not be verified."
+                "Secure connection verified."
+                if gateway.tls_ok is not False
+                else "The secure connection could not be verified."
             ),
-            "action": "Check the Gateway clock and certificate chain.",
+            "action": (
+                "Check the Gateway date and time. If the problem continues, "
+                "ask a technician to check its security certificate."
+            ),
             "blocking": True,
         },
         {
@@ -238,14 +246,14 @@ def gateway_readiness(gateway: Gateway) -> dict:
         },
         {
             "key": "guided_setup",
-            "label": "Guided Setup support",
+            "label": "Guided setup",
             "status": "pass" if capability_ready else "warning",
             "message": (
                 "Secure Guided Setup is available."
                 if capability_ready
-                else "This Gateway will use the compatible legacy deployment path."
+                else "This Gateway can continue with basic setup, but some guided checks are unavailable."
             ),
-            "action": "Update Gateway software and trusted configuration keys to enable the new deployment path.",
+            "action": "Ask a technician to update the Gateway software before the next commissioning visit.",
             "blocking": False,
         },
         {
@@ -253,9 +261,9 @@ def gateway_readiness(gateway: Gateway) -> dict:
             "label": "Equipment interfaces",
             "status": "pass" if gateway.active_interface else "warning",
             "message": (
-                f"Active network interface: {gateway.active_interface}."
+                "An equipment connection is available."
                 if gateway.active_interface
-                else "Hardware interfaces have not been reported."
+                else "The Gateway has not detected an equipment connection."
             ),
             "action": "Reconnect the equipment interface, then rerun readiness checks.",
             "blocking": False,

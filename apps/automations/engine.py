@@ -166,9 +166,11 @@ def execute_automation(automation, trigger_device=None):
                 else:
                     log_details.append("Maintenance ticket creation failed: no device identified.")
 
-        except Exception as e:
-            logger.error(f"Automation Action Failed: {e}")
-            log_details.append(f"Action {action.get_action_type_display()} failed: str({e})")
+        except Exception:
+            logger.exception("Automation action failed for action %s", action.pk)
+            log_details.append(
+                "An automation step could not be completed. Check the rule settings and try again, or contact support."
+            )
             has_error = True
 
     AutomationLog.objects.create(

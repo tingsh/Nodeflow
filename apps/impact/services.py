@@ -726,22 +726,26 @@ def build_impact_readiness(site_profile, summary):
     business = ensure_business_profile(site_profile.team)
     investment_ready = monthly_investment_cost(business) > 0
     return [
-        {"label": "Trusted data source", "ready": source_ready, "detail": "Customer-confirmed semantic mapping"},
-        {"label": "Business assumptions", "ready": assumptions_ready, "detail": assumption_detail},
         {
-            "label": "Data coverage",
+            "label": "Meter or sensor confirmed",
+            "ready": source_ready,
+            "detail": "Your team has confirmed which reading should be used",
+        },
+        {"label": "Business inputs entered", "ready": assumptions_ready, "detail": assumption_detail},
+        {
+            "label": "Usable operating data",
             "ready": summary.coverage_pct >= Decimal("80"),
-            "detail": f"{summary.coverage_pct}% valid observed time",
+            "detail": f"{summary.coverage_pct}% of the period has usable readings",
         },
         {
-            "label": "Baseline",
+            "label": "Comparison period",
             "ready": baseline_ready,
-            "detail": "Customer-supplied or at least 14 comparable local days",
+            "detail": "Monthly figures from your team, or at least 14 comparable measured days",
         },
         {
-            "label": "Novena investment",
+            "label": "Implementation cost",
             "ready": investment_ready,
-            "detail": "Recurring and/or amortized implementation cost",
+            "detail": "Monthly cost, or the one-time cost spread across its useful period",
         },
     ]
 

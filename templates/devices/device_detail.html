@@ -109,7 +109,7 @@
              </div>
              <div>
                 <h3 class="text-sm font-bold text-base-content">Sensor Live View</h3>
-                <p class="text-[10px] text-base-content/50 uppercase tracking-tighter font-black">Streaming telemetry from Gateway {{ device.gateway.serial_number }}</p>
+                <p class="text-[10px] text-base-content/50 uppercase tracking-tighter font-black">Live readings from Gateway {{ device.gateway.serial_number }}</p>
              </div>
         </div>
         
@@ -177,8 +177,8 @@
                         container.innerHTML = `
                             <div class="col-span-full py-20 text-center bg-base-100 rounded-lg border border-dashed border-base-content/10">
                                 <i class="fa fa-database text-4xl text-base-content/10 mb-4"></i>
-                                <h3 class="text-lg font-bold text-base-content/40">No Telemetry Recorded</h3>
-                                <p class="text-sm text-base-content/30 mt-1">Once the sensors start transmitting, charts will appear here automatically.</p>
+                                <h3 class="text-lg font-bold text-base-content/40">No equipment readings yet</h3>
+                                <p class="text-sm text-base-content/30 mt-1">Check that the equipment and Gateway are powered and connected. Charts will appear after the first reading arrives.</p>
                             </div>
                         `;
                         initWebSocket();
@@ -291,7 +291,7 @@
                 const cell = document.createElement('td');
                 cell.colSpan = Math.max(1, telemetrySampleColumns.length + 1);
                 cell.className = 'px-6 py-10 text-center text-xs text-gray-400 italic';
-                cell.textContent = 'No telemetry samples recorded yet.';
+                cell.textContent = 'No live readings recorded yet. Check equipment and Gateway connectivity.';
                 row.appendChild(cell);
                 body.appendChild(row);
                 return;
@@ -647,8 +647,7 @@
                 <div>
                     <h3 class="font-bold">Monitoring-only mode</h3>
                     <p class="text-xs opacity-80">
-                        Remote writes are disabled until this equipment has a verified control definition,
-                        commissioned operating limits, and an approved activation.
+                        Remote equipment control is blocked until its safety limits have been checked on site and approved by a customer administrator.
                     </p>
                 </div>
             </div>
@@ -735,12 +734,12 @@
                             <i class="fa fa-eye"></i>
                         </div>
                         <div>
-                            <h3 class="font-bold text-gray-900 dark:text-white leading-none">On-Demand Read</h3>
-                            <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mt-1">Live register values</p>
+                            <h3 class="font-bold text-gray-900 dark:text-white leading-none">Check a live reading</h3>
+                            <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mt-1">Read-only equipment check</p>
                         </div>
                     </div>
                     <button onclick="readAllRegisters()" class="btn btn-ghost btn-xs rounded-md text-emerald-600 font-bold text-[10px] uppercase tracking-widest bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100">
-                        <i class="fa fa-refresh mr-1"></i> Read All
+                        <i class="fa fa-refresh mr-1"></i> Check all readings
                     </button>
                 </div>
                 <div class="divide-y divide-gray-50 dark:divide-gray-700">
@@ -772,8 +771,8 @@
                             <i class="fa fa-terminal"></i>
                         </div>
                         <div class="text-left">
-                            <h3 class="font-bold text-gray-900 dark:text-white leading-none text-sm">Advanced Controls</h3>
-                            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Manual register read/write</p>
+                            <h3 class="font-bold text-gray-900 dark:text-white leading-none text-sm">Technician controls</h3>
+                            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Advanced Modbus register read/write</p>
                         </div>
                     </div>
                     <i class="fa fa-chevron-down text-gray-400 text-xs transition-transform" :class="showAdvanced && 'rotate-180'"></i>
@@ -843,7 +842,7 @@
 
                         <div class="p-3 bg-amber-50 dark:bg-amber-900/10 rounded-md border border-amber-100 dark:border-amber-900/20">
                             <p class="text-[10px] text-amber-700 dark:text-amber-500 font-medium leading-relaxed">
-                                <i class="fa fa-triangle-exclamation mr-1"></i> <strong>Expert mode.</strong> Incorrect register writes can damage equipment. Use only if you know the device's register map.
+                                <i class="fa fa-triangle-exclamation mr-1"></i> <strong>Authorised technicians only.</strong> Incorrect Modbus register writes can damage equipment. Verify the equipment manual, local safety state, register address, and value before continuing.
                             </p>
                         </div>
                     </div>

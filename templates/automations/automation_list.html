@@ -7,15 +7,15 @@
   <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
     <div>
       <h1 class="text-3xl font-extrabold tracking-tight text-base-content">
-        <i class="fa fa-bolt text-primary mr-2"></i> Logic & Automations
+        <i class="fa fa-bolt text-primary mr-2"></i> Operational Rules
       </h1>
-      <p class="text-base-content/70 mt-2 text-lg">Define rules to automatically react to telemetry and alerts.</p>
+      <p class="text-base-content/70 mt-2 text-lg">Watch equipment readings, notify people, create maintenance work, or prepare a control proposal for approval.</p>
     </div>
     
     {% has_perm 'manage_automations' as can_manage %}
     <div class="flex gap-2">
       <a href="{% url 'web_team:automations:logs' team.slug %}" class="btn btn-outline border-base-content/20">
-        <i class="fa fa-history mr-2"></i> Audit Logs
+        <i class="fa fa-history mr-2"></i> Rule History
       </a>
       {% if can_manage %}
         <a href="{% url 'web_team:automations:create' team.slug %}" class="btn btn-primary shadow-lg shadow-primary-500/30">
@@ -86,7 +86,7 @@
           <i class="fa fa-sitemap text-3xl text-primary"></i>
         </div>
         <h3 class="text-xl font-bold text-base-content mb-2">No Automations Found</h3>
-        <p class="text-base-content/60 max-w-md mx-auto mb-6">Create rule-based automations to monitor telemetry values and automatically trigger commands, webhooks, or notifications.</p>
+        <p class="text-base-content/60 max-w-md mx-auto mb-6">Create a rule to watch equipment readings, notify the team, create maintenance work, or prepare an equipment action for approval. Rules do not directly control equipment.</p>
         {% if can_manage %}
         <a href="{% url 'web_team:automations:create' team.slug %}" class="btn btn-primary px-8">
           Create Your First Automation

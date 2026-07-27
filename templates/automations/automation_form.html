@@ -54,7 +54,7 @@
         <h2 class="card-title text-lg border-b border-base-200 pb-2 mb-4 flex justify-between h-auto">
           <span><i class="fa fa-filter text-info w-5"></i> Trigger Conditions</span>
         </h2>
-        <p class="text-sm text-base-content/70 mb-4">Define what values or states will trigger this automation. You can set a duration to ensure the condition is sustained before acting.</p>
+        <p class="text-sm text-base-content/70 mb-4">Choose the equipment reading and limit to watch. Add a duration to avoid acting on brief spikes.</p>
         
         {{ conditions.management_form }}
         
@@ -93,7 +93,7 @@
         <h2 class="card-title text-lg border-b border-base-200 pb-2 mb-4 flex justify-between h-auto">
           <span><i class="fa fa-play text-success w-5"></i> Actions</span>
         </h2>
-        <p class="text-sm text-base-content/70 mb-4">Define what happens when the conditions above are met.</p>
+        <p class="text-sm text-base-content/70 mb-4">Choose who should be notified or what work should be prepared. Equipment action proposals still require the normal safety checks and approval.</p>
         
         {{ actions.management_form }}
         
@@ -107,7 +107,8 @@
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <!-- Device Command Fields -->
                 <div class="col-span-1 md:col-span-2" x-show="actionType == 'send_command'" x-transition>
-                  <div class="text-sm font-semibold text-base-content/50 uppercase tracking-widest mt-2 mb-4">Command Configuration:</div>
+                  <div class="text-sm font-semibold text-base-content/50 uppercase tracking-widest mt-2 mb-2">Equipment action proposal</div>
+                  <p class="text-xs text-warning mb-4">This records a proposal only. It does not send a control request to the equipment.</p>
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>{% render_field form.target_device %}</div>
                     <div>{% render_field form.command_key %}</div>
@@ -117,7 +118,7 @@
                 
                 <!-- Webhook Fields -->
                 <div class="col-span-1 md:col-span-2" x-show="actionType == 'webhook'" x-transition>
-                  <div class="text-sm font-semibold text-base-content/50 uppercase tracking-widest mt-4 mb-4">Webhook Configuration:</div>
+                  <div class="text-sm font-semibold text-base-content/50 uppercase tracking-widest mt-4 mb-4">External system notification (technician setup)</div>
                   <div class="col-span-1 md:col-span-2">{% render_field form.webhook_url %}</div>
                 </div>
                 

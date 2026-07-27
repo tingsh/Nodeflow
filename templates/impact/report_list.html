@@ -5,7 +5,7 @@
     <div>
       <a href="{% url 'web_team:impact:overview' request.team.slug %}" class="text-xs font-bold text-primary">← Business Impact</a>
       <h1 class="mt-2 text-2xl font-bold">Monthly business reviews</h1>
-      <p class="mt-1 text-sm text-base-content/60">Frozen, versioned reports with assumptions and methodology preserved.</p>
+      <p class="mt-1 text-sm text-base-content/60">Saved monthly reports keep the business inputs and calculation method used at the time.</p>
     </div>
     <form method="post" action="{% url 'web_team:impact:report_generate' request.team.slug %}" class="flex flex-wrap items-end gap-2">
       {% csrf_token %}
@@ -17,7 +17,7 @@
 
   <div class="mt-6 overflow-hidden rounded-lg border border-base-content/10 bg-base-100">
     <table class="table">
-      <thead><tr><th>Period</th><th>Scope</th><th>Revision</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Period</th><th>Site</th><th>Report version</th><th>Status</th><th></th></tr></thead>
       <tbody>
       {% for report in reports %}
         <tr>

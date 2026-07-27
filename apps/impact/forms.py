@@ -103,6 +103,38 @@ class ImpactSettingsForm(forms.Form):
                 initial[field_name] = getattr(latest, field_name)
         initial.update(kwargs.pop("initial", {}))
         super().__init__(*args, initial=initial, **kwargs)
+        labels = {
+            "currency": "Reporting currency",
+            "operating_days": "Normal operating days",
+            "operating_start": "Typical opening time",
+            "operating_end": "Typical closing time",
+            "one_time_investment": "One-time implementation cost",
+            "amortization_months": "Spread one-time cost over (months)",
+            "recurring_monthly_cost": "Other monthly operating cost",
+            "use_subscription_cost": "Include Novena subscription cost",
+            "tariff_per_kwh": "Electricity price per kWh",
+            "expected_after_hours_base_kw": "Expected after-hours power (kW)",
+            "abnormal_tolerance_pct": "Allowed variation before flagging (%)",
+            "downtime_cost_per_hour": "Estimated downtime cost per hour",
+            "labor_cost_per_hour": "Estimated labour cost per hour",
+            "cold_min_temperature": "Lowest acceptable temperature",
+            "cold_max_temperature": "Highest acceptable temperature",
+            "excursion_delay_minutes": "Wait before counting a temperature breach (minutes)",
+            "cold_loss_per_critical_excursion": "Estimated loss per critical temperature event",
+            "cold_critical_duration_minutes": "Minutes before a temperature event is critical",
+            "baseline_strategy": "How should Novena choose the comparison period?",
+            "supplied_monthly_energy_kwh": "Your usual monthly energy use (kWh)",
+            "supplied_monthly_downtime_minutes": "Your usual monthly downtime (minutes)",
+            "supplied_monthly_labor_minutes": "Your usual monthly labour time (minutes)",
+            "email_reports": "Email monthly business reviews",
+            "report_recipients": "Report recipients",
+        }
+        for field_name, label in labels.items():
+            self.fields[field_name].label = label
+        self.fields["baseline_strategy"].choices = (
+            (SiteImpactProfile.BaselineStrategy.ROLLING, "Use at least 14 comparable measured days"),
+            (SiteImpactProfile.BaselineStrategy.SUPPLIED, "Use monthly figures entered by my team"),
+        )
         if not can_manage_reports:
             self.fields["email_reports"].disabled = True
             self.fields["report_recipients"].disabled = True
@@ -208,6 +240,21 @@ class ImpactDataSourceForm(forms.ModelForm):
             "calibration_expires_at",
         ]
         widgets = {"calibration_expires_at": forms.DateInput(attrs={"type": "date"})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["source_role"].label = "How is this meter or sensor used?"
+        self.fields["source_role"].choices = (
+            (ImpactDataSource.SourceRole.SITE_BOUNDARY, "Main site meter"),
+            (ImpactDataSource.SourceRole.SUBMETER, "Area or process submeter"),
+            (ImpactDataSource.SourceRole.GENERATION, "On-site generation meter"),
+            (ImpactDataSource.SourceRole.INDEPENDENT, "Standalone equipment meter"),
+            (ImpactDataSource.SourceRole.MONITORING_ONLY, "Monitor only — exclude from totals"),
+        )
+        self.fields["include_in_totals"].label = "Include this source in site totals"
+        self.fields["calibration_status"].label = "Sensor calibration status"
+        self.fields["calibration_accuracy"].label = "Calibration accuracy"
+        self.fields["calibration_expires_at"].label = "Calibration valid until"
 
 
 class ImpactOpportunityForm(forms.ModelForm):

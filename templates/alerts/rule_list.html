@@ -63,9 +63,9 @@
 
             <div class="bg-base-200/40 rounded-2xl p-4 border border-base-content/5 mb-6">
                 <div class="flex items-center space-x-2">
-                    <span class="text-[10px] font-black text-base-content/30 uppercase tracking-widest">Logic:</span>
-                    <span class="text-sm font-bold font-mono text-base-content">
-                        {{ rule.telemetry_key }} {{ rule.get_condition_display }} {{ rule.threshold }}
+                    <span class="text-[10px] font-black text-base-content/30 uppercase tracking-widest">Alert when:</span>
+                    <span class="text-sm font-bold text-base-content">
+                        {{ rule.metric_label }} is {{ rule.threshold_display }}
                     </span>
                 </div>
             </div>
@@ -82,7 +82,7 @@
                     <i class="fa fa-link text-xs text-blue-500" title="Webhook Configured"></i>
                     {% endif %}
                 </div>
-                <span class="text-[9px] font-black text-base-content/30 uppercase font-mono">Cooldown: {{ rule.cooldown_minutes }}m</span>
+                <span class="text-[9px] font-black text-base-content/30 uppercase">Wait {{ rule.cooldown_minutes }}m before notifying again</span>
             </div>
         </div>
         {% empty %}
@@ -90,8 +90,8 @@
             <div class="w-16 h-16 bg-base-200 rounded-full flex items-center justify-center mx-auto mb-6">
                 <i class="fa fa-bell-slash text-2xl opacity-20"></i>
             </div>
-            <h3 class="font-black text-base-content text-xl mb-1">No Rules Configured</h3>
-            <p class="text-sm text-base-content/40 max-w-xs mx-auto mb-8">Set up your first alert rule to start proactively monitoring your infrastructure.</p>
+            <h3 class="font-black text-base-content text-xl mb-1">No alert rules yet</h3>
+            <p class="text-sm text-base-content/40 max-w-xs mx-auto mb-8">Create an alert for an important equipment reading and choose who should respond.</p>
             <a href="{% url 'web_team:alerts:rule_create' request.team.slug %}" class="btn btn-outline btn-sm rounded-xl">Create Initial Rule</a>
         </div>
         {% endfor %}

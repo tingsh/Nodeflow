@@ -3,7 +3,7 @@
   <h1>{{ period_label }} Review</h1>
   <p class="muted">{{ team.name }}{% if site %} · {{ site.name }}{% endif %} · Generated {{ generated_at|date:"d M Y H:i" }}</p>
 
-  <div class="notice">Financial figures are estimates based on configured assumptions and valid operational data. Open opportunities are kept separate from estimated realized value.</div>
+  <div class="notice">Financial figures are estimates based on the business inputs and usable operating data available for this period. Possible future savings are kept separate from value already estimated as achieved.</div>
 
   <div class="grid">
     <div class="card"><div class="label">Estimated realized</div><div class="value">{{ summary.currency }} {{ summary.estimated_realized_value|default_if_none:"—" }}</div></div>
@@ -16,9 +16,9 @@
   {% if summary.sites %}
   {% for site_summary in summary.sites %}
     <h2>{{ site_summary.site_name }} · {{ site_summary.vertical_profile }}</h2>
-    <p>Coverage: {{ site_summary.coverage_pct }}% · Status: {{ site_summary.status }}</p>
+    <p>Usable data: {{ site_summary.coverage_pct }}% · Status: {{ site_summary.status }}</p>
     <table>
-      <thead><tr><th>Metric</th><th>Result</th><th>Evidence</th><th>Coverage</th></tr></thead>
+      <thead><tr><th>Outcome</th><th>Result</th><th>How calculated</th><th>Usable data</th></tr></thead>
       <tbody>
       {% for metric in site_summary.metrics %}
         <tr>
@@ -34,7 +34,7 @@
   {% else %}
   <h2>Measured and estimated outcomes</h2>
   <table>
-    <thead><tr><th>Metric</th><th>Result</th><th>Evidence</th><th>Coverage</th></tr></thead>
+    <thead><tr><th>Outcome</th><th>Result</th><th>How calculated</th><th>Usable data</th></tr></thead>
     <tbody>
     {% for metric in summary.metrics %}
       <tr><td>{{ metric.label|default:metric.key }}</td><td>{% if metric.monetary_value != None %}{{ metric.currency }} {{ metric.monetary_value }}{% else %}{{ metric.value|default_if_none:"—" }} {{ metric.unit }}{% endif %}</td><td><span class="badge">{{ metric.evidence }}</span></td><td>{{ metric.coverage_pct }}%</td></tr>
@@ -43,7 +43,7 @@
   </table>
   {% endif %}
 
-  <h2>Assumptions and methodology</h2>
-  <p>Methodology version {{ methodology_version }}. Measured, calculated, and estimated results remain distinct. Estimates below 80% data coverage are withheld, 80–95% is low confidence, and at least 95% is normal confidence. Different currencies are not combined.</p>
-  <p>Each estimate retains its immutable assumption revision, calculation inputs, data coverage, warnings, and methodology in the report snapshot and CSV export.</p>
+  <h2>How these estimates were calculated</h2>
+  <p>Calculation method {{ methodology_version }}. The report keeps measured, calculated, and estimated results separate. Financial estimates are hidden below 80% usable data, shown as lower confidence from 80–95%, and shown at normal confidence from 95%. Different currencies are not combined.</p>
+  <p>The saved report keeps the business inputs, source readings, usable-data level, warnings, and calculation method used at the time so the result can be reviewed later.</p>
 </div>

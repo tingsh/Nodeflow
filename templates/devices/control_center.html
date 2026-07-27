@@ -3,48 +3,54 @@
 <div class="px-4 sm:px-6 lg:px-8 py-8 space-y-6">
   <div class="flex items-start justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-bold">Governed Remote Control</h1>
+      <h1 class="text-2xl font-bold">Remote Equipment Control</h1>
+      <p class="text-sm text-gray-600 mt-1">Check safety readiness, approvals, and confirmed equipment changes.</p>
       <p class="text-sm text-gray-500">{{ gateway.site.name }} · {{ gateway.name }} · {{ gateway.serial_number }}</p>
     </div>
     <form method="post" action="{% url 'web_team:devices:gateway_emergency_disable' request.team.slug gateway.pk %}">
       {% csrf_token %}
       <input type="hidden" name="reason" value="Emergency disable from control center">
-      <button class="btn btn-error" type="submit">Disable remote write-back</button>
+      <button class="btn btn-error" type="submit" onclick="return confirm('Block new remote-control requests now? The gateway may take time to confirm the change, so equipment must still be checked locally.');">Emergency: block remote control</button>
     </form>
   </div>
 
   <div class="alert {% if request.team.remote_control_mode == 'controlled' %}alert-warning{% else %}alert-info{% endif %}">
-    <span>Team mode: <strong>{{ request.team.get_remote_control_mode_display }}</strong>. Activation is never time-based; monitoring evidence, commissioning, policy acknowledgement, MFA and customer-admin activation must all pass.</span>
+    <span>Remote control: <strong>{{ request.team.get_remote_control_mode_display }}</strong>. Equipment changes are allowed only after operating data, on-site safety checks, gateway confirmation, identity checks, and customer approval all pass.</span>
   </div>
 
   <div class="grid md:grid-cols-3 gap-4">
     <section class="card bg-base-100 border"><div class="card-body">
       <h2 class="card-title text-base">Readiness</h2>
       {% if assessment %}
-        <p class="font-semibold">{{ assessment.get_state_display }}</p>
-        <p class="text-sm">{{ assessment.observation_days }} days · {{ assessment.telemetry_coverage_percent }}% coverage</p>
-        {% for blocker in assessment.blockers %}<p class="text-sm text-error">{{ blocker }}</p>{% endfor %}
-      {% else %}<p class="text-sm">No readiness assessment yet.</p>{% endif %}
+        <p class="font-semibold">{{ assessment.operator_state }}</p>
+        <p class="text-sm">{{ assessment.observation_days }} operating days checked · {{ assessment.telemetry_coverage_percent }}% usable data</p>
+        {% for blocker in assessment.operator_blockers %}<p class="text-sm text-error mt-2">{{ blocker }}</p>{% endfor %}
+      {% else %}<p class="text-sm">Safety readiness has not been checked yet. Ask an authorised technician to assess this gateway before enabling remote control.</p>{% endif %}
     </div></section>
     <section class="card bg-base-100 border"><div class="card-body">
       <h2 class="card-title text-base">Gateway safety</h2>
-      <p class="text-sm">Protocol v{{ gateway.remote_control_protocol_version }}</p>
-      <p class="text-sm">Local enable: {{ gateway.remote_control_local_writeback_enabled|yesno:"ready,disabled" }}</p>
-      <p class="text-sm">Policy: {{ gateway.remote_control_policy_loaded|yesno:"loaded,missing" }} rev {{ gateway.remote_control_policy_revision }}</p>
-      <p class="text-sm">Clock / journal: {{ gateway.remote_control_clock_ready|yesno:"ready,blocked" }} / {{ gateway.remote_control_journal_ready|yesno:"ready,blocked" }}</p>
+      <p class="text-sm">Safe-control support: {{ gateway.remote_control_protocol_version|yesno:"available,not confirmed" }}</p>
+      <p class="text-sm">On-site control switch: {{ gateway.remote_control_local_writeback_enabled|yesno:"enabled,disabled" }}</p>
+      <p class="text-sm">Latest safety settings: {{ gateway.remote_control_policy_loaded|yesno:"confirmed,not confirmed" }}</p>
+      <p class="text-sm">Gateway time: {{ gateway.remote_control_clock_ready|yesno:"verified,not verified" }}</p>
+      <p class="text-sm">Safe command history: {{ gateway.remote_control_journal_ready|yesno:"available,unavailable" }}</p>
+      {% if not gateway.remote_control_local_writeback_enabled or not gateway.remote_control_policy_loaded or not gateway.remote_control_clock_ready or not gateway.remote_control_journal_ready %}
+        <p class="text-sm text-error mt-2">Remote control is blocked. Check the gateway locally or ask an authorised technician for help.</p>
+      {% endif %}
     </div></section>
     <section class="card bg-base-100 border"><div class="card-body">
-      <h2 class="card-title text-base">Audit export</h2>
+      <h2 class="card-title text-base">Command audit trail</h2>
+      <p class="text-sm">Download the detailed safety record for review or support.</p>
       <a class="link" href="{% url 'web_team:devices:command_audit_export' request.team.slug 'csv' %}">Download CSV</a>
       <a class="link" href="{% url 'web_team:devices:command_audit_export' request.team.slug 'json' %}">Download JSON</a>
     </div></section>
   </div>
 
   <section class="card bg-base-100 border"><div class="card-body">
-    <h2 class="card-title">Exact key activations</h2>
+    <h2 class="card-title">Approved equipment controls</h2>
     {% for activation in activations %}
       <div class="flex justify-between border-b py-2"><span>{{ activation.device.name }} · {{ activation.command_key }}</span><span>{{ activation.get_status_display }} until {{ activation.expires_at }}</span></div>
-    {% empty %}<p class="text-sm">No device keys are active.</p>{% endfor %}
+    {% empty %}<p class="text-sm">No equipment controls are approved. Complete the safety checks before requesting activation.</p>{% endfor %}
   </div></section>
 
   <section class="card bg-base-100 border"><div class="card-body">
@@ -54,21 +60,21 @@
         <p><strong>{{ approval.command.device.name }}</strong> · {{ approval.command.command_key }} → {{ approval.command.normalized_value }}</p>
         <p class="text-sm">Requested by {{ approval.command.actor_snapshot.email }} · expires {{ approval.expires_at }}</p>
         <form method="post" action="{% url 'web_team:devices:remote_command_approve' request.team.slug approval.command.pk %}">
-          {% csrf_token %}<button class="btn btn-sm btn-warning">Approve with recent MFA</button>
+          {% csrf_token %}<button class="btn btn-sm btn-warning">Confirm identity and approve</button>
         </form>
       </div>
     {% empty %}<p class="text-sm">No approvals are waiting.</p>{% endfor %}
   </div></section>
 
   <section class="card bg-base-100 border"><div class="card-body">
-    <h2 class="card-title">Command timeline</h2>
+    <h2 class="card-title">Safe command history</h2>
     {% for command in commands %}
       <details class="border-b py-2">
-        <summary>{{ command.created_at }} · {{ command.operation }} · {{ command.status }}</summary>
-        <p class="text-sm">Target: {{ command.gateway.serial_number }} / {{ command.device.name|default:"Gateway" }} / {{ command.command_key }}</p>
-        {% for event in command.events.all %}<p class="text-xs">{{ event.happened_at }} — {{ event.event_type }} — {{ event.to_status }}</p>{% endfor %}
+        <summary>{{ command.created_at }} · {{ command.operator_operation }} · {{ command.operator_status }}</summary>
+        <p class="text-sm">Equipment: {{ command.device.name|default:"Gateway" }}{% if command.command_key %} · Setting: {{ command.command_key }}{% endif %}</p>
+        {% for event in command.operator_events %}<p class="text-xs">{{ event.happened_at }} — {{ event.event }} — {{ event.status }}</p>{% endfor %}
       </details>
-    {% empty %}<p class="text-sm">No commands recorded.</p>{% endfor %}
+    {% empty %}<p class="text-sm">No remote-control requests have been recorded.</p>{% endfor %}
   </div></section>
 </div>
 {% endblock %}

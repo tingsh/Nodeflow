@@ -9,16 +9,16 @@
       <p class="mt-1 text-sm text-base-content/60">{{ site.get_solution_profile_display }} · {{ profile.get_calculation_status_display }}</p>
     </div>
     <div class="flex flex-wrap gap-2">
-      <a href="{% url 'web_team:impact:sources' request.team.slug site.id %}" class="btn btn-outline btn-sm rounded-md">Data sources</a>
-      <a href="{% url 'web_team:impact:settings' request.team.slug site.id %}" class="btn btn-primary btn-sm rounded-md">Assumptions</a>
+      <a href="{% url 'web_team:impact:sources' request.team.slug site.id %}" class="btn btn-outline btn-sm rounded-md">Meters and sensors</a>
+      <a href="{% url 'web_team:impact:settings' request.team.slug site.id %}" class="btn btn-primary btn-sm rounded-md">Business inputs</a>
       <a href="{% url 'web_team:impact:site_csv' request.team.slug site.id %}" class="btn btn-ghost btn-sm rounded-md">Export CSV</a>
     </div>
   </div>
 
   {% if summary.status != "ready" %}
   <div class="mt-5 rounded-lg border border-amber-300/50 bg-amber-50 p-4 text-amber-900">
-    <p class="font-bold">Impact calculation is not fully ready</p>
-    <p class="mt-1 text-sm">Status: {{ profile.get_calculation_status_display }}. Confirm trusted data sources, assumptions, and sufficient data coverage before relying on financial estimates.</p>
+    <p class="font-bold">Savings estimate is not ready to use</p>
+    <p class="mt-1 text-sm">Do not rely on the financial figures yet. Complete the unchecked items below by confirming the right meter, entering business costs, or restoring missing readings.</p>
     <ul class="mt-3 grid grid-cols-1 gap-2 text-sm md:grid-cols-2 xl:grid-cols-5">
       {% for item in readiness %}
       <li class="rounded-md border border-amber-900/10 bg-white/60 p-3">
@@ -48,7 +48,7 @@
       <p class="mt-2 text-xl font-bold font-mono">{{ summary.roi_pct|default_if_none:"—" }}{% if summary.roi_pct != None %}%{% endif %}</p>
     </div>
     <div class="rounded-lg border border-base-content/10 bg-base-100 p-4">
-      <p class="text-[10px] font-bold uppercase text-base-content/45">Data coverage</p>
+      <p class="text-[10px] font-bold uppercase text-base-content/45">Usable data</p>
       <p class="mt-2 text-xl font-bold font-mono">{{ summary.coverage_pct }}%</p>
     </div>
   </div>
@@ -57,11 +57,11 @@
     <section class="overflow-hidden rounded-lg border border-base-content/10 bg-base-100 xl:col-span-2">
       <div class="border-b border-base-content/10 px-5 py-4">
         <h2 class="font-bold">Measured and estimated outcomes</h2>
-        <p class="mt-1 text-xs text-base-content/50">Financial estimates are withheld below 80% valid data coverage.</p>
+        <p class="mt-1 text-xs text-base-content/50">Novena hides financial estimates when less than 80% of the period has usable readings.</p>
       </div>
       <div class="overflow-x-auto">
         <table class="table table-sm">
-          <thead><tr><th>Outcome</th><th>Result</th><th>Evidence</th><th>Coverage</th></tr></thead>
+          <thead><tr><th>Outcome</th><th>Result</th><th>How it was calculated</th><th>Usable data</th></tr></thead>
           <tbody>
           {% for metric in summary.metrics %}
             <tr>
@@ -69,7 +69,7 @@
                 <p class="font-semibold">{{ metric.label }}</p>
                 {% for warning in metric.warnings %}<p class="mt-1 text-xs text-amber-700">{{ warning }}</p>{% endfor %}
                 {% if metric.evidence == "estimated" or metric.monetary_value != None %}
-                <a href="{% url 'web_team:impact:settings' request.team.slug site.id %}" class="mt-1 inline-block text-xs font-semibold text-primary">View assumptions</a>
+                <a href="{% url 'web_team:impact:settings' request.team.slug site.id %}" class="mt-1 inline-block text-xs font-semibold text-primary">Review business inputs</a>
                 {% endif %}
               </td>
               <td class="font-mono">
@@ -112,7 +112,7 @@
   <section class="mt-6 overflow-hidden rounded-lg border border-base-content/10 bg-base-100">
     <div class="border-b border-base-content/10 px-5 py-4">
       <h2 class="font-bold">Top energy contributors</h2>
-      <p class="mt-1 text-xs text-base-content/50">Confirmed, non-overlapping sources only. Abnormal excess compares each source with its own rolling baseline.</p>
+      <p class="mt-1 text-xs text-base-content/50">Uses only confirmed meters that are not double-counted. Unusual excess is compared with that meter's recent normal operating pattern.</p>
     </div>
     <div class="overflow-x-auto">
       <table class="table table-sm">
@@ -134,9 +134,9 @@
 
   {% if assumption %}
   <details class="mt-6 rounded-lg border border-base-content/10 bg-base-100 p-5">
-    <summary class="cursor-pointer font-bold">Assumptions and methodology</summary>
+    <summary class="cursor-pointer font-bold">How these estimates were calculated</summary>
     <div class="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
-      <p><span class="text-base-content/50">Revision</span><br>v{{ assumption.revision }}</p>
+      <p><span class="text-base-content/50">Input set used</span><br>v{{ assumption.revision }}</p>
       <p><span class="text-base-content/50">Tariff</span><br>{{ assumption.currency }} {{ assumption.tariff_per_kwh|default_if_none:"Not configured" }}/kWh</p>
       <p><span class="text-base-content/50">After-hours base</span><br>{{ assumption.expected_after_hours_base_kw|default_if_none:"Not configured" }} kW</p>
     </div>

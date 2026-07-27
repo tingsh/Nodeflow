@@ -20,7 +20,7 @@
             <li>
                 <div class="flex items-center">
                     <i class="fa fa-chevron-right text-gray-400 text-xs mr-4"></i>
-                    <span class="text-sm font-medium text-gray-900 dark:text-white">Logs</span>
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">Technician logs</span>
                 </div>
             </li>
         </ol>
@@ -29,8 +29,8 @@
     <!-- Header -->
     <div class="sm:flex sm:items-center sm:justify-between mb-8">
         <div>
-            <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Gateway Logs</h2>
-            <p class="mt-1 text-sm text-gray-500">Remote log stream from <span class="font-mono font-bold">{{ gateway.serial_number }}</span></p>
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Gateway technician logs</h2>
+            <p class="mt-1 text-sm text-gray-500">Detailed support records from <span class="font-mono font-bold">{{ gateway.serial_number }}</span>. Share these with an authorised technician when troubleshooting.</p>
         </div>
         <div class="mt-4 sm:mt-0 flex items-center space-x-2">
             <a href="{% url 'web_team:devices:gateway_logs' request.team.slug gateway.pk %}"

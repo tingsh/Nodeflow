@@ -41,14 +41,38 @@ logger = logging.getLogger("novena_hub")
 
 
 @require_permission("view_command_audit")
-def gateway_control_center(request, pk):
+def gateway_control_center(request, team_slug, pk):
+    from .operator_copy import (
+        event_label,
+        operation_label,
+        readiness_blocker_label,
+        readiness_state_label,
+        status_label,
+    )
+
     gateway = get_object_or_404(Gateway, pk=pk, team=request.team)
+    assessment = gateway.control_readiness_assessments.order_by("-assessed_at").first()
+    if assessment:
+        assessment.operator_state = readiness_state_label(assessment.state)
+        assessment.operator_blockers = [readiness_blocker_label(item) for item in assessment.blockers]
+    commands = list(RemoteCommand.objects.filter(team=request.team, gateway=gateway).prefetch_related("events")[:100])
+    for command in commands:
+        command.operator_operation = operation_label(command.operation)
+        command.operator_status = status_label(command.status)
+        command.operator_events = [
+            {
+                "happened_at": event.happened_at,
+                "event": event_label(event.event_type),
+                "status": status_label(event.to_status) if event.to_status else "Recorded",
+            }
+            for event in command.events.all()
+        ]
     return render(
         request,
         "devices/control_center.html",
         {
             "gateway": gateway,
-            "assessment": gateway.control_readiness_assessments.order_by("-assessed_at").first(),
+            "assessment": assessment,
             "activations": ControlActivation.objects.filter(
                 team=request.team,
                 device__gateway=gateway,
@@ -58,17 +82,14 @@ def gateway_control_center(request, pk):
                 command__gateway=gateway,
                 status=RemoteCommandApproval.Status.PENDING,
             ).select_related("command", "command__device"),
-            "commands": RemoteCommand.objects.filter(
-                team=request.team,
-                gateway=gateway,
-            ).prefetch_related("events")[:100],
+            "commands": commands,
         },
     )
 
 
 @require_POST
 @require_permission("toggle_remote_control")
-def gateway_emergency_disable(request, pk):
+def gateway_emergency_disable(request, team_slug, pk):
     gateway = get_object_or_404(Gateway, pk=pk, team=request.team)
     from .control_readiness import emergency_disable
 
@@ -83,14 +104,17 @@ def gateway_emergency_disable(request, pk):
             "status": "disabled_at_hub",
             "control_epoch": epoch,
             "gateway_acknowledged": False,
-            "message": "Hub dispatch is blocked immediately. Gateway acknowledgement is pending.",
+            "message": (
+                "New remote-control requests are blocked. The gateway has not yet confirmed the change, "
+                "so verify the equipment locally before leaving the site."
+            ),
         }
     )
 
 
 @require_POST
 @require_permission("approve_high_risk_commands")
-def remote_command_approve(request, command_id):
+def remote_command_approve(request, team_slug, command_id):
     command = get_object_or_404(RemoteCommand, pk=command_id, team=request.team)
     recent_value = request.session.get("remote_control_recent_auth_at")
     recent_auth_at = datetime.fromisoformat(recent_value) if recent_value else None
@@ -497,8 +521,13 @@ def gateway_send_rpc(request, team_slug, pk):
             reason=request.POST.get("reason", ""),
         )
     except (CommandDenied, json.JSONDecodeError) as exc:
+        from .operator_copy import customer_safe_control_error
+
         return JsonResponse(
-            {"error": str(exc), "code": getattr(exc, "code", "invalid_request")},
+            {
+                "error": customer_safe_control_error(getattr(exc, "code", "invalid_request")),
+                "code": getattr(exc, "code", "invalid_request"),
+            },
             status=403 if getattr(exc, "code", "") == "permission_denied" else 400,
         )
 
@@ -584,7 +613,15 @@ def device_rpc_command(request, team_slug, gateway_pk, device_pk):
             command_type=command_type,
         )
     except (ValueError, json.JSONDecodeError) as exc:
-        return JsonResponse({"error": str(exc), "code": getattr(exc, "code", "invalid_request")}, status=400)
+        from .operator_copy import customer_safe_control_error
+
+        return JsonResponse(
+            {
+                "error": customer_safe_control_error(getattr(exc, "code", "invalid_request")),
+                "code": getattr(exc, "code", "invalid_request"),
+            },
+            status=400,
+        )
 
     return JsonResponse(
         {
@@ -607,7 +644,10 @@ def device_rpc_status(request, team_slug, gateway_pk, device_pk, request_id):
     ).first()
 
     if not rpc:
-        return JsonResponse({"status": "not_found", "result": None, "error": "RPC command not found"}, status=404)
+        return JsonResponse(
+            {"status": "not_found", "result": None, "error": "This equipment request could not be found."},
+            status=404,
+        )
 
     return JsonResponse(
         {
@@ -628,7 +668,10 @@ def gateway_rpc_status(request, team_slug, gateway_pk, request_id):
     ).first()
 
     if not rpc:
-        return JsonResponse({"status": "not_found", "result": None, "error": "RPC command not found"}, status=404)
+        return JsonResponse(
+            {"status": "not_found", "result": None, "error": "This gateway request could not be found."},
+            status=404,
+        )
 
     return JsonResponse(
         {
@@ -741,9 +784,14 @@ def device_send_command(request, team_slug, pk):
             }
         )
     except Exception as e:
+        from django.utils.html import escape
+
+        from .operator_copy import customer_safe_device_error
+
+        safe_error = customer_safe_device_error(str(e), code=getattr(e, "code", ""))
         if request.headers.get("HX-Request"):
-            return HttpResponse(f'<span class="text-error text-xs font-bold">{str(e)}</span>', status=400)
-        return JsonResponse({"error": str(e)}, status=400)
+            return HttpResponse(f'<span class="text-error text-xs font-bold">{escape(safe_error)}</span>', status=400)
+        return JsonResponse({"error": safe_error}, status=400)
 
 
 @require_permission("view_devices")
@@ -754,6 +802,8 @@ def device_command_status(request, team_slug, pk, tx_id):
 
     command = get_object_or_404(DeviceCommand, transaction_id=tx_id, team=request.team)
     if request.GET.get("format") == "json" or "application/json" in request.headers.get("Accept", ""):
+        from .operator_copy import customer_safe_device_error
+
         result = command.response_payload.get("result") if isinstance(command.response_payload, dict) else None
         return JsonResponse(
             {
@@ -763,7 +813,7 @@ def device_command_status(request, team_slug, pk, tx_id):
                 "command_key": command.command_key,
                 "result": result,
                 "response_payload": command.response_payload,
-                "error": command.error_message or None,
+                "error": customer_safe_device_error(command.error_message) if command.error_message else None,
             }
         )
     return render(request, "devices/partials/command_status_badge.html", {"command": command})

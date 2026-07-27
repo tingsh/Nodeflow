@@ -47,6 +47,34 @@ def test_alert_rule_form_requires_recipients_when_email_enabled():
 
 
 @pytest.mark.django_db
+def test_alert_rule_form_uses_operator_labels():
+    team = Team.objects.create(name="Labels", slug="labels")
+    form = AlertRuleForm(team=team)
+
+    assert form.fields["telemetry_key"].label == "Reading to monitor"
+    assert form.fields["condition"].label == "Alert when the reading is"
+    assert dict(form.fields["condition"].choices)["gt"] == "above"
+
+
+@pytest.mark.django_db
+def test_alert_rule_display_translates_signal_and_condition_codes():
+    team = Team.objects.create(name="Display", slug="display")
+    site = Site.objects.create(team=team, name="Cold Store")
+    device = Device.objects.create(team=team, site=site, name="Cold Room")
+    rule = AlertRule.objects.create(
+        team=team,
+        device=device,
+        name="High temperature",
+        telemetry_key="cold_room_temperature",
+        condition="gt",
+        threshold=8,
+    )
+
+    assert rule.metric_label == "Cold Room Temperature"
+    assert rule.threshold_display == "above 8"
+
+
+@pytest.mark.django_db
 def test_onboarding_alert_rule_adds_current_user_as_email_recipient():
     client = Client()
     team = Team.objects.create(name="Test Team", slug="test-team")
@@ -63,7 +91,7 @@ def test_onboarding_alert_rule_adds_current_user_as_email_recipient():
 
     response = client.post(
         reverse("web_team:onboarding:step_4_alert", args=[team.slug]),
-        {"key": "temp", "threshold": "45"},
+        {"accept_profile_presets": "0", "key": "temp", "threshold": "45"},
     )
 
     assert response.status_code == 302

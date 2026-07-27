@@ -349,7 +349,9 @@ def calculate_energy_metrics(site_profile, assumption, start, end):
     weighted_coverage = Decimal("0")
     results = []
     warnings = (
-        [] if has_boundary else ["No site boundary meter is configured; totals use confirmed non-overlapping meters."]
+        []
+        if has_boundary
+        else ["No main site meter is confirmed. Totals use only confirmed meters that do not overlap."]
     )
 
     for source in sources:

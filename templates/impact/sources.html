@@ -2,8 +2,8 @@
 {% block app %}
 <div class="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
   <a href="{% url 'web_team:impact:site_detail' request.team.slug site.id %}" class="text-xs font-bold text-primary">← {{ site.name }} impact</a>
-  <h1 class="mt-2 text-2xl font-bold">Trusted business data sources</h1>
-  <p class="mt-1 max-w-3xl text-sm text-base-content/60">Confirm the exact meter or sensor used for each result. A main meter and its submeters are never summed together.</p>
+  <h1 class="mt-2 text-2xl font-bold">Meters and sensors used for Business Impact</h1>
+  <p class="mt-1 max-w-3xl text-sm text-base-content/60">Confirm what each reading represents. Novena avoids double-counting a main site meter and the area meters below it.</p>
 
   <div class="mt-6 space-y-4">
   {% for source in sources %}
@@ -12,16 +12,20 @@
       <div class="flex flex-col gap-4 xl:flex-row xl:items-end">
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
-            <h2 class="font-bold">{{ source.device.name }} · {{ source.telemetry_key }}</h2>
+            <h2 class="font-bold">{{ source.device.name }} · {{ source.get_quantity_kind_display }}</h2>
             <span class="badge badge-ghost badge-sm">{{ source.get_verification_status_display }}</span>
             {% if source.device.template.is_verified %}<span class="badge badge-success badge-sm">Verified template</span>{% endif %}
           </div>
-          <p class="mt-1 text-xs text-base-content/50">{{ source.get_quantity_kind_display }} · raw converted to {{ source.canonical_unit|default:"unitless" }}</p>
+          <p class="mt-1 text-xs text-base-content/50">Reported in {{ source.canonical_unit|default:"no unit" }}. Technician signal: {{ source.telemetry_key }}</p>
         </div>
         <label class="min-w-56">
-          <span class="mb-1 block text-xs font-bold text-base-content/50">Meter/source role</span>
+          <span class="mb-1 block text-xs font-bold text-base-content/50">How is this reading used?</span>
           <select name="source_role" class="select select-bordered select-sm w-full">
-          {% for value, label in source.SourceRole.choices %}<option value="{{ value }}" {% if source.source_role == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          <option value="site_boundary" {% if source.source_role == "site_boundary" %}selected{% endif %}>Main site meter</option>
+          <option value="submeter" {% if source.source_role == "submeter" %}selected{% endif %}>Area or process submeter</option>
+          <option value="generation" {% if source.source_role == "generation" %}selected{% endif %}>On-site generation meter</option>
+          <option value="independent" {% if source.source_role == "independent" %}selected{% endif %}>Standalone equipment meter</option>
+          <option value="monitoring_only" {% if source.source_role == "monitoring_only" %}selected{% endif %}>Monitor only — exclude from totals</option>
           </select>
         </label>
         <label class="flex items-center gap-2 pb-2 text-sm">
@@ -42,8 +46,8 @@
     </form>
   {% empty %}
     <div class="rounded-lg border border-dashed border-base-content/15 bg-base-100 p-10 text-center">
-      <p class="font-semibold">No trustworthy source suggestions are available.</p>
-      <p class="mt-1 text-sm text-base-content/50">Use a verified equipment template with energy, power, temperature, power-factor, or runtime semantics.</p>
+      <p class="font-semibold">No suitable meter or sensor reading is available yet.</p>
+      <p class="mt-1 text-sm text-base-content/50">Add equipment with a verified profile, then wait for its first energy, power, temperature, or runtime reading. Ask your installer if no reading appears.</p>
     </div>
   {% endfor %}
   </div>

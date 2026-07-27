@@ -5,9 +5,9 @@
             <i class="fa fa-check-circle text-2xl animate-bounce"></i>
         </div>
         <div class="flex-1">
-            <h4 class="text-lg font-black text-base-content font-heading tracking-tight">Device Registered!</h4>
+            <h4 class="text-lg font-black text-base-content font-heading tracking-tight">Equipment added</h4>
             <p class="text-xs text-base-content/60 mt-1">
-                <strong>{{ device.name }}</strong> has been successfully registered on port <strong>{{ device.port }}</strong> of gateway <strong>{{ device.gateway.name }}</strong>.
+                <strong>{{ device.name }}</strong> is saved on gateway <strong>{{ device.gateway.name }}</strong>. Test the live connection before finishing.
             </p>
         </div>
     </div>
@@ -22,7 +22,7 @@
         </div>
 
         <p class="text-xs text-base-content/60 leading-relaxed">
-            Verify that your gateway is physically communicating with the device. This will send an on-demand Modbus read request through the gateway's active MQTT channel.
+            Check that the gateway can read a live value from this equipment. This does not change any equipment setting.
         </p>
 
         {% if test_register %}
@@ -30,7 +30,7 @@
         <div class="text-xs font-mono bg-base-100 p-4 rounded-2xl border border-base-content/5 flex items-center justify-between gap-4">
             <div>
                 <span class="font-bold text-primary-500">{{ test_register.key }}</span>
-                <span class="text-base-content/40 ml-1.5">(Address: {{ test_register.address }}, FC: {{ test_register.functionCode }})</span>
+                <span class="text-base-content/40 ml-1.5">Technician details: address {{ test_register.address }}, function {{ test_register.functionCode }}</span>
             </div>
             <div class="shrink-0 flex items-center gap-1.5">
                 <span class="badge badge-outline border-base-content/10 text-[9px] uppercase font-bold">{{ test_register.type }}</span>
@@ -42,7 +42,7 @@
 
         <!-- Live Read Result Box -->
         <div id="test-result-box" class="hidden rounded-2xl bg-base-100 p-4 border border-base-content/5">
-            <span class="text-[10px] font-black text-base-content/40 uppercase tracking-widest block mb-1">Response Data</span>
+            <span class="text-[10px] font-black text-base-content/40 uppercase tracking-widest block mb-1">Live reading</span>
             <div id="test-result-data" class="text-xs font-mono font-bold leading-relaxed break-all"></div>
         </div>
 
@@ -53,7 +53,7 @@
         </button>
         {% else %}
         <div class="p-4 bg-amber-500/5 rounded-2xl border border-amber-500/10 text-xs text-amber-500 font-bold text-center">
-            <i class="fa fa-exclamation-triangle mr-1.5"></i> No readable registers found in this template to test.
+            <i class="fa fa-exclamation-triangle mr-1.5"></i> This equipment profile has no safe test reading. Ask a technician to verify the connection locally.
         </div>
         {% endif %}
     </div>
@@ -111,7 +111,7 @@
         const resultData = document.getElementById('test-result-data');
 
         btn.disabled = true;
-        btn.innerHTML = '<span class="loading loading-spinner loading-xs mr-2"></span> Reading Register...';
+        btn.innerHTML = '<span class="loading loading-spinner loading-xs mr-2"></span> Checking live value...';
         badge.className = 'badge badge-warning text-white text-[8px] uppercase font-bold py-1.5 px-2.5';
         badge.innerHTML = '<i class="fa fa-sync fa-spin mr-1"></i> Testing';
         resultBox.classList.add('hidden');
@@ -127,7 +127,7 @@
 
             const command = await commandCall('read', 'connection_test', params);
             if (command.status === 'sent') {
-                badge.innerHTML = '<i class="fa fa-clock mr-1"></i> Waiting for Edge';
+                badge.innerHTML = '<i class="fa fa-clock mr-1"></i> Waiting for gateway';
                 const result = await pollCommandResult(command.transaction_id);
                 resultBox.classList.remove('hidden');
 
@@ -137,22 +137,22 @@
                     const response = (result.result && result.result.response) ? result.result.response : result.result;
                     const val = response && response.value !== undefined ? response.value : JSON.stringify(response);
                     resultData.className = 'text-xs font-mono text-success font-bold';
-                    resultData.textContent = `Successfully read telemetry: ${val} {{ test_register.unit|default:"" }}`;
+                    resultData.textContent = `Live reading confirmed: ${val} {{ test_register.unit|default:"" }}`;
                 } else {
                     badge.className = 'badge badge-error text-white text-[8px] uppercase font-bold py-1.5 px-2.5';
                     badge.innerHTML = '<i class="fa fa-times-circle mr-1"></i> Failed';
                     resultData.className = 'text-xs font-mono text-error font-bold';
-                    resultData.textContent = `Error: ${result.error || 'Failed to read register map.'}`;
+                    resultData.textContent = `Connection not confirmed: ${result.error || 'Check equipment power, wiring, and communication settings, then retry.'}`;
                 }
             } else {
-                throw new Error(rpc.error || 'Failed to dispatch RPC command.');
+                throw new Error(command.error || 'The gateway could not start the connection test. Check that it is online and retry.');
             }
         } catch (e) {
             resultBox.classList.remove('hidden');
             badge.className = 'badge badge-error text-white text-[8px] uppercase font-bold py-1.5 px-2.5';
             badge.innerHTML = '<i class="fa fa-exclamation-triangle mr-1"></i> Error';
             resultData.className = 'text-xs font-mono text-error font-bold';
-            resultData.textContent = `Test Failed: ${e.message}`;
+            resultData.textContent = `Test not completed: ${e.message}`;
         } finally {
             btn.disabled = false;
             btn.innerHTML = '<i class="fa fa-bolt mr-2"></i> Test Connection & Read';

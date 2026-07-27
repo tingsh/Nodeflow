@@ -55,8 +55,8 @@
             {% for cond in automation.conditions.all %}
               <div class="bg-base-200/50 p-4 rounded-xl border border-info/20 flex flex-col sm:flex-row items-baseline gap-2">
                 <span class="badge badge-primary badge-outline font-mono">{{ cond.device.name }}</span>
-                <span class="font-mono font-bold text-base-content">{{ cond.telemetry_key }}</span>
-                <span class="font-mono text-info font-bold">{{ cond.get_operator_display }}</span>
+                <span class="font-bold text-base-content">{{ cond.reading_label }}</span>
+                <span class="text-info font-bold">{{ cond.operator_label }}</span>
                 <span class="font-mono font-bold bg-base-300 px-2 rounded">{{ cond.threshold }}</span>
                 
                 {% if cond.duration_seconds > 0 %}
@@ -81,14 +81,15 @@
             {% for action in automation.actions.all %}
               <div class="bg-base-200/50 p-4 rounded-xl border border-success/20">
                 <div class="font-semibold text-base-content flex items-center gap-2 mb-2">
-                  <i class="fa fa-bolt text-success"></i> {{ action.get_action_type_display }}
+                  <i class="fa fa-bolt text-success"></i> {% if action.action_type == 'send_command' %}Equipment action proposal{% else %}{{ action.get_action_type_display }}{% endif %}
                 </div>
                 
                 {% if action.action_type == 'send_command' %}
                   <div class="text-sm font-mono overflow-auto bg-base-300/50 p-2 rounded">
                     Device: {{ action.target_device.name }}<br>
-                    Key: {{ action.command_key }}<br>
-                    Payload: {{ action.command_payload }}
+                    Proposed setting: {{ action.command_key }}<br>
+                    Proposed value: {{ action.command_payload }}<br>
+                    <span class="font-sans text-warning">Proposal only — no equipment control is sent automatically.</span>
                   </div>
                 {% elif action.action_type == 'webhook' %}
                   <div class="text-sm font-mono break-all bg-base-300/50 p-2 rounded">
@@ -116,7 +117,7 @@
           </h2>
           
           <div class="text-sm flex justify-between items-center bg-base-200 p-2 rounded-lg mb-4">
-            <span class="text-base-content/60">Cooldown</span>
+            <span class="text-base-content/60">Wait before running again</span>
             <span class="font-mono font-bold">{{ automation.cooldown_minutes }} mins</span>
           </div>
 
@@ -127,7 +128,7 @@
                 <div class="font-medium text-sm mt-0.5 truncate">{{ log.get_status_display }}</div>
               </li>
             {% empty %}
-              <li class="text-sm text-base-content/50 text-center py-4 italic">No executions yet.</li>
+              <li class="text-sm text-base-content/50 text-center py-4 italic">This rule has not run yet. It will run after its conditions are met.</li>
             {% endfor %}
           </ul>
           

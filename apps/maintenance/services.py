@@ -29,9 +29,11 @@ def auto_create_ticket(alert, force=False):
 
     title = f"[{rule.get_severity_display().upper()}] {rule.name} on {alert.device.name}"
     description = (
-        f"Automated ticket generated from alert on {alert.device.name}.\n"
-        f"Measurement: {rule.telemetry_key.replace('_', ' ').title()}\n"
-        f"Triggered Value: {alert.trigger_value} (Threshold: {rule.condition} {rule.threshold})"
+        f"This maintenance ticket was created because an alert triggered on {alert.device.name}.\n"
+        f"Reading: {alert.metric_label}\n"
+        f"Observed value: {alert.trigger_value_display}\n"
+        f"Alert limit: {alert.threshold_display}\n\n"
+        "Next step: confirm the reading on site, inspect the equipment, and record the action taken."
     )
 
     # Determine notification flags from the rule
@@ -44,7 +46,7 @@ def auto_create_ticket(alert, force=False):
     # Clone checklist state from template if set
     checklist_state = []
     if rule.maintenance_template:
-        description += f"\n\nTemplate Instructions:\n{rule.maintenance_template.description}"
+        description += f"\n\nChecklist guidance:\n{rule.maintenance_template.description}"
         for item in rule.maintenance_template.checklist:
             checklist_state.append(
                 {"task": item.get("task", ""), "required": item.get("required", False), "done": False}
