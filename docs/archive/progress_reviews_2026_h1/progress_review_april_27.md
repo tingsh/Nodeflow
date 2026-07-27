@@ -1,3 +1,5 @@
+> **Historical reference — do not use as current implementation guidance.** See the [current CTO review](../../cto_product_progress_review_2026-07-18.md).
+
 # Novena — CTO Progress Review & Unicorn Assessment
 
 > **Historical review:** This document records the 27 April 2026 state. The current cross-repository assessment is [CTO Product Progress Review — 18 July 2026](cto_product_progress_review_2026-07-18.md).

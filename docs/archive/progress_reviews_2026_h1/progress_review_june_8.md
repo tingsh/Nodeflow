@@ -1,3 +1,5 @@
+> **Historical reference — do not use as current implementation guidance.** See the [current CTO review](../../cto_product_progress_review_2026-07-18.md).
+
 # NodeFlow Progress Review — June 8, 2026
 # Product Readiness & Phase 2 Completion
 

@@ -1,62 +1,51 @@
-.idea
-.vscode
+.idea/
+.vscode/
 *.code-workspace
-*.pyc
-*.swp
-*~
-.venv
-venv
-db.sqlite3
-.sass-cache/
-celerybeat-schedule
-novena_hub/localsettings.py
-novena_hub/local.py
-static_root/
-node_modules/
-.vite/
-openapitools.json
-media/
-backups/
-docs/_build
-_dist/
-.env
-.env.production
-.idea
-.vscode
-*.code-workspace
-*.pyc
-*~
-.venv
-venv
-db.sqlite3
-.sass-cache/
-celerybeat-schedule
-novena_hub/localsettings.py
-novena_hub/local.py
-static_root/
-node_modules/
-.vite/
-openapitools.json
-media/
-docs/_build
-_dist/
-.env
-.env.production
 .DS_Store
-.direnv
+.gemini/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+.venv-wsl/
+.venv_new/
+venv/
+
+# Local configuration and runtime state
+.env
+.env.production
 .envrc
-# compiled static files are built in dev/deploy
+.direnv/
+celerybeat-schedule
+db.sqlite3
+novena_hub/local.py
+novena_hub/localsettings.py
+media/
+private_media/
+backups/
+.dev-pids/
+*.log
+*.pid
+
+# Frontend and generated build output
+node_modules/
+.vite/
+static/.vite/
 static/css/
 static/js/
-t e s t _ o u t p u t . t x t  
-.gemini/  
- 
-.venv-wsl
-.venv_new
+static_root/
+.sass-cache/
+*.css.map
+*.js.map
 
-# WSL local dev runtime artifacts
-.dev-pids/
-*-wsl.log
-*-wsl.err.log
-vite-detach-test.log
-vite-detach-test.err.log
+# Generated documentation and API tooling
+docs/_build/
+_dist/
+openapitools.json
+
+# Editor and OS temporary files
+*.swp
+*~

@@ -1,3 +1,5 @@
+> **Historical reference — do not use as current implementation guidance.** See the [current project status](../../agent_context/skills/novena-project-status/references/project_status.md).
+
 # Implementation Plan: Novena Feature Sprints 1-6
 
 > **Created:** April 17, 2026  

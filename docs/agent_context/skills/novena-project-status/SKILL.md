@@ -7,6 +7,8 @@ description: Use for Novena Hub or Novena Gateway work when Codex needs current 
 
 Read references/project_status.md at the start of substantial Novena work to understand where the project stands. The readable source lives under docs/agent_context/skills/novena-project-status, while .agents/skills/novena-project-status is a symlink for Codex discovery.
 
+The active status file is intentionally concise. Historical activity lives under `docs/archive/project_activity_2026_h1/` and should only be read when a task requires historical investigation.
+
 When completing a feature, bug fix, review, migration, or environment change:
 
 1. Add a new dated entry to the top of the Recent Activity Log in references/project_status.md.

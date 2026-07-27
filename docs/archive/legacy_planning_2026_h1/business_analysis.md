@@ -1,3 +1,5 @@
+> **Historical reference — do not use as current implementation guidance.** See the [current business plan](../../business_plan_2026-07-18.md).
+
 # IIoT SaaS Platform — Business Viability Analysis
 
 > **Historical analysis:** This document records the April 2026 thesis and contains product, pricing, roadmap, and grant assumptions that are now stale. Use the [Updated Novena Business Plan — 18 July 2026](business_plan_2026-07-18.md) for current decisions.

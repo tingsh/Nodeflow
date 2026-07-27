@@ -15,6 +15,10 @@ jobs:
           python-version: 3.12
       - name: Run pre-commit hooks
         uses: pre-commit/action@v3.0.0
+      - name: Validate active documentation and repository hygiene
+        run: |
+          python scripts/check_docs.py
+          python scripts/check_repo_hygiene.py
   tests:
     runs-on: ubuntu-latest
     timeout-minutes: 60

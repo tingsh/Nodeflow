@@ -1,3 +1,5 @@
+> **Historical reference — do not use as current implementation guidance.** See the [current CTO review](../../cto_product_progress_review_2026-07-18.md).
+
 # Novena Progress Review — Post-Sprint 6 Comprehensive Audit
 
 > **Date:** April 18, 2026  
