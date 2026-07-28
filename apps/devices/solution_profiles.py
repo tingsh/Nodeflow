@@ -63,10 +63,10 @@ PROFILES = {
         name="Cold Chain Monitoring",
         short_name="Cold Chain",
         icon="fa-snowflake",
-        promise="Track temperatures, door events, and compressor health before spoilage happens.",
+        promise="Track temperatures, door events, and compressor health so teams can act before spoilage risk grows.",
         setup_copy=(
             "Novena will prioritize temperature sensors, door states, compressor status, "
-            "excursion alerts, and audit-ready exports."
+            "excursion alerts, and audit-friendly CSV exports."
         ),
         site_placeholder="Jurong Cold Room A",
         recommended_device_types=("temp_sensor", "chiller"),
@@ -100,7 +100,7 @@ PROFILES = {
         icon="fa-bolt",
         promise="See demand, kWh, spikes, and abnormal loads across machines and meters.",
         setup_copy=(
-            "Novena will prioritize power meters, VFDs, energy dashboards, spike alerts, and savings review exports."
+            "Novena will prioritize power meters, VFDs, energy dashboards, spike alerts, and savings-evidence exports."
         ),
         site_placeholder="Tuas Assembly Line",
         recommended_device_types=("power_meter", "solar_inverter", "vfd", "plc"),
@@ -208,6 +208,8 @@ def template_profile_score(template, profile):
         score += 60
     if template.category in profile.recommended_categories:
         score += 40
+    if profile.key == GENERAL_IOT:
+        return score
     if getattr(template, "is_verified", False):
         score += 10
     register_map = template.register_map if isinstance(template.register_map, dict) else {}
