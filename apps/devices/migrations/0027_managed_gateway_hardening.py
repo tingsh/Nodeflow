@@ -1,6 +1,7 @@
+import uuid
+
 import django.db.models.deletion
 import django.utils.timezone
-import uuid
 from django.conf import settings
 from django.db import migrations, models
 
@@ -18,6 +19,7 @@ def backfill_hardening_state(apps, schema_editor):
     # Backfill inventory for older claimed rows so deploying the consumer does
     # not strand an otherwise valid existing Gateway.
     for gateway in Gateway.objects.exclude(lifecycle_status="released").iterator():
+        claimed_at = getattr(gateway, "claimed_at", None) or gateway.created_at
         inventory = GatewayInventory.objects.filter(serial_number=gateway.serial_number).first()
         if inventory is None:
             GatewayInventory.objects.create(
@@ -25,14 +27,14 @@ def backfill_hardening_state(apps, schema_editor):
                 status="claimed",
                 gateway_id=gateway.pk,
                 claimed_by_team_id=gateway.team_id,
-                claimed_at=gateway.claimed_at,
+                claimed_at=claimed_at,
             )
         elif inventory.gateway_id in {None, gateway.pk}:
             GatewayInventory.objects.filter(pk=inventory.pk).update(
                 status="claimed",
                 gateway_id=gateway.pk,
                 claimed_by_team_id=gateway.team_id,
-                claimed_at=inventory.claimed_at or gateway.claimed_at,
+                claimed_at=inventory.claimed_at or claimed_at,
             )
 
     for gateway_id in GatewayActivation.objects.values_list("gateway_id", flat=True).distinct():
