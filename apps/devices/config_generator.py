@@ -11,6 +11,7 @@ The generated config follows the Novena Gateway connector schema:
 """
 
 import logging
+import math
 
 logger = logging.getLogger("novena_hub")
 
@@ -92,11 +93,14 @@ def _build_slave_config(device, is_tcp):
     discovery = device.discovery_meta or {}
     connection = device.connection_config or {}
 
+    from apps.subscriptions.enforcement import get_effective_polling_interval_seconds
+
+    effective_polling_seconds = get_effective_polling_interval_seconds(device)
     slave = {
         "deviceName": device.name,
         "deviceId": str(device.pk),
         "unitId": discovery.get("slave_id", connection.get("slave_id", 1)),
-        "pollPeriod": (template.default_polling_interval or 5) * 1000,
+        "pollPeriod": math.ceil(effective_polling_seconds * 1000),
         "method": connection.get("method", "socket"),
         "timeout": connection.get("timeout", 35),
         "byteOrder": connection.get("byteOrder", "BIG"),
@@ -169,7 +173,7 @@ def _default_objects_count(type_name):
     return 1
 
 
-def normalized_datapoints(template):
+def normalized_datapoints(template, *, team=None):
     """Expose the legacy register map through a versioned protocol-neutral shape."""
     from apps.impact.services import semantic_datapoint_metadata
 
@@ -191,11 +195,16 @@ def normalized_datapoints(template):
             "quality": register.get("quality", {}),
             "protocol_metadata": register.get("protocol_metadata", {}),
         }
+        expected_interval = template.default_polling_interval
+        if team is not None:
+            from apps.subscriptions.enforcement import get_latency_limit_for_team
+
+            expected_interval = max(float(expected_interval or 5), float(get_latency_limit_for_team(team)))
         datapoint.update(
             semantic_datapoint_metadata(
                 key,
                 register,
-                expected_interval=template.default_polling_interval,
+                expected_interval=expected_interval,
             )
         )
         datapoints.append(datapoint)
@@ -203,6 +212,8 @@ def normalized_datapoints(template):
 
 
 def human_config_preview(gateway):
+    from apps.subscriptions.enforcement import get_effective_polling_interval_seconds
+
     connectors = generate_connector_config(gateway)
     devices = list(gateway.devices.select_related("template").all())
     return {
@@ -224,8 +235,10 @@ def human_config_preview(gateway):
                 "protocol": device.get_protocol_display(),
                 "target": device.port or "",
                 "slave_id": (device.connection_config or {}).get("slave_id"),
-                "polling_interval": (device.template.default_polling_interval if device.template else None),
-                "telemetry_keys": [datapoint["key"] for datapoint in normalized_datapoints(device.template)]
+                "polling_interval": (get_effective_polling_interval_seconds(device) if device.template else None),
+                "telemetry_keys": [
+                    datapoint["key"] for datapoint in normalized_datapoints(device.template, team=device.team)
+                ]
                 if device.template
                 else [],
             }
@@ -244,9 +257,9 @@ def generate_and_push_config(gateway, *, setup_run=None):
 
     Returns the GatewayConfig record or None.
     """
-    from apps.telemetry.mqtt_publisher import publish_config_update
+    from .gateway_config_delivery import ensure_gateway_configurable, queue_gateway_config
 
-    from .gateway_config_delivery import gateway_supports_guided_setup, queue_gateway_config
+    ensure_gateway_configurable(gateway)
 
     connectors = generate_connector_config(gateway)
 
@@ -261,18 +274,12 @@ def generate_and_push_config(gateway, *, setup_run=None):
     gateway.lifecycle_status = "commissioning"
     gateway.save(update_fields=["lifecycle_status"])
 
-    if gateway_supports_guided_setup(gateway):
-        config_record = queue_gateway_config(
-            gateway,
-            "connector_update",
-            config_payload,
-            setup_run=setup_run,
-        )
-    else:
-        config_record = publish_config_update(gateway, "connector_update", config_payload)
-        if setup_run:
-            config_record.setup_run = setup_run
-            config_record.save(update_fields=["setup_run", "updated_at"])
+    config_record = queue_gateway_config(
+        gateway,
+        "connector_update",
+        config_payload,
+        setup_run=setup_run,
+    )
     logger.info(
         "Pushed connector config to %s: %d connectors, request_id=%s",
         gateway.serial_number,

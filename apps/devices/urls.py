@@ -19,8 +19,14 @@ urlpatterns = [
     path("gateways/<int:pk>/delete/", views.GatewayDeleteView.as_view(), name="gateway_delete"),
     # Gateway management (Cloud ↔ Edge)
     path("gateways/<int:pk>/rotate-password/", views.gateway_rotate_password, name="gateway_rotate_password"),
+    path("gateways/<int:pk>/retry-activation/", views.gateway_retry_activation, name="gateway_retry_activation"),
     path("gateways/<int:pk>/rpc/", views.gateway_send_rpc, name="gateway_send_rpc"),
     path("gateways/<int:pk>/config/", views.gateway_push_config, name="gateway_push_config"),
+    path(
+        "gateways/<int:pk>/config/<int:config_pk>/retry/",
+        views.gateway_retry_config,
+        name="gateway_retry_config",
+    ),
     path("gateways/<int:pk>/logs/", views.gateway_logs, name="gateway_logs"),
     path("gateways/<int:pk>/rpc-history/", views.gateway_rpc_history, name="gateway_rpc_history"),
     path("gateways/<int:pk>/control/", views.gateway_control_center, name="gateway_control_center"),

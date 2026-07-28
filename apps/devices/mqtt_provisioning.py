@@ -12,10 +12,13 @@ Requires:
 
 import json
 import logging
+import secrets
+import threading
 import time
 
 import paho.mqtt.client as mqtt
 from django.conf import settings
+from django.core.cache import cache
 
 logger = logging.getLogger("novena_hub")
 
@@ -24,6 +27,30 @@ RESPONSE_TOPIC = "$CONTROL/dynamic-security/v1/response"
 
 # Singleton client for dynsec commands (connects on port 1884 with admin creds)
 _dynsec_client = None
+
+
+class DynsecCommandError(RuntimeError):
+    """Mosquitto accepted a control message but rejected its command."""
+
+
+def _command_target(command):
+    for key in ("username", "rolename", "groupname"):
+        if command.get(key):
+            return key, str(command[key])
+    return None, None
+
+
+def _response_matches(command, response):
+    if response.get("command") != command.get("command"):
+        return False
+    return response.get("correlationData") == command.get("correlationData")
+
+
+def _is_expected_error(error, *, allow_not_found=False, allow_exists=False):
+    normalized = str(error or "").lower()
+    if allow_not_found and any(token in normalized for token in ("not found", "does not exist")):
+        return True
+    return allow_exists and "already" in normalized
 
 
 def _get_dynsec_client():
@@ -60,16 +87,82 @@ def _get_dynsec_client():
     return _dynsec_client
 
 
-def _publish_dynsec_command(command):
-    """Publish a command to the dynamic security control topic."""
-    client = _get_dynsec_client()
-    payload = json.dumps({"commands": [command]})
-    result = client.publish(DYNSEC_TOPIC, payload, qos=1)
-    result.wait_for_publish(timeout=5)
-    if result.rc != mqtt.MQTT_ERR_SUCCESS:
-        raise RuntimeError(f"Dynsec command {command.get('command')} failed to publish (rc={result.rc})")
-    logger.debug("Dynsec command published (rc=%s): %s", result.rc, command.get("command"))
-    return result
+def _publish_dynsec_command(command, *, allow_not_found=False, allow_exists=False):
+    """Publish one command and require a matching Dynamic Security response."""
+    target_key, target_value = _command_target(command)
+    correlation_data = (
+        f"{command.get('command')}:{target_key or 'none'}:{target_value or 'none'}:{secrets.token_urlsafe(12)}"
+    )
+    command = {**command, "correlationData": correlation_data}
+    timeout = float(getattr(settings, "MQTT_DYNSEC_RESPONSE_TIMEOUT_SECONDS", 5))
+    lock_key = "novena:mqtt:dynsec-command-lock"
+    lock_token = secrets.token_urlsafe(18)
+    lock_deadline = time.monotonic() + timeout
+    while not cache.add(lock_key, lock_token, timeout=max(10, int(timeout * 2))):
+        if time.monotonic() >= lock_deadline:
+            raise RuntimeError("Timed out waiting for the MQTT security command lock.")
+        time.sleep(0.05)
+
+    response_event = threading.Event()
+    connected_event = threading.Event()
+    matched_response = {}
+    client = mqtt.Client(
+        callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+        client_id=f"novena-dynsec-{secrets.token_hex(8)}",
+        protocol=mqtt.MQTTv311,
+    )
+    client.username_pw_set(
+        getattr(settings, "MQTT_DYNSEC_ADMIN_USER", "dynsec-admin"),
+        getattr(settings, "MQTT_DYNSEC_ADMIN_PASS", "dynsec-password"),
+    )
+
+    def on_connect(inner_client, userdata, flags, reason_code, properties):
+        if reason_code == 0:
+            inner_client.subscribe(RESPONSE_TOPIC, qos=1)
+            connected_event.set()
+
+    def on_message(inner_client, userdata, message):
+        try:
+            payload = json.loads(message.payload.decode())
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return
+        for response in payload.get("responses", []):
+            if _response_matches(command, response):
+                matched_response.update(response)
+                response_event.set()
+                return
+
+    client.on_connect = on_connect
+    client.on_message = on_message
+    try:
+        client.connect(
+            settings.MQTT_BROKER_HOST,
+            int(getattr(settings, "MQTT_DYNSEC_PORT", 1884)),
+            60,
+        )
+        client.loop_start()
+        if not connected_event.wait(timeout):
+            raise RuntimeError("Could not subscribe for the MQTT security response.")
+        result = client.publish(DYNSEC_TOPIC, json.dumps({"commands": [command]}), qos=1)
+        result.wait_for_publish(timeout=timeout)
+        if result.rc != mqtt.MQTT_ERR_SUCCESS or not result.is_published():
+            raise RuntimeError(f"Dynsec command {command.get('command')} was not acknowledged by the broker.")
+        if not response_event.wait(timeout):
+            raise RuntimeError(f"Dynsec command {command.get('command')} produced no verified response.")
+        error = matched_response.get("error")
+        if error and not _is_expected_error(
+            error,
+            allow_not_found=allow_not_found,
+            allow_exists=allow_exists,
+        ):
+            raise DynsecCommandError(f"Dynsec {command.get('command')} failed: {error}")
+        logger.debug("Dynsec command verified: %s", command.get("command"))
+        return matched_response
+    finally:
+        client.loop_stop()
+        client.disconnect()
+        if cache.get(lock_key) == lock_token:
+            cache.delete(lock_key)
 
 
 def provision_gateway_mqtt(gateway, password):
@@ -92,18 +185,18 @@ def provision_gateway_mqtt(gateway, password):
         "command": "createClient",
         "username": sn,
         "password": password,
-        "textName": f"Edge Gateway {sn}",
-        "textDescription": f"Auto-provisioned for gateway {gateway.name}",
-        "roles": [{"roleName": "gateway", "priority": -1}],
+        "textname": f"Edge Gateway {sn}",
+        "textdescription": f"Auto-provisioned for gateway {gateway.name}",
+        "roles": [{"rolename": "gateway", "priority": -1}],
     }
-    _publish_dynsec_command(create_cmd)
+    _publish_dynsec_command(create_cmd, allow_exists=True)
 
     # Step 2: Create a per-gateway role with scoped topic ACLs
     role_name = f"gw-{sn}"
     create_role_cmd = {
         "command": "createRole",
-        "roleName": role_name,
-        "textDescription": f"Per-gateway ACLs for {sn}",
+        "rolename": role_name,
+        "textdescription": f"Per-gateway ACLs for {sn}",
         "acls": [
             # Edge → cloud publishes for this gateway only.
             {"acltype": "publishClientSend", "topic": f"v1/gateway/{sn}/telemetry", "allow": True},
@@ -116,31 +209,31 @@ def provision_gateway_mqtt(gateway, password):
             {"acltype": "publishClientReceive", "topic": f"v1/gateway/{sn}/#", "allow": True},
         ],
     }
-    _publish_dynsec_command(create_role_cmd)
+    _publish_dynsec_command(create_role_cmd, allow_exists=True)
 
     # Step 3: Assign the per-gateway role to the client
     add_role_cmd = {
         "command": "addClientRole",
         "username": sn,
-        "roleName": role_name,
+        "rolename": role_name,
         "priority": -1,
     }
-    _publish_dynsec_command(add_role_cmd)
+    _publish_dynsec_command(add_role_cmd, allow_exists=True)
 
     # Step 4: Create a bootstrap client scoped to only first-time activation.
     # The physical gateway uses this identity after operational auth failures.
     bootstrap_role_name = f"bootstrap-gw-{sn}"
     bootstrap_role_cmd = {
         "command": "createRole",
-        "roleName": bootstrap_role_name,
-        "textDescription": f"Bootstrap activation ACLs for {sn}",
+        "rolename": bootstrap_role_name,
+        "textdescription": f"Bootstrap activation ACLs for {sn}",
         "acls": [
             {"acltype": "publishClientSend", "topic": f"v1/gateway/{sn}/bootstrap/hello", "allow": True},
             {"acltype": "subscribePattern", "topic": f"v1/gateway/{sn}/bootstrap/activate", "allow": True},
             {"acltype": "publishClientReceive", "topic": f"v1/gateway/{sn}/bootstrap/activate", "allow": True},
         ],
     }
-    _publish_dynsec_command(bootstrap_role_cmd)
+    _publish_dynsec_command(bootstrap_role_cmd, allow_exists=True)
 
     from .services import compute_claim_code
 
@@ -148,11 +241,24 @@ def provision_gateway_mqtt(gateway, password):
         "command": "createClient",
         "username": bootstrap_username,
         "password": compute_claim_code(sn),
-        "textName": f"Bootstrap Gateway {sn}",
-        "textDescription": f"Claim-time activation client for gateway {gateway.name}",
-        "roles": [{"roleName": bootstrap_role_name, "priority": -1}],
+        "textname": f"Bootstrap Gateway {sn}",
+        "textdescription": f"Claim-time activation client for gateway {gateway.name}",
+        "roles": [{"rolename": bootstrap_role_name, "priority": -1}],
     }
-    _publish_dynsec_command(bootstrap_client_cmd)
+    _publish_dynsec_command(bootstrap_client_cmd, allow_exists=True)
+
+    # Existing clients need the new activation generation even when createClient
+    # was an idempotent no-op.
+    _publish_dynsec_command(
+        {"command": "modifyClient", "username": sn, "password": password},
+    )
+    _publish_dynsec_command(
+        {
+            "command": "modifyClient",
+            "username": bootstrap_username,
+            "password": compute_claim_code(sn),
+        },
+    )
 
     logger.info("Provisioned MQTT credentials for gateway %s on Mosquitto", sn)
 
@@ -186,32 +292,43 @@ def deprovision_gateway_mqtt(gateway):
     """
     sn = gateway.serial_number
 
+    # Disable both identities first. A confirmed disable/delete immediately
+    # disconnects clients and makes partial retries fail closed.
+    _publish_dynsec_command(
+        {"command": "disableClient", "username": sn},
+        allow_not_found=True,
+    )
+    _publish_dynsec_command(
+        {"command": "disableClient", "username": f"bootstrap:{sn}"},
+        allow_not_found=True,
+    )
+
     # Delete the client
     delete_client_cmd = {
         "command": "deleteClient",
         "username": sn,
     }
-    _publish_dynsec_command(delete_client_cmd)
+    _publish_dynsec_command(delete_client_cmd, allow_not_found=True)
 
     # Delete the per-gateway role
     role_name = f"gw-{sn}"
     delete_role_cmd = {
         "command": "deleteRole",
-        "roleName": role_name,
+        "rolename": role_name,
     }
-    _publish_dynsec_command(delete_role_cmd)
+    _publish_dynsec_command(delete_role_cmd, allow_not_found=True)
 
     # Delete the claim-time bootstrap identity and its scoped role.
     delete_bootstrap_client_cmd = {
         "command": "deleteClient",
         "username": f"bootstrap:{sn}",
     }
-    _publish_dynsec_command(delete_bootstrap_client_cmd)
+    _publish_dynsec_command(delete_bootstrap_client_cmd, allow_not_found=True)
 
     delete_bootstrap_role_cmd = {
         "command": "deleteRole",
-        "roleName": f"bootstrap-gw-{sn}",
+        "rolename": f"bootstrap-gw-{sn}",
     }
-    _publish_dynsec_command(delete_bootstrap_role_cmd)
+    _publish_dynsec_command(delete_bootstrap_role_cmd, allow_not_found=True)
 
     logger.info("Deprovisioned MQTT credentials for gateway %s from Mosquitto", sn)

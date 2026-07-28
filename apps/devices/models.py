@@ -58,6 +58,7 @@ class Gateway(BaseTeamModel):
         ("commissioning", _("Commissioning")),
         ("active", _("Active")),
         ("release_pending", _("Release Pending")),
+        ("released", _("Released")),
     )
     TLS_MODE_CHOICES = (
         ("none", _("None")),
@@ -67,7 +68,7 @@ class Gateway(BaseTeamModel):
 
     site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="gateways")
     name = models.CharField(max_length=200)
-    serial_number = models.CharField(max_length=100, unique=True)
+    serial_number = models.CharField(max_length=100)
     access_token = models.CharField(max_length=64, unique=True, help_text=_("MQTT authentication token"))
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="offline")
     lifecycle_status = models.CharField(max_length=20, choices=LIFECYCLE_CHOICES, default="claimed")
@@ -147,6 +148,15 @@ class Gateway(BaseTeamModel):
     def __str__(self):
         return f"{self.name} ({self.serial_number})"
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["serial_number"],
+                condition=~models.Q(lifecycle_status="released"),
+                name="unique_active_gateway_serial",
+            )
+        ]
+
     @property
     def freshness(self):
         from apps.devices.freshness import gateway_freshness_state
@@ -189,16 +199,20 @@ class GatewayActivation(BaseTeamModel):
     """Durable activation attempt for first-time operational MQTT credentials."""
 
     STATUS_CHOICES = (
+        ("provisioning", _("Provisioning")),
         ("pending", _("Pending")),
         ("delivered", _("Delivered")),
         ("acknowledged", _("Acknowledged")),
         ("expired", _("Expired")),
         ("retried", _("Retried")),
+        ("retry", _("Retry Scheduled")),
         ("failed", _("Failed")),
+        ("superseded", _("Superseded")),
     )
-    UNRESOLVED_STATUSES = ("pending", "delivered", "retried", "failed")
+    UNRESOLVED_STATUSES = ("provisioning", "pending", "delivered", "retried", "retry", "failed")
 
     gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="activations")
+    generation = models.PositiveIntegerField(default=1)
     request_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     attempt_count = models.PositiveIntegerField(default=0)
@@ -211,6 +225,9 @@ class GatewayActivation(BaseTeamModel):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["gateway", "generation"], name="unique_gateway_activation_generation")
+        ]
         indexes = [
             models.Index(fields=["gateway", "status"]),
             models.Index(fields=["expires_at", "status"]),
@@ -218,6 +235,45 @@ class GatewayActivation(BaseTeamModel):
 
     def __str__(self):
         return f"Activation {self.request_id} -> {self.gateway.serial_number} ({self.status})"
+
+
+class GatewayReleaseRequest(BaseTeamModel):
+    """Durable, fail-closed release of one claimed Gateway ownership record."""
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", _("Queued")
+        REVOKING = "revoking", _("Revoking credentials")
+        RETRY = "retry", _("Retry scheduled")
+        NEEDS_ATTENTION = "needs_attention", _("Needs attention")
+        COMPLETED = "completed", _("Completed")
+
+    request_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    gateway = models.ForeignKey(Gateway, on_delete=models.PROTECT, related_name="release_requests")
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="gateway_release_requests",
+    )
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.QUEUED)
+    attempt_count = models.PositiveIntegerField(default=0)
+    next_attempt_at = models.DateTimeField(default=timezone.now)
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["gateway"],
+                condition=models.Q(status__in=["queued", "revoking", "retry", "needs_attention"]),
+                name="unique_active_gateway_release",
+            )
+        ]
+        indexes = [models.Index(fields=["status", "next_attempt_at"])]
 
 
 class DeviceTemplate(models.Model):
@@ -344,11 +400,14 @@ class GatewayConfig(BaseTeamModel):
 
     STATUS_CHOICES = (
         ("queued", _("Queued")),
-        ("delivered", _("Delivered")),
+        ("waiting_for_gateway", _("Waiting for Gateway")),
+        ("published", _("Published")),
         ("accepted", _("Accepted")),
         ("active", _("Active")),
         ("failed", _("Failed")),
         ("rolled_back", _("Rolled Back")),
+        ("timed_out", _("Timed Out")),
+        ("superseded", _("Superseded")),
     )
 
     gateway = models.ForeignKey(Gateway, on_delete=models.CASCADE, related_name="config_history")
@@ -375,7 +434,11 @@ class GatewayConfig(BaseTeamModel):
     connector_results = models.JSONField(default=list, blank=True)
     rollback_connector_results = models.JSONField(default=list, blank=True)
     delivered_at = models.DateTimeField(null=True, blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
     acknowledged_at = models.DateTimeField(null=True, blank=True)
+    acknowledgement_deadline_at = models.DateTimeField(null=True, blank=True)
+    last_ack_at = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
@@ -391,7 +454,9 @@ class GatewayConfigOutbox(BaseTeamModel):
     class Status(models.TextChoices):
         PENDING = "pending", _("Pending")
         CLAIMED = "claimed", _("Claimed")
-        DELIVERED = "delivered", _("Delivered")
+        WAITING_GATEWAY = "waiting_gateway", _("Waiting for Gateway")
+        AWAITING_ACK = "awaiting_ack", _("Awaiting acknowledgement")
+        COMPLETED = "completed", _("Completed")
         RETRY = "retry", _("Retry")
         DEAD_LETTER = "dead_letter", _("Dead letter")
 
@@ -408,6 +473,30 @@ class GatewayConfigOutbox(BaseTeamModel):
     class Meta:
         ordering = ["next_attempt_at", "created_at"]
         indexes = [models.Index(fields=["status", "next_attempt_at"])]
+
+
+class GatewayPlanReconciliation(BaseTeamModel):
+    """Idempotent record of applying a subscription polling policy to a team."""
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", _("Queued")
+        RUNNING = "running", _("Running")
+        COMPLETED = "completed", _("Completed")
+        NEEDS_ATTENTION = "needs_attention", _("Needs attention")
+
+    source_key = models.CharField(max_length=255)
+    previous_interval_seconds = models.FloatField()
+    new_interval_seconds = models.FloatField()
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.QUEUED)
+    queued_gateway_count = models.PositiveIntegerField(default=0)
+    skipped_gateway_count = models.PositiveIntegerField(default=0)
+    unsupported_gateway_count = models.PositiveIntegerField(default=0)
+    last_error = models.TextField(blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [models.UniqueConstraint(fields=["team", "source_key"], name="unique_team_plan_reconcile_source")]
 
 
 class DeploymentSetupRun(BaseTeamModel):
@@ -910,11 +999,12 @@ class RemoteCommand(BaseTeamModel):
     gateway = models.ForeignKey(Gateway, on_delete=models.PROTECT, related_name="remote_commands")
     device = models.ForeignKey(
         Device,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="remote_commands",
     )
+    target_snapshot = models.JSONField(default=dict, blank=True)
     requested_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

@@ -4,7 +4,6 @@ import uuid
 
 import paho.mqtt.client as mqtt
 from django.conf import settings
-from django.utils import timezone
 
 logger = logging.getLogger("novena_hub")
 
@@ -56,53 +55,6 @@ def get_mqtt_client():
         logger.error("Failed to connect MQTT publisher: %s", e)
 
     return _client
-
-
-def publish_config_update(gateway, action, config):
-    """
-    Push a config update to a gateway.
-
-    Args:
-        gateway: Gateway model instance
-        action: 'full_update', 'connector_update', 'connector_add', 'connector_remove'
-        config: dict — config content appropriate for the action
-
-    Returns:
-        GatewayConfig instance
-    """
-    from apps.devices.models import GatewayConfig
-
-    request_id = uuid.uuid4()
-    topic = f"v1/gateway/{gateway.serial_number}/config"
-    payload = {
-        "request_id": str(request_id),
-        "action": action,
-        "config": config,
-    }
-
-    # Store in DB
-    config_record = GatewayConfig.objects.create(
-        team=gateway.team,
-        gateway=gateway,
-        config_json=config,
-        request_id=request_id,
-        action=action,
-    )
-
-    # Publish
-    result = _publish_qos1(topic, payload)
-    config_record.status = "delivered"
-    config_record.delivered_at = timezone.now()
-    config_record.save(update_fields=["status", "delivered_at", "updated_at"])
-    logger.info(
-        "Published config update to %s (action=%s, request_id=%s, rc=%s)",
-        gateway.serial_number,
-        action,
-        request_id,
-        result.rc,
-    )
-
-    return config_record
 
 
 def _publish_qos1(topic: str, payload: dict):
@@ -246,6 +198,7 @@ def publish_gateway_activation(activation, operational_password):
     topic = f"v1/gateway/{gateway.serial_number}/bootstrap/activate"
     payload = {
         "request_id": request_id,
+        "generation": activation.generation,
         "action": "activate",
         "activation_expires_at": activation.expires_at.isoformat(),
         "mqtt": {
@@ -255,8 +208,7 @@ def publish_gateway_activation(activation, operational_password):
         },
     }
 
-    client = get_mqtt_client()
-    result = client.publish(topic, json.dumps(payload), qos=1)
+    result = _publish_qos1(topic, payload)
     logger.info(
         "Published gateway activation to %s (request_id=%s, rc=%s)",
         gateway.serial_number,

@@ -201,6 +201,6 @@ def test_gateway_command_history_avoids_visible_software_rpc_term():
 
     content = response.content.decode()
     assert response.status_code == 200
-    assert "Remote Command History" in content
+    assert "Gateway action history" in content
     assert "Settings" in content
     assert "RPC" not in content

@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from apps.devices.models import Device, Gateway, GatewayInventory, Site
 from apps.devices.services import GatewayClaimError, claim_gateway_for_team, compute_claim_code
@@ -63,6 +63,7 @@ class SubscriptionEnforcementTests(TestCase):
         self.assertFalse(can_add_device(self.team))
 
     @patch("apps.devices.mqtt_provisioning.provision_gateway_mqtt")
+    @override_settings(GATEWAY_ACTIVATION_ENCRYPTION_KEY="MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
     def test_gateway_claim_blocks_when_plan_limit_is_reached(self, mock_provision):
         starter = next(product for product in ACTIVE_PRODUCTS if product.slug == "starter")
         create_subscription_for_team(self.team, starter)

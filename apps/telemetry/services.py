@@ -2,7 +2,8 @@ import logging
 
 from django.utils import timezone
 
-from apps.devices.models import Device, Gateway
+from apps.devices.models import Device
+from apps.devices.services import current_claimed_gateway
 from apps.utils.timezones import format_site_datetime
 
 from .models import TelemetryData
@@ -19,9 +20,8 @@ def ingest_telemetry_data(gateway_sn, values, timestamp=None, device_id=None):
     if timestamp is None:
         timestamp = cloud_received_at
 
-    try:
-        gateway = Gateway.objects.get(serial_number=gateway_sn)
-    except Gateway.DoesNotExist:
+    gateway = current_claimed_gateway(gateway_sn)
+    if not gateway:
         logger.warning("Gateway with SN %s not found. Ingestion skipped.", gateway_sn)
         return
 
@@ -34,7 +34,10 @@ def ingest_telemetry_data(gateway_sn, values, timestamp=None, device_id=None):
     device_name = values.pop("device_name", None)
 
     if device_id:
-        target_device = gateway.devices.filter(pk=device_id).first()
+        try:
+            target_device = gateway.devices.filter(pk=int(device_id)).first()
+        except (TypeError, ValueError):
+            logger.warning("Invalid telemetry device_id %s from gateway %s.", device_id, gateway_sn)
         if not target_device:
             logger.debug("device_id %s not found on gateway %s, falling back to name match", device_id, gateway_sn)
 
@@ -44,10 +47,24 @@ def ingest_telemetry_data(gateway_sn, values, timestamp=None, device_id=None):
         except Device.DoesNotExist:
             logger.info("Device %s not found for gateway %s.", device_name, gateway_sn)
 
-    if not target_device and gateway.devices.exists():
-        target_device = gateway.devices.first()
+    legacy_fallback_used = False
+    if not target_device:
+        legacy_candidates = list(gateway.devices.order_by("id")[:2])
+        if len(legacy_candidates) == 1:
+            target_device = legacy_candidates[0]
+            legacy_fallback_used = True
+        elif len(legacy_candidates) > 1:
+            logger.warning(
+                "Rejected ambiguous telemetry for gateway %s. Payload device_id=%s device_name=%s; "
+                "the gateway has multiple configured devices.",
+                gateway_sn,
+                device_id,
+                device_name,
+            )
+
+    if legacy_fallback_used:
         logger.warning(
-            "Using legacy first-device telemetry fallback for gateway %s. "
+            "Using legacy first-device telemetry fallback for gateway %s (single configured device). "
             "Payload device_id=%s device_name=%s resolved_device=%s.",
             gateway_sn,
             device_id,

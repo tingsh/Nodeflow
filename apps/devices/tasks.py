@@ -48,6 +48,43 @@ def dispatch_due_gateway_config_outboxes():
     return dispatch_due()
 
 
+@shared_task(name="apps.devices.tasks.dispatch_gateway_release")
+def dispatch_gateway_release(release_id):
+    from .gateway_release import dispatch_gateway_release as dispatch
+
+    release = dispatch(release_id)
+    return str(release.request_id) if release else None
+
+
+@shared_task(name="apps.devices.tasks.dispatch_due_gateway_releases")
+def dispatch_due_gateway_releases():
+    from .gateway_release import dispatch_due_gateway_releases as dispatch_due
+
+    return dispatch_due()
+
+
+@shared_task(name="apps.devices.tasks.provision_gateway_activation")
+def provision_gateway_activation(activation_id):
+    from .activation import provision_gateway_activation as provision
+
+    return provision(activation_id)
+
+
+@shared_task(name="apps.devices.tasks.reconcile_team_gateway_polling")
+def reconcile_team_gateway_polling(reconciliation_id):
+    from .plan_reconciliation import reconcile_team_gateway_polling as reconcile
+
+    result = reconcile(reconciliation_id)
+    return result.pk
+
+
+@shared_task(name="apps.devices.tasks.dispatch_due_plan_reconciliations")
+def dispatch_due_plan_reconciliations():
+    from .plan_reconciliation import dispatch_due_plan_reconciliations as dispatch_due
+
+    return dispatch_due()
+
+
 @shared_task
 def check_device_heartbeats():
     """Persist devices as offline when telemetry freshness exceeds the offline timeout."""

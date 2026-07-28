@@ -29,22 +29,55 @@
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                         <p class="text-xs font-black uppercase tracking-widest text-base-content/45">Gateway settings</p>
-                        <h3 class="mt-1 font-black">{{ commissioning.latest_config.get_status_display|default:"Not queued" }}</h3>
+                        <h3 class="mt-1 font-black">
+                            {% if commissioning.latest_config.status == "queued" or commissioning.latest_config.status == "waiting_for_gateway" %}Queued
+                            {% elif commissioning.latest_config.status == "published" %}Sent securely
+                            {% elif commissioning.latest_config.status == "accepted" %}Reached Gateway
+                            {% elif commissioning.latest_config.status == "active" %}Applied
+                            {% elif commissioning.latest_config.status == "rolled_back" %}Rolled back
+                            {% elif commissioning.latest_config.status == "failed" or commissioning.latest_config.status == "timed_out" %}Needs attention
+                            {% elif commissioning.latest_config.status == "superseded" %}Replaced
+                            {% else %}Not queued{% endif %}
+                        </h3>
                         <p class="mt-1 text-sm text-base-content/55">
                             {% if commissioning.latest_config.status == "active" %}The Gateway accepted the settings and started its equipment connections.
                             {% elif commissioning.latest_config.status == "rolled_back" %}The Gateway restored the last working settings.
-                            {% elif commissioning.latest_config.status == "failed" %}The settings could not be applied. The last working setup remains in place.
+                            {% elif commissioning.latest_config.status == "failed" or commissioning.latest_config.status == "timed_out" %}The settings could not be confirmed. The last working setup remains in place.
+                            {% elif commissioning.latest_config.status == "waiting_for_gateway" %}The settings are safely queued until the Gateway reconnects.
+                            {% elif commissioning.latest_config.status == "published" %}The cloud service sent the settings and is waiting for the Gateway to confirm receipt.
                             {% else %}Waiting for the Gateway to confirm the settings and start the checked equipment connections.{% endif %}
                         </p>
                     </div>
                     {% if commissioning.latest_config %}
-                    <span class="badge {% if commissioning.latest_config.status == 'active' %}badge-success{% elif commissioning.latest_config.status == 'failed' or commissioning.latest_config.status == 'rolled_back' %}badge-error{% else %}badge-warning{% endif %}">
-                        {{ commissioning.latest_config.get_status_display }}
+                    <span class="badge {% if commissioning.latest_config.status == 'active' %}badge-success{% elif commissioning.latest_config.status == 'failed' or commissioning.latest_config.status == 'timed_out' or commissioning.latest_config.status == 'rolled_back' %}badge-error{% else %}badge-warning{% endif %}">
+                        {% if commissioning.latest_config.status == "queued" or commissioning.latest_config.status == "waiting_for_gateway" %}Queued
+                        {% elif commissioning.latest_config.status == "published" %}Sent securely
+                        {% elif commissioning.latest_config.status == "accepted" %}Reached Gateway
+                        {% elif commissioning.latest_config.status == "active" %}Applied
+                        {% elif commissioning.latest_config.status == "rolled_back" %}Rolled back
+                        {% elif commissioning.latest_config.status == "failed" or commissioning.latest_config.status == "timed_out" %}Needs attention
+                        {% elif commissioning.latest_config.status == "superseded" %}Replaced
+                        {% else %}{{ commissioning.latest_config.get_status_display }}{% endif %}
                     </span>
                     {% endif %}
                 </div>
                 {% if commissioning.latest_config.error_message %}
                 <div class="mt-4 rounded-lg bg-error/10 p-3 text-sm text-error">{{ commissioning.latest_config.error_message }}</div>
+                {% endif %}
+                {% if commissioning.latest_config.status == "failed" or commissioning.latest_config.status == "rolled_back" or commissioning.latest_config.status == "timed_out" %}
+                <form method="post" action="{% url 'web_team:devices:gateway_retry_config' request.team.slug device.gateway.pk commissioning.latest_config.pk %}" class="mt-4">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary btn-sm rounded-md">
+                        <i class="fa fa-refresh mr-1"></i> Retry these settings
+                    </button>
+                </form>
+                {% elif commissioning.latest_config.status == "waiting_for_gateway" %}
+                <form method="post" action="{% url 'web_team:devices:gateway_retry_activation' request.team.slug device.gateway.pk %}" class="mt-4">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline btn-sm rounded-md">
+                        <i class="fa fa-refresh mr-1"></i> Retry secure connection
+                    </button>
+                </form>
                 {% endif %}
                 <details class="mt-4">
                     <summary class="cursor-pointer text-xs font-bold text-base-content/55">Technician setup details</summary>

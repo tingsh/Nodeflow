@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -46,10 +47,10 @@ def compact_timesince(dt, now=None):
 
 
 def expected_device_interval_seconds(device):
-    template = getattr(device, "template", None)
-    interval = getattr(template, "default_polling_interval", None) if template else None
+    from apps.subscriptions.enforcement import get_effective_polling_interval_seconds
+
     try:
-        return max(1, int(interval or DEFAULT_POLLING_INTERVAL_SECONDS))
+        return max(1, math.ceil(get_effective_polling_interval_seconds(device)))
     except (TypeError, ValueError):
         return DEFAULT_POLLING_INTERVAL_SECONDS
 

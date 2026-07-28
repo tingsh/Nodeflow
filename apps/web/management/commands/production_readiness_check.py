@@ -20,6 +20,8 @@ DEFAULT_DYNSEC_PASS = "dynsec-password"
 REQUIRED_HOSTS = {"novenaplatform.com", "app.novenaplatform.com"}
 REQUIRED_CELERY_TASKS = {
     "apps.devices.tasks.dispatch_due_gateway_config_outboxes",
+    "apps.devices.tasks.dispatch_due_gateway_releases",
+    "apps.devices.tasks.dispatch_due_plan_reconciliations",
     "apps.devices.tasks.dispatch_due_remote_command_outboxes",
     "apps.maintenance.tasks.generate_preventive_tickets",
     "apps.telemetry.tasks.flush_telemetry_buffer_task",
@@ -361,6 +363,14 @@ def build_checks() -> list[CheckResult]:
             if settings.MQTT_DYNSEC_ADMIN_USER != DEFAULT_DYNSEC_USER
             and settings.MQTT_DYNSEC_ADMIN_PASS != DEFAULT_DYNSEC_PASS
             else "Default Dynamic Security admin credentials are active.",
+        ),
+        CheckResult(
+            "Services",
+            "Required Gateway MQTT provisioning",
+            "OK" if getattr(settings, "MQTT_PROVISIONING_REQUIRED", False) else "FAIL",
+            "MQTT_PROVISIONING_REQUIRED=True"
+            if getattr(settings, "MQTT_PROVISIONING_REQUIRED", False)
+            else "MQTT_PROVISIONING_REQUIRED must be True for managed Gateways.",
         ),
         CheckResult(
             "Notifications",

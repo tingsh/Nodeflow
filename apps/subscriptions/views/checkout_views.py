@@ -86,6 +86,10 @@ def checkout(request, plan_slug):
         # Offline simulation fallback
         messages.warning(request, f"Stripe price not configured for '{plan_slug}'. Simulating checkout locally.")
 
+        from apps.subscriptions.enforcement import get_latency_limit_for_team
+
+        previous_interval = get_latency_limit_for_team(subscription_holder)
+
         # Provision the mock subscription
         mock_sub_id = f"sub_mock_{plan_slug}"
 
@@ -117,6 +121,17 @@ def checkout(request, plan_slug):
         )
         subscription_holder.subscription = sub
         subscription_holder.save()
+        subscription_holder.clear_cached_subscription()
+        new_interval = get_latency_limit_for_team(subscription_holder)
+
+        from apps.devices.plan_reconciliation import queue_team_plan_reconciliation
+
+        queue_team_plan_reconciliation(
+            subscription_holder,
+            previous_interval,
+            new_interval,
+            f"local-checkout:{mock_sub_id}:{new_interval}",
+        )
 
         messages.success(request, f"Successfully simulated subscription to {target_product.metadata.name}!")
         return HttpResponseRedirect(reverse("web_team:home", args=[subscription_holder.slug]))

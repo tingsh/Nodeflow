@@ -7,7 +7,6 @@ import secrets
 import uuid
 
 from django.conf import settings
-from django.contrib.auth.hashers import make_password
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -64,6 +63,20 @@ def normalize_gateway_serial(serial_number: str) -> str:
     return serial_number.strip().upper()
 
 
+def current_claimed_gateway(serial_number: str):
+    """Resolve the one factory-authorized ownership row for MQTT/edge ingress."""
+    serial_number = normalize_gateway_serial(serial_number)
+    inventory = (
+        GatewayInventory.objects.select_related("gateway")
+        .filter(serial_number=serial_number, status="claimed", gateway__isnull=False)
+        .first()
+    )
+    gateway = inventory.gateway if inventory else None
+    if not gateway or gateway.lifecycle_status in {"release_pending", "released"}:
+        return None
+    return gateway
+
+
 def validate_gateway_claim(serial_number: str, claim_code: str):
     """Validate a sticker claim against factory inventory and HMAC claim code."""
     serial_number = normalize_gateway_serial(serial_number)
@@ -71,7 +84,7 @@ def validate_gateway_claim(serial_number: str, claim_code: str):
         raise GatewayClaimError("Invalid claim code. Please check the sticker on the bottom of your gateway.")
 
     inventory = GatewayInventory.objects.filter(serial_number__iexact=serial_number).first()
-    existing_gateway = Gateway.objects.filter(serial_number=serial_number).first()
+    existing_gateway = Gateway.objects.exclude(lifecycle_status="released").filter(serial_number=serial_number).first()
     if not inventory and not existing_gateway:
         raise GatewayClaimError("This serial number is not in the Novena factory inventory. Please contact support.")
     if inventory and inventory.status == "retired":
@@ -91,19 +104,31 @@ def claim_gateway_for_team(team, site, name: str, serial_number: str, claim_code
     inventory = validate_gateway_claim(serial_number, claim_code)
     operational_password = generate_operational_mqtt_password()
 
-    existing_gateway = Gateway.objects.select_for_update().filter(serial_number=serial_number).first()
-    existing_can_transfer = (
-        existing_gateway
-        and inventory
-        and inventory.status in ("unclaimed", "released")
-        and existing_gateway.lifecycle_status == "release_pending"
-    )
-    if existing_gateway and existing_gateway.team != team and not existing_can_transfer:
+    if inventory:
+        inventory = GatewayInventory.objects.select_for_update().get(pk=inventory.pk)
+    existing_gateway = None
+    if inventory and inventory.gateway_id:
+        existing_gateway = Gateway.objects.select_for_update().filter(pk=inventory.gateway_id).first()
+    if not existing_gateway:
+        existing_gateway = (
+            Gateway.objects.select_for_update()
+            .exclude(lifecycle_status="released")
+            .filter(serial_number=serial_number)
+            .first()
+        )
+    if existing_gateway and existing_gateway.team != team:
         raise GatewayClaimError(
             "This serial number is already registered to another team. Please contact support if this is an error."
         )
-    is_new_for_team = not Gateway.objects.filter(team=team, serial_number=serial_number).exists()
-    if (not existing_gateway or existing_can_transfer) and is_new_for_team:
+    is_new_for_team = (
+        not Gateway.objects.filter(
+            team=team,
+            serial_number=serial_number,
+        )
+        .exclude(lifecycle_status="released")
+        .exists()
+    )
+    if not existing_gateway and is_new_for_team:
         from apps.subscriptions.enforcement import can_add_gateway, get_gateway_limit_for_team
 
         if not can_add_gateway(team):
@@ -113,20 +138,17 @@ def claim_gateway_for_team(team, site, name: str, serial_number: str, claim_code
                 "Upgrade your plan or release an unused gateway before adding another."
             )
 
-    if inventory:
-        inventory = GatewayInventory.objects.select_for_update().get(pk=inventory.pk)
-        if inventory.status == "claimed" and inventory.claimed_by_team and inventory.claimed_by_team != team:
-            raise GatewayClaimError(
-                "This serial number is already registered to another team. Please contact support if this is an error."
-            )
+    if inventory and inventory.status == "claimed" and inventory.claimed_by_team and inventory.claimed_by_team != team:
+        raise GatewayClaimError(
+            "This serial number is already registered to another team. Please contact support if this is an error."
+        )
 
     if existing_gateway:
         gateway = existing_gateway
-        gateway.team = team
         gateway.site = site
         gateway.name = name
         gateway.mqtt_username = serial_number
-        gateway.mqtt_password = make_password(operational_password)
+        gateway.mqtt_password = ""
         gateway.mqtt_provisioning_status = "pending"
         gateway.mqtt_provisioning_error = ""
         gateway.credential_rotation_status = "pending"
@@ -136,7 +158,6 @@ def claim_gateway_for_team(team, site, name: str, serial_number: str, claim_code
             gateway.lifecycle_status = "claimed"
         gateway.save(
             update_fields=[
-                "team",
                 "site",
                 "name",
                 "mqtt_username",
@@ -155,7 +176,7 @@ def claim_gateway_for_team(team, site, name: str, serial_number: str, claim_code
             serial_number=serial_number,
             access_token=secrets.token_hex(20),
             mqtt_username=serial_number,
-            mqtt_password=make_password(operational_password),
+            mqtt_password="",
             mqtt_provisioning_status="pending",
             credential_rotation_status="pending",
             lifecycle_status="claimed",
@@ -169,35 +190,9 @@ def claim_gateway_for_team(team, site, name: str, serial_number: str, claim_code
             inventory.claimed_at = timezone.now()
         inventory.save(update_fields=["status", "claimed_by_team", "gateway", "claimed_at"])
 
-    try:
-        from .mqtt_provisioning import provision_gateway_mqtt
+    from .activation import queue_gateway_activation
 
-        provision_gateway_mqtt(gateway, operational_password)
-        gateway.mqtt_provisioning_status = "success"
-        gateway.mqtt_provisioning_error = ""
-        gateway.mqtt_provisioned_at = timezone.now()
-        gateway.save(update_fields=["mqtt_provisioning_status", "mqtt_provisioning_error", "mqtt_provisioned_at"])
-        try:
-            from .activation import create_gateway_activation, deliver_gateway_activation
-
-            activation = create_gateway_activation(gateway, operational_password)
-            if gateway.status == "online" or gateway.last_bootstrap_seen_at:
-                deliver_gateway_activation(activation)
-        except Exception as e:
-            logger.info("Gateway activation publish deferred for %s: %s", gateway.serial_number, e)
-    except Exception as e:
-        gateway.mqtt_provisioning_status = "failed"
-        gateway.mqtt_provisioning_error = str(e)
-        gateway.save(update_fields=["mqtt_provisioning_status", "mqtt_provisioning_error"])
-        logger.warning(
-            "Mosquitto provisioning failed for gateway %s: %s (gateway saved, manual setup may be required)",
-            gateway.serial_number,
-            e,
-        )
-        if getattr(settings, "MQTT_PROVISIONING_REQUIRED", False):
-            raise GatewayClaimError(
-                "Gateway ownership verified, but MQTT access could not be provisioned. Please retry."
-            ) from e
+    queue_gateway_activation(gateway, operational_password)
 
     return gateway
 
@@ -210,43 +205,10 @@ def release_gateway_for_redo(gateway):
     The Gateway row is kept so the physical device can fall back to bootstrap mode
     and be re-claimed with the same serial number + printed claim code.
     """
-    gateway = Gateway.objects.select_for_update().get(pk=gateway.pk)
-    gateway.devices.all().delete()
-    gateway.config_history.all().delete()
-    gateway.rpc_commands.all().delete()
+    from .gateway_release import request_gateway_release
 
-    inventory = GatewayInventory.objects.select_for_update().filter(gateway=gateway).first()
-    if inventory:
-        inventory.status = "released"
-        inventory.claimed_by_team = None
-        inventory.claimed_at = None
-        inventory.save(update_fields=["status", "claimed_by_team", "claimed_at"])
-
-    gateway.status = "offline"
-    gateway.lifecycle_status = "release_pending"
-    gateway.discovery_data = {}
-    gateway.config = {}
-    gateway.connected_devices = []
-    gateway.active_connectors = []
-    gateway.mqtt_provisioning_status = "not_started"
-    gateway.mqtt_provisioning_error = ""
-    gateway.credential_rotation_status = "not_started"
-    gateway.last_seen = None
-    gateway.save(
-        update_fields=[
-            "status",
-            "lifecycle_status",
-            "discovery_data",
-            "config",
-            "connected_devices",
-            "active_connectors",
-            "mqtt_provisioning_status",
-            "mqtt_provisioning_error",
-            "credential_rotation_status",
-            "last_seen",
-        ]
-    )
-    return gateway
+    request_gateway_release(gateway)
+    return Gateway.objects.get(pk=gateway.pk)
 
 
 READ_FUNCTION_CODES = {1, 2, 3, 4}

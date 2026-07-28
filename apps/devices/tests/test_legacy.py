@@ -5,10 +5,10 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from apps.alerts.models import AlertRule
-from apps.teams.models import Team
+from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
 
-from ..models import Device, DeviceCommand, DeviceTemplate, Gateway, Site
+from ..models import Device, DeviceCommand, DeviceTemplate, Gateway, GatewayInventory, Site
 from ..remote_control import CommandDenied
 from ..services import process_command_response, send_device_command
 
@@ -18,6 +18,7 @@ class DeviceInfrastructureTest(TestCase):
         self.team = Team.objects.create(name="Test Team", slug="test-team")
         self.user = CustomUser.objects.create(email="test@example.com", username="testuser")
         self.team.members.add(self.user)
+        Membership.objects.filter(team=self.team, user=self.user).update(role="admin")
         self.site = Site.objects.create(team=self.team, name="Test Site")
         self.client = Client()
 
@@ -32,6 +33,13 @@ class DeviceInfrastructureTest(TestCase):
         gateway = Gateway.objects.create(
             team=self.team, site=self.site, serial_number="NF-TEST-999", name="Discovery Gateway"
         )
+        GatewayInventory.objects.create(
+            serial_number=gateway.serial_number,
+            status="claimed",
+            gateway=gateway,
+            claimed_by_team=self.team,
+        )
+        self.client.force_login(self.user)
         url = reverse("web_team:devices:gateway_discovery_api", args=[self.team.slug])
         payload = {
             "serial_number": "NF-TEST-999",

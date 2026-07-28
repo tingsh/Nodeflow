@@ -3,11 +3,11 @@
 ## Current Stage
 
 - Phase: Pre-Launch / Release Candidate.
-- Status: Core Hub and Gateway capability is built. The cleanup-only repository hygiene pass is complete and locally verified without production-code, schema or protocol changes. Physical CM4 replay and a 3–5 customer technical canary remain release gates.
+- Status: The four Managed Gateway software hardening blockers and customer-facing polish are implemented and locally verified on the hardening branch. Physical CM4 replay and a 3–5 customer technical canary remain release gates.
 
 ## Current Sprint Goal
 
-Review the cleanup-only Hub and Gateway PRs, then run the three vertical CM4 hardware replays before widening the pilot.
+Review and merge the Managed Gateway hardening changes, then run the three vertical CM4 hardware replays before widening the pilot.
 
 ## Open Release Gates
 
@@ -26,6 +26,8 @@ Review the cleanup-only Hub and Gateway PRs, then run the three vertical CM4 har
 
 ## Recent Activity Log
 
+- 2026-07-28: Completed the bounded Managed Gateway technical hardening implementation and customer-facing polish: fail-closed verified credential revocation and fresh-row reclaim, automatic activation recovery, signed durable configuration delivery with exact acknowledgements, plan-safe polling reconciliation, clearer lifecycle/configuration labels, manager-friendly RPC history, and visible recovery actions. Validation passed 300 Hub tests with one expected skip and 13 subtests, 110 Gateway tests, Ruff, Django and migration checks, frontend production build, template compilation, and a real temporary Mosquitto Dynamic Security provision/revoke/idempotency smoke. Physical CM4 replay remains open.
+- 2026-07-27: Completed a software-only Managed Gateway + Cloud Hub end-to-end review across team/site onboarding, claim and activation, status/freshness, signed config delivery, simulated telemetry, logs/RPC, failure handling, tenant isolation and plan enforcement. Safely hardened immutable Gateway identity/status editing, stale onboarding status copy, device-limit enforcement across alternate onboarding paths, ambiguous multi-device telemetry identity handling and the plan-limit upgrade link. Validation passed: 305 Django tests with one expected skip, 110 Gateway tests, frontend type-check/build, Django checks and migration check, three-persona pilot simulation/UI route smoke, and a real local MQTT broker-to-buffer-to-database telemetry probe. Controlled-canary gaps remain around fail-open credential deprovisioning on Gateway release, activation recovery after its 24-hour window, legacy config acknowledgement semantics, plan-safe edge polling and physical CM4 replay.
 - 2026-07-27: Completed the operator-language product polish across remote-control safety, Gateway setup and diagnostics, Business Impact, alerts, maintenance, automations and directly affected public product copy. Added customer-safe translations for current and historical control states/errors while preserving stored values, permissions, calculations, audit exports and MQTT/RPC contracts. Validation passed: Django checks, no-migration check, 85 focused Django tests plus the alert pytest module, the complete 301-test Django suite with one expected skip, frontend build/type-check, pre-commit, documentation links and repository hygiene.
 - 2026-07-26: Completed a cleanup-only Hub and Gateway hygiene pass: archived stale planning documents, clarified documentation authority, removed runtime snapshots from Git tracking, strengthened repository checks and verified 294 Hub tests plus 110 Gateway tests. No production modules, schemas, routes, MQTT/RPC contracts, Stripe binaries or protected ThingsBoard-derived paths changed.
 - 2026-07-26: Merged Business Impact and ROI Release 1 behind its Waffle rollout flag, including versioned baselines, deterministic value calculations, reports, private storage/backup integration and production-readiness gates. The full Hub suite passed 293 tests with one expected skip after merge.

@@ -53,6 +53,9 @@ class GatewayConfigDeliveryTest(TestCase):
             serial_number="NF-GUIDED-001",
             access_token="guided-token",
             gateway_capabilities=["guided_setup_v1"],
+            status="online",
+            mqtt_connected=True,
+            last_seen=timezone.now(),
         )
 
     @patch("apps.devices.gateway_config_delivery._schedule_config_dispatch")
@@ -62,11 +65,13 @@ class GatewayConfigDeliveryTest(TestCase):
 
         self.assertEqual(first.revision, 1)
         self.assertEqual(second.revision, 2)
-        self.assertEqual(first.status, "queued")
+        first.refresh_from_db()
+        self.assertEqual(first.status, "superseded")
         self.assertEqual(first.envelope_json["target"]["gateway_serial"], self.gateway.serial_number)
         self.assertEqual(first.envelope_json["checksum"], first.checksum)
         self.assertTrue(first.envelope_json["signature"])
-        self.assertTrue(GatewayConfigOutbox.objects.filter(config=first, status="pending").exists())
+        self.assertTrue(GatewayConfigOutbox.objects.filter(config=first, status="completed").exists())
+        self.assertTrue(GatewayConfigOutbox.objects.filter(config=second, status="pending").exists())
         schedule.assert_not_called()
 
     @patch("apps.telemetry.mqtt_publisher.publish_config_envelope")
@@ -78,8 +83,8 @@ class GatewayConfigDeliveryTest(TestCase):
 
         config.refresh_from_db()
         config.outbox.refresh_from_db()
-        self.assertEqual(config.status, "delivered")
-        self.assertEqual(config.outbox.status, "delivered")
+        self.assertEqual(config.status, "published")
+        self.assertEqual(config.outbox.status, "awaiting_ack")
         self.assertIsNotNone(config.delivered_at)
         publish.assert_called_once()
 
@@ -352,6 +357,53 @@ class GuidedSetupViewTest(TestCase):
         device = Device.objects.get(team=self.team, name="Main Meter")
         self.assertEqual(device.connection_config["host"], "192.168.1.50")
         self.assertEqual(device.metadata["guided_setup_validation"], "pending")
+
+    @patch("apps.devices.deployment_setup.start_validation")
+    def test_manual_setup_enforces_team_device_limit(self, validation):
+        self.gateway.gateway_capabilities = ["guided_setup_v1"]
+        self.gateway.save(update_fields=["gateway_capabilities"])
+        for index in range(3):
+            Device.objects.create(
+                team=self.team,
+                site=self.site,
+                gateway=self.gateway,
+                name=f"Existing Device {index}",
+                device_type="power_meter",
+                protocol="modbus_tcp",
+            )
+
+        response = self.client.post(
+            self.url,
+            {
+                "action": "manual",
+                "manual_name": "Over Limit Meter",
+                "manual_protocol": "modbus_tcp",
+                "manual_manufacturer": "PrivateCo",
+                "manual_model": "LIMIT",
+                "manual_device_type": "power_meter",
+                "manual_host": "192.168.1.50",
+                "manual_port": "502",
+                "point_key_1": "voltage",
+                "point_address_1": "1",
+            },
+            follow=True,
+        )
+
+        self.assertContains(response, "Your current plan supports up to 3 equipment items")
+        self.assertFalse(Device.objects.filter(team=self.team, name="Over Limit Meter").exists())
+        self.assertFalse(DeviceTemplate.objects.filter(created_by_team=self.team, model_number="LIMIT").exists())
+        validation.assert_not_called()
+
+    def test_gateway_status_poll_uses_heartbeat_freshness(self):
+        self.gateway.status = "online"
+        self.gateway.last_seen = timezone.now() - timezone.timedelta(minutes=10)
+        self.gateway.save(update_fields=["status", "last_seen"])
+
+        response = self.client.get(reverse("web_team:onboarding:gateway_status_poll", args=[self.team.slug]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Waiting for the Gateway to connect")
+        self.assertNotContains(response, "Gateway is online")
 
     def test_legacy_gateway_can_use_saved_discovery_with_verified_template(self):
         template = DeviceTemplate.objects.create(

@@ -23,7 +23,11 @@ class GatewayClaimWorkflowTest(TestCase):
     @patch("apps.telemetry.mqtt_publisher.publish_gateway_activation")
     @patch("apps.devices.mqtt_provisioning.provision_gateway_mqtt")
     def test_valid_inventory_claim_creates_gateway_and_marks_inventory_claimed(self, mock_provision, mock_publish):
+        from apps.devices.activation import provision_gateway_activation
+
         gateway = claim_gateway_for_team(self.team, self.site, "Main Gateway", self.serial, self.claim_code)
+        provision_gateway_activation(gateway.activations.get().pk)
+        gateway.refresh_from_db()
 
         self.assertEqual(gateway.team, self.team)
         self.assertEqual(gateway.site, self.site)
@@ -47,13 +51,17 @@ class GatewayClaimWorkflowTest(TestCase):
 
     @override_settings(MQTT_PROVISIONING_REQUIRED=True)
     @patch("apps.devices.mqtt_provisioning.provision_gateway_mqtt", side_effect=RuntimeError("broker down"))
-    def test_required_broker_provisioning_failure_blocks_claim(self, mock_provision):
-        with self.assertRaises(GatewayClaimError):
-            claim_gateway_for_team(self.team, self.site, "Main Gateway", self.serial, self.claim_code)
+    def test_required_broker_provisioning_failure_keeps_durable_claim_for_retry(self, mock_provision):
+        from apps.devices.activation import provision_gateway_activation
 
-        self.assertFalse(Gateway.objects.filter(serial_number=self.serial).exists())
+        gateway = claim_gateway_for_team(self.team, self.site, "Main Gateway", self.serial, self.claim_code)
+        provision_gateway_activation(gateway.activations.get().pk)
+
+        gateway.refresh_from_db()
+        self.assertEqual(gateway.mqtt_provisioning_status, "failed")
+        self.assertEqual(gateway.activations.get().status, "retry")
         self.inventory.refresh_from_db()
-        self.assertEqual(self.inventory.status, "unclaimed")
+        self.assertEqual(self.inventory.status, "claimed")
 
     def test_invalid_claim_code_fails(self):
         with self.assertRaises(GatewayClaimError):
@@ -79,16 +87,19 @@ class GatewayClaimWorkflowTest(TestCase):
     @patch("apps.telemetry.mqtt_publisher.publish_gateway_activation")
     @patch("apps.devices.mqtt_provisioning.provision_gateway_mqtt")
     def test_bootstrap_hello_retries_pending_activation(self, mock_provision, mock_publish):
+        from apps.devices.activation import provision_gateway_activation
         from apps.telemetry.management.commands.mqtt_consumer import Command
 
         gateway = claim_gateway_for_team(self.team, self.site, "Main Gateway", self.serial, self.claim_code)
+        provision_gateway_activation(gateway.activations.get().pk)
         activation = gateway.activations.get()
 
         Command()._handle_bootstrap_hello({"serial_number": self.serial})
+        provision_gateway_activation(activation.pk)
 
         activation.refresh_from_db()
         gateway.refresh_from_db()
-        self.assertEqual(activation.status, "retried")
+        self.assertEqual(activation.status, "delivered")
         self.assertEqual(activation.attempt_count, 1)
         self.assertIsNotNone(activation.delivered_at)
         self.assertEqual(gateway.lifecycle_status, "activating")
@@ -115,6 +126,12 @@ class GatewayClaimWorkflowTest(TestCase):
             expires_at=timezone.now() + timezone.timedelta(hours=1),
             encrypted_mqtt_password=encrypt_activation_secret("secret-password"),
         )
+        GatewayInventory.objects.create(
+            serial_number=gateway.serial_number,
+            status="claimed",
+            gateway=gateway,
+            claimed_by_team=self.team,
+        )
 
         payload = {
             "serial_number": gateway.serial_number,
@@ -122,6 +139,7 @@ class GatewayClaimWorkflowTest(TestCase):
                 "credential_update_status": "success",
                 "credential_update_action": "activate",
                 "credential_update_request_id": str(activation.request_id),
+                "credential_update_generation": activation.generation,
             },
         }
         consumer = Command()
@@ -158,6 +176,12 @@ class GatewayClaimWorkflowTest(TestCase):
             expires_at=timezone.now() + timezone.timedelta(hours=1),
             encrypted_mqtt_password=encrypt_activation_secret("secret-password"),
         )
+        GatewayInventory.objects.create(
+            serial_number=gateway.serial_number,
+            status="claimed",
+            gateway=gateway,
+            claimed_by_team=self.team,
+        )
 
         Command()._handle_attributes(
             {
@@ -166,6 +190,7 @@ class GatewayClaimWorkflowTest(TestCase):
                     "credential_update_status": "success",
                     "credential_update_action": "activate",
                     "credential_update_request_id": str(uuid4()),
+                    "credential_update_generation": activation.generation,
                 },
             }
         )
@@ -222,7 +247,7 @@ class GatewayMqttProvisioningAclTest(TestCase):
         provision_gateway_mqtt(self.gateway, "operational-secret")
 
         commands = [call.args[0] for call in mock_publish.call_args_list]
-        role_command = next(command for command in commands if command.get("roleName") == "gw-NF-ACL-001")
+        role_command = next(command for command in commands if command.get("rolename") == "gw-NF-ACL-001")
         send_topics = {acl["topic"] for acl in role_command["acls"] if acl["acltype"] == "publishClientSend"}
         self.assertEqual(
             send_topics,
@@ -234,6 +259,12 @@ class GatewayMqttProvisioningAclTest(TestCase):
             },
         )
         self.assertNotIn("v1/gateway/telemetry", send_topics)
+
+    def test_unknown_dynsec_command_is_never_treated_as_not_found(self):
+        from apps.devices.mqtt_provisioning import _is_expected_error
+
+        self.assertFalse(_is_expected_error("Unknown command", allow_not_found=True))
+        self.assertTrue(_is_expected_error("Client not found", allow_not_found=True))
 
 
 class EdgeConfigGenerationTest(TestCase):
@@ -313,6 +344,7 @@ class EdgeConfigGenerationTest(TestCase):
         self.assertEqual(slave["unitId"], 7)
 
 
+@override_settings(GATEWAY_ACTIVATION_ENCRYPTION_KEY="MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 class GatewayDeleteReleaseViewTest(TestCase):
     def setUp(self):
         from django.test import Client
@@ -396,6 +428,8 @@ class GatewayDeleteReleaseViewTest(TestCase):
 
     @patch("apps.devices.mqtt_provisioning.deprovision_gateway_mqtt")
     def test_matching_serial_releases_gateway_for_redo(self, mock_deprovision):
+        from apps.devices.gateway_release import dispatch_gateway_release
+
         device = Device.objects.create(
             team=self.team,
             site=self.site,
@@ -410,27 +444,41 @@ class GatewayDeleteReleaseViewTest(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Gateway.objects.filter(pk=self.gateway.pk).exists())
+        self.assertTrue(Device.objects.filter(pk=device.pk).exists())
+        mock_deprovision.assert_not_called()
+        self.gateway.refresh_from_db()
+        self.inventory.refresh_from_db()
+        self.assertEqual(self.gateway.lifecycle_status, "release_pending")
+        self.assertEqual(self.inventory.status, "claimed")
+
+        dispatch_gateway_release(self.gateway.release_requests.get().pk)
+
         self.assertFalse(Device.objects.filter(pk=device.pk).exists())
         mock_deprovision.assert_called_once()
         self.assertEqual(mock_deprovision.call_args.args[0].serial_number, self.serial)
         self.inventory.refresh_from_db()
         self.assertEqual(self.inventory.status, "released")
-        self.assertEqual(self.inventory.gateway, self.gateway)
+        self.assertIsNone(self.inventory.gateway)
         self.assertIsNone(self.inventory.claimed_by_team)
         self.assertIsNone(self.inventory.claimed_at)
         self.gateway.refresh_from_db()
-        self.assertEqual(self.gateway.lifecycle_status, "release_pending")
+        self.assertEqual(self.gateway.lifecycle_status, "released")
 
     @patch("apps.telemetry.mqtt_publisher.publish_gateway_activation")
     @patch("apps.devices.mqtt_provisioning.provision_gateway_mqtt")
     @patch("apps.devices.mqtt_provisioning.deprovision_gateway_mqtt")
     def test_released_gateway_can_be_onboarded_by_another_team(self, mock_deprovision, mock_provision, mock_publish):
+        from apps.devices.activation import provision_gateway_activation
+        from apps.devices.gateway_release import dispatch_gateway_release
+
         self.client.force_login(self.admin)
         self.client.post(self._delete_url(), {"confirmation_serial": self.serial})
+        dispatch_gateway_release(self.gateway.release_requests.get().pk)
 
         gateway = claim_gateway_for_team(
             self.other_team, self.other_site, "Reclaimed Gateway", self.serial, self.claim_code
         )
+        provision_gateway_activation(gateway.activations.get().pk)
 
         self.assertEqual(gateway.team, self.other_team)
         self.assertEqual(gateway.site, self.other_site)
@@ -439,6 +487,10 @@ class GatewayDeleteReleaseViewTest(TestCase):
         self.assertEqual(self.inventory.claimed_by_team, self.other_team)
         self.assertEqual(self.inventory.gateway, gateway)
         self.assertEqual(gateway.team, self.other_team)
+        self.assertNotEqual(gateway.pk, self.gateway.pk)
+        self.gateway.refresh_from_db()
+        self.assertEqual(self.gateway.team, self.team)
+        self.assertEqual(self.gateway.lifecycle_status, "released")
         mock_deprovision.assert_called_once()
         self.assertEqual(mock_deprovision.call_args.args[0].serial_number, self.serial)
         mock_provision.assert_called_once()
