@@ -91,8 +91,7 @@ def _publish_dynsec_command(command, *, allow_not_found=False, allow_exists=Fals
     """Publish one command and require a matching Dynamic Security response."""
     target_key, target_value = _command_target(command)
     correlation_data = (
-        f"{command.get('command')}:{target_key or 'none'}:"
-        f"{target_value or 'none'}:{secrets.token_urlsafe(12)}"
+        f"{command.get('command')}:{target_key or 'none'}:{target_value or 'none'}:{secrets.token_urlsafe(12)}"
     )
     command = {**command, "correlationData": correlation_data}
     timeout = float(getattr(settings, "MQTT_DYNSEC_RESPONSE_TIMEOUT_SECONDS", 5))

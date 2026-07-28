@@ -46,9 +46,7 @@ def activation_ttl() -> timedelta:
 
 
 def create_gateway_activation(gateway, operational_password: str, *, status="provisioning") -> GatewayActivation:
-    latest_generation = (
-        gateway.activations.order_by("-generation").values_list("generation", flat=True).first() or 0
-    )
+    latest_generation = gateway.activations.order_by("-generation").values_list("generation", flat=True).first() or 0
     expires_at = timezone.now() + activation_ttl()
     return GatewayActivation.objects.create(
         team=gateway.team,
@@ -206,11 +204,15 @@ def retry_activation_for_gateway(gateway) -> bool:
 def reissue_activation_for_gateway(gateway, *, force=False) -> GatewayActivation:
     """Return a live activation or create a fresh credential generation."""
     gateway = gateway.__class__.objects.select_for_update().get(pk=gateway.pk)
-    inventory = GatewayInventory.objects.select_for_update().filter(
-        gateway=gateway,
-        status="claimed",
-        claimed_by_team=gateway.team,
-    ).first()
+    inventory = (
+        GatewayInventory.objects.select_for_update()
+        .filter(
+            gateway=gateway,
+            status="claimed",
+            claimed_by_team=gateway.team,
+        )
+        .first()
+    )
     if not inventory or gateway.lifecycle_status in {"release_pending", "released"}:
         raise ValueError("This Gateway is not in an activatable claimed state.")
 

@@ -284,10 +284,7 @@ def acknowledge_gateway_config(gateway, attrs: dict) -> GatewayConfig:
         raise ValueError("Signed configuration acknowledgement has an invalid status.")
 
     latest_revision = (
-        GatewayConfig.objects.filter(gateway=gateway)
-        .order_by("-revision")
-        .values_list("revision", flat=True)
-        .first()
+        GatewayConfig.objects.filter(gateway=gateway).order_by("-revision").values_list("revision", flat=True).first()
     )
     config_record.last_ack_at = now
     if config_record.revision != latest_revision:

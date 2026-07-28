@@ -164,10 +164,7 @@ def dispatch_gateway_release(release_id) -> GatewayReleaseRequest | None:
     lease_seconds = int(getattr(settings, "GATEWAY_RELEASE_LEASE_SECONDS", 60))
     with transaction.atomic():
         release = (
-            GatewayReleaseRequest.objects.select_for_update()
-            .select_related("gateway")
-            .filter(pk=release_id)
-            .first()
+            GatewayReleaseRequest.objects.select_for_update().select_related("gateway").filter(pk=release_id).first()
         )
         if not release or release.status == GatewayReleaseRequest.Status.COMPLETED:
             return release

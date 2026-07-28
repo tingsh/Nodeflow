@@ -447,11 +447,7 @@ def _request_remote_command_atomic(
         target_snapshot={
             "gateway_serial": gateway.serial_number,
             "gateway_name": gateway.name,
-            **(
-                {"device_id": device.pk, "device_name": device.name}
-                if device
-                else {}
-            ),
+            **({"device_id": device.pk, "device_name": device.name} if device else {}),
         },
         policy_snapshot=policy_snapshot,
         request_payload={"method": operation, "params": request_params},

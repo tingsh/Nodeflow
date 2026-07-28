@@ -402,7 +402,7 @@ class GuidedSetupViewTest(TestCase):
         response = self.client.get(reverse("web_team:onboarding:gateway_status_poll", args=[self.team.slug]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Waiting for gateway to connect")
+        self.assertContains(response, "Waiting for the Gateway to connect")
         self.assertNotContains(response, "Gateway is online")
 
     def test_legacy_gateway_can_use_saved_discovery_with_verified_template(self):

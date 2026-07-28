@@ -120,10 +120,14 @@ def claim_gateway_for_team(team, site, name: str, serial_number: str, claim_code
         raise GatewayClaimError(
             "This serial number is already registered to another team. Please contact support if this is an error."
         )
-    is_new_for_team = not Gateway.objects.filter(
-        team=team,
-        serial_number=serial_number,
-    ).exclude(lifecycle_status="released").exists()
+    is_new_for_team = (
+        not Gateway.objects.filter(
+            team=team,
+            serial_number=serial_number,
+        )
+        .exclude(lifecycle_status="released")
+        .exists()
+    )
     if not existing_gateway and is_new_for_team:
         from apps.subscriptions.enforcement import can_add_gateway, get_gateway_limit_for_team
 
@@ -134,12 +138,7 @@ def claim_gateway_for_team(team, site, name: str, serial_number: str, claim_code
                 "Upgrade your plan or release an unused gateway before adding another."
             )
 
-    if (
-        inventory
-        and inventory.status == "claimed"
-        and inventory.claimed_by_team
-        and inventory.claimed_by_team != team
-    ):
+    if inventory and inventory.status == "claimed" and inventory.claimed_by_team and inventory.claimed_by_team != team:
         raise GatewayClaimError(
             "This serial number is already registered to another team. Please contact support if this is an error."
         )
