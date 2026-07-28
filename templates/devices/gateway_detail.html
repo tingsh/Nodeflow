@@ -63,6 +63,48 @@
         </div>
     </div>
 
+    {% if gateway.lifecycle_status == "release_pending" %}
+    <div class="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div class="font-bold"><i class="fa fa-lock mr-2"></i>Secure release in progress</div>
+        <p class="mt-1">This Gateway is quarantined while Novena verifies that both service identities are revoked. Its data remains protected until that completes.</p>
+        {% if release_request.status == "needs_attention" %}
+        <p class="mt-2 font-semibold">Automatic retries need support attention. The Gateway remains safely quarantined.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if gateway.lifecycle_status != "release_pending" and gateway.lifecycle_status != "released" %}
+    <div class="mb-6 rounded-xl border border-indigo-100 bg-indigo-50 p-4 text-sm text-indigo-900 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200">
+        <div class="font-bold">
+            {% if gateway.lifecycle_status == "claimed" %}Gateway claimed
+            {% elif gateway.lifecycle_status == "bootstrap_seen" or gateway.lifecycle_status == "activating" %}Secure connection setup in progress
+            {% elif gateway.lifecycle_status == "commissioning" %}Equipment setup in progress
+            {% elif gateway.lifecycle_status == "active" %}Monitoring is active
+            {% elif gateway.lifecycle_status == "online" %}Gateway connected
+            {% else %}Gateway setup{% endif %}
+        </div>
+        <p class="mt-1">
+            {% if gateway.lifecycle_status == "claimed" %}Power on the Gateway and connect it to the network. Novena will activate it automatically.
+            {% elif gateway.lifecycle_status == "bootstrap_seen" or gateway.lifecycle_status == "activating" %}Novena is securely preparing this Gateway. Keep it powered on and connected.
+            {% elif gateway.lifecycle_status == "commissioning" %}Novena is validating and applying the selected equipment settings. Keep the Gateway online.
+            {% elif gateway.lifecycle_status == "active" %}The Gateway is managed by Novena and sending equipment data. No action is required.
+            {% elif gateway.lifecycle_status == "online" %}The secure connection is ready. Continue by adding or discovering equipment.
+            {% else %}Novena is preparing this managed Gateway for monitoring.{% endif %}
+        </p>
+        {% if gateway.freshness.status != "live" %}
+        <div class="mt-3 border-t border-indigo-200 pt-3 dark:border-indigo-500/30">
+            <p>Not connected? Check power and network first, then retry the secure connection.</p>
+            <form method="post" action="{% url 'web_team:devices:gateway_retry_activation' request.team.slug gateway.pk %}" class="mt-2">
+                {% csrf_token %}
+                <button type="submit" class="font-bold text-indigo-700 hover:text-indigo-900 dark:text-indigo-300 dark:hover:text-indigo-100">
+                    <i class="fa fa-refresh mr-1"></i> Retry secure connection
+                </button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
     <!-- Main Grid -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
@@ -430,6 +472,18 @@
                     </div>
                 </div>
                 <div class="p-6">
+                    {% if latest_activation and latest_activation.status != "acknowledged" and gateway.freshness.status == "live" and gateway.lifecycle_status != "release_pending" and gateway.lifecycle_status != "released" %}
+                    <div class="mb-4 rounded-xl border border-indigo-100 bg-indigo-50 p-3 text-xs text-indigo-800">
+                        <div class="font-bold">Activation: {{ latest_activation.get_status_display }}</div>
+                        <p class="mt-1">If the Gateway is powered on but has not connected, securely retry activation. No password will be shown.</p>
+                        <form method="post" action="{% url 'web_team:devices:gateway_retry_activation' request.team.slug gateway.pk %}" class="mt-2">
+                            {% csrf_token %}
+                            <button type="submit" class="font-bold text-indigo-700 hover:text-indigo-900">
+                                <i class="fa fa-refresh mr-1"></i> Retry activation
+                            </button>
+                        </form>
+                    </div>
+                    {% endif %}
                     <div class="mb-4">
                         <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Gateway service username <span class="normal-case tracking-normal">(MQTT)</span></div>
                         <div class="text-sm font-mono text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 px-3 py-2 rounded-lg">{{ gateway.mqtt_username|default:"—" }}</div>
@@ -464,15 +518,38 @@
                         <div class="flex items-center justify-between">
                             <div class="text-xs font-mono text-gray-500">{{ cfg.pushed_at|date:"M d, H:i" }}</div>
                             <span class="px-2 py-0.5 text-[10px] font-black uppercase rounded-full
-                                {% if cfg.status == 'success' %}bg-green-100 text-green-700
-                                {% elif cfg.status == 'failed' %}bg-red-100 text-red-700
+                                {% if cfg.status == 'active' %}bg-green-100 text-green-700
+                                {% elif cfg.status == 'failed' or cfg.status == 'timed_out' or cfg.status == 'rolled_back' %}bg-red-100 text-red-700
+                                {% elif cfg.status == 'accepted' %}bg-indigo-100 text-indigo-700
                                 {% else %}bg-gray-100 text-gray-600{% endif %}">
-                                {{ cfg.status }}
+                                {% if cfg.status == "queued" or cfg.status == "waiting_for_gateway" %}Queued
+                                {% elif cfg.status == "published" %}Sent securely
+                                {% elif cfg.status == "accepted" %}Reached Gateway
+                                {% elif cfg.status == "active" %}Applied
+                                {% elif cfg.status == "rolled_back" %}Rolled back
+                                {% elif cfg.status == "failed" or cfg.status == "timed_out" %}Needs attention
+                                {% elif cfg.status == "superseded" %}Replaced
+                                {% else %}{{ cfg.get_status_display }}{% endif %}
                             </span>
                         </div>
-                        <div class="text-xs text-gray-500 mt-1">{{ cfg.action }} &middot; {{ cfg.request_id|truncatechars:12 }}</div>
+                        <div class="text-xs text-gray-500 mt-1">
+                            {% if cfg.action == "full_update" %}Complete Gateway settings
+                            {% elif cfg.action == "connector_update" %}Equipment connection settings
+                            {% elif cfg.action == "connector_add" %}Added equipment connection
+                            {% elif cfg.action == "connector_remove" %}Removed equipment connection
+                            {% else %}Gateway settings{% endif %}
+                            &middot; Revision {{ cfg.revision }}
+                        </div>
                         {% if cfg.error_message %}
                         <div class="text-xs text-red-500 mt-1">{{ cfg.error_message }}</div>
+                        {% endif %}
+                        {% if cfg.status == "failed" or cfg.status == "rolled_back" or cfg.status == "timed_out" %}
+                        <form method="post" action="{% url 'web_team:devices:gateway_retry_config' request.team.slug gateway.pk cfg.pk %}" class="mt-2">
+                            {% csrf_token %}
+                            <button type="submit" class="text-xs font-bold text-indigo-600 hover:text-indigo-700">
+                                <i class="fa fa-refresh mr-1"></i> Retry as a new revision
+                            </button>
+                        </form>
                         {% endif %}
                     </div>
                     {% empty %}

@@ -344,7 +344,12 @@ def _request_remote_command_atomic(
 
     team = Team.objects.select_for_update().get(pk=gateway.team_id)
     denial: tuple[str, str] | None = None
-    if source == RemoteCommand.Source.USER and not _has_permission(
+    if gateway.lifecycle_status in {"release_pending", "released"}:
+        denial = (
+            "gateway_quarantined",
+            "This Gateway is being securely released and cannot accept commands.",
+        )
+    elif source == RemoteCommand.Source.USER and not _has_permission(
         requested_by,
         team,
         definition.permission,
@@ -439,6 +444,15 @@ def _request_remote_command_atomic(
         risk=definition.risk,
         status=status,
         actor_snapshot=actor_snapshot(requested_by),
+        target_snapshot={
+            "gateway_serial": gateway.serial_number,
+            "gateway_name": gateway.name,
+            **(
+                {"device_id": device.pk, "device_name": device.name}
+                if device
+                else {}
+            ),
+        },
         policy_snapshot=policy_snapshot,
         request_payload={"method": operation, "params": request_params},
         template_revision=template_revision,

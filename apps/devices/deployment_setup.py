@@ -304,7 +304,7 @@ def start_validation(*, item: DeploymentSetupItem, template, requested_by):
 
     item.selected_template = template
     item.trust_level = trust_level_for_template(template)
-    item.datapoints = normalized_datapoints(template)
+    item.datapoints = normalized_datapoints(template, team=item.run.team)
     item.state = DeploymentSetupItem.State.VALIDATING
     item.save()
     command = request_remote_command(
@@ -466,7 +466,7 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
 
     latest_config = run.configurations.first()
     if latest_config:
-        if latest_config.status in {"queued", "delivered", "accepted"}:
+        if latest_config.status in {"queued", "waiting_for_gateway", "published", "accepted"}:
             run.state = DeploymentSetupRun.State.DEPLOYING
             run.current_step = "verify"
             event_type = f"configuration_{latest_config.status}"
@@ -476,7 +476,8 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
                     event_type,
                     {
                         "queued": "Configuration is queued for secure delivery.",
-                        "delivered": "The Gateway received the configuration.",
+                        "waiting_for_gateway": "The settings are safely queued until the Gateway is online.",
+                        "published": "The cloud broker accepted the settings for delivery.",
                         "accepted": "The Gateway accepted and is validating the configuration.",
                     }[latest_config.status],
                     evidence={
@@ -540,7 +541,7 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
                         "error_code": latest_config.error_code,
                     },
                 )
-        elif latest_config.status == "failed":
+        elif latest_config.status in {"failed", "timed_out", "superseded"}:
             run.items.filter(state=DeploymentSetupItem.State.QUEUED).update(state=DeploymentSetupItem.State.FAILED)
             run.state = DeploymentSetupRun.State.FAILED
             if not run.events.filter(event_type="configuration_failed").exists():
@@ -592,10 +593,13 @@ def deployment_progress(run: DeploymentSetupRun) -> list[dict]:
     status_order = {
         "": -1,
         "queued": 0,
-        "delivered": 1,
+        "waiting_for_gateway": 0,
+        "published": 1,
         "accepted": 2,
         "active": 3,
         "failed": 3,
+        "timed_out": 3,
+        "superseded": 3,
         "rolled_back": 3,
     }
     level = status_order.get(config_status, -1)
@@ -608,7 +612,7 @@ def deployment_progress(run: DeploymentSetupRun) -> list[dict]:
             DeploymentSetupItem.State.TELEMETRY_CONFIRMED,
         }
     )
-    failed = config_status in {"failed", "rolled_back"}
+    failed = config_status in {"failed", "timed_out", "superseded", "rolled_back"}
 
     def state(completed):
         if completed:
@@ -619,7 +623,7 @@ def deployment_progress(run: DeploymentSetupRun) -> list[dict]:
 
     return [
         {"label": "Configuration queued", "status": state(level >= 0)},
-        {"label": "Gateway received configuration", "status": state(level >= 1)},
+        {"label": "Settings published securely", "status": state(level >= 1)},
         {"label": "Configuration validated", "status": state(level >= 3 and not failed)},
         {"label": "Connectors started", "status": state(level >= 3 and not failed)},
         {"label": "Equipment communication established", "status": state(equipment_ready)},

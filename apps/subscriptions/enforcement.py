@@ -68,7 +68,7 @@ def can_add_gateway(team):
     if limit == -1 or limit >= 9999:
         return True
 
-    count = Gateway.objects.filter(team=team).count()
+    count = Gateway.objects.filter(team=team).exclude(lifecycle_status="released").count()
     return count < limit
 
 
@@ -81,6 +81,17 @@ def get_latency_limit_for_team(team):
         return product_metadata.telemetry_interval_seconds
 
     return DEFAULT_LATENCY_LIMIT
+
+
+def get_effective_polling_interval_seconds(device):
+    """Return the slower of equipment capability and subscription policy."""
+    template = getattr(device, "template", None)
+    template_interval = getattr(template, "default_polling_interval", None) if template else None
+    try:
+        template_interval = float(template_interval or 5)
+    except (TypeError, ValueError):
+        template_interval = 5.0
+    return max(1.0, template_interval, float(get_latency_limit_for_team(device.team)))
 
 
 def get_retention_limit_days_for_team(team):

@@ -122,7 +122,10 @@ def create_stripe_portal_session(subscription_holder: Team) -> BillingPortalSess
 
 
 @transaction.atomic
-def provision_subscription(subscription_holder: Team, subscription_id: str) -> Subscription:
+def provision_subscription(subscription_holder: Team, subscription_id: str, *, source_key=None) -> Subscription:
+    from apps.subscriptions.enforcement import get_latency_limit_for_team
+
+    previous_interval = get_latency_limit_for_team(subscription_holder)
     stripe = get_stripe_module()
     subscription = stripe.Subscription.retrieve(subscription_id)
     djstripe_subscription = Subscription.sync_from_stripe_data(subscription)
@@ -132,6 +135,22 @@ def provision_subscription(subscription_holder: Team, subscription_id: str) -> S
     if not subscription_holder.customer:
         subscription_holder.customer = djstripe_subscription.customer
         subscription_holder.save()
+    subscription_holder.clear_cached_subscription()
+    new_interval = get_latency_limit_for_team(subscription_holder)
+
+    def queue_reconciliation():
+        from apps.devices.plan_reconciliation import queue_team_plan_reconciliation
+        from apps.teams.models import Team
+
+        team = Team.objects.get(pk=subscription_holder.pk)
+        queue_team_plan_reconciliation(
+            team,
+            previous_interval,
+            new_interval,
+            source_key or f"provision:{subscription_id}:{new_interval}",
+        )
+
+    transaction.on_commit(queue_reconciliation)
     return djstripe_subscription
 
 

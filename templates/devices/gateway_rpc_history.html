@@ -30,7 +30,7 @@
     <div class="sm:flex sm:items-center sm:justify-between mb-8">
         <div>
             <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Gateway action history</h2>
-            <p class="mt-1 text-sm text-gray-500">Detailed gateway requests and results for <span class="font-mono font-bold">{{ gateway.serial_number }}</span>. This support view may include technician details.</p>
+            <p class="mt-1 text-sm text-gray-500">A customer-friendly record of checks and actions for <span class="font-mono font-bold">{{ gateway.serial_number }}</span>. Technical evidence is available when support needs it.</p>
         </div>
     </div>
 
@@ -40,23 +40,42 @@
             <table class="min-w-full divide-y divide-gray-100 dark:divide-gray-700">
                 <thead class="bg-gray-50 dark:bg-gray-900/50">
                     <tr>
-                        <th class="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Sent At</th>
-                        <th class="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Command</th>
-                        <th class="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Settings</th>
-                        <th class="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
-                        <th class="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Responded</th>
-                        <th class="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Response / Error</th>
+                        <th class="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Requested</th>
+                        <th class="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Action</th>
+                        <th class="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Outcome</th>
+                        <th class="px-4 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Support details</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-50 dark:divide-gray-700 text-xs">
                     {% for cmd in commands %}
                     <tr>
                         <td class="px-4 py-3 text-gray-500 font-mono whitespace-nowrap">{{ cmd.sent_at|site_datetime:gateway.site }}</td>
-                        <td class="px-4 py-3 whitespace-nowrap">
-                            <span class="font-bold text-indigo-600 dark:text-indigo-400">{{ cmd.method }}</span>
-                        </td>
-                        <td class="px-4 py-3 text-gray-500 font-mono max-w-xs truncate">
-                            {% if cmd.params %}{{ cmd.params }}{% else %}—{% endif %}
+                        <td class="px-4 py-3">
+                            <div class="font-bold text-gray-900 dark:text-white">
+                                {% if cmd.method == "ping" %}Connection check
+                                {% elif cmd.method == "get_status" or cmd.method == "get_device_health" %}Gateway health check
+                                {% elif cmd.method == "get_devices" %}Equipment list check
+                                {% elif cmd.method == "get_config" or cmd.method == "get_config_status" %}Settings check
+                                {% elif cmd.method == "deployment_preflight" %}Installation readiness check
+                                {% elif cmd.method == "deployment_discover" %}Equipment discovery
+                                {% elif cmd.method == "deployment_validate" %}Equipment connection test
+                                {% elif cmd.method == "restart_all" %}Restart equipment connections
+                                {% elif cmd.method == "reboot" %}Restart Gateway
+                                {% elif cmd.method == "update_firmware" %}Gateway software update
+                                {% elif cmd.method == "read_device" %}Read equipment value
+                                {% elif cmd.method == "write_device" %}Change equipment setting
+                                {% elif cmd.method == "set_log_level" %}Change support logging
+                                {% else %}Technician action{% endif %}
+                            </div>
+                            <div class="mt-1 text-gray-500">
+                                {% if cmd.method == "ping" %}Novena checked whether the Gateway was reachable.
+                                {% elif cmd.method == "deployment_preflight" %}Novena checked whether the Gateway was ready for installation.
+                                {% elif cmd.method == "deployment_discover" %}Novena asked the Gateway to look for connected equipment.
+                                {% elif cmd.method == "deployment_validate" %}Novena tested the selected equipment connection safely.
+                                {% elif cmd.method == "update_firmware" %}A signed software update was requested.
+                                {% elif cmd.method == "reboot" %}A controlled Gateway restart was requested.
+                                {% else %}A Gateway check or managed action was requested.{% endif %}
+                            </div>
                         </td>
                         <td class="px-4 py-3 whitespace-nowrap">
                             <span class="px-2 py-0.5 text-[10px] font-black uppercase rounded-full
@@ -64,25 +83,28 @@
                                 {% elif cmd.status == 'error' %}bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400
                                 {% elif cmd.status == 'timeout' %}bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400
                                 {% else %}bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400{% endif %}">
-                                {{ cmd.status }}
+                                {% if cmd.status == "success" %}Completed
+                                {% elif cmd.status == "error" %}Needs attention
+                                {% elif cmd.status == "timeout" %}No confirmation
+                                {% else %}In progress{% endif %}
                             </span>
+                            {% if cmd.responded_at %}<div class="mt-1 text-gray-500">Updated {{ cmd.responded_at|site_datetime:gateway.site }}</div>{% endif %}
                         </td>
-                        <td class="px-4 py-3 text-gray-500 font-mono whitespace-nowrap">
-                            {% if cmd.responded_at %}{{ cmd.responded_at|site_datetime:gateway.site }}{% else %}—{% endif %}
-                        </td>
-                        <td class="px-4 py-3 max-w-xs">
-                            {% if cmd.error_message %}
-                                <span class="text-red-500">{{ cmd.error_message|truncatechars:80 }}</span>
-                            {% elif cmd.result %}
-                                <span class="text-gray-600 dark:text-gray-400 font-mono">{{ cmd.result }}</span>
-                            {% else %}
-                                <span class="text-gray-400">—</span>
-                            {% endif %}
+                        <td class="px-4 py-3 max-w-sm">
+                            <details>
+                                <summary class="cursor-pointer font-bold text-indigo-600 dark:text-indigo-400">View technician details</summary>
+                                <dl class="mt-2 space-y-2 text-gray-500">
+                                    <div><dt class="font-bold text-gray-700 dark:text-gray-300">Method</dt><dd class="font-mono break-all">{{ cmd.method }}</dd></div>
+                                    {% if cmd.params %}<div><dt class="font-bold text-gray-700 dark:text-gray-300">Parameters</dt><dd class="font-mono break-all">{{ cmd.params }}</dd></div>{% endif %}
+                                    {% if cmd.result %}<div><dt class="font-bold text-gray-700 dark:text-gray-300">Result</dt><dd class="font-mono break-all">{{ cmd.result }}</dd></div>{% endif %}
+                                    {% if cmd.error_message %}<div><dt class="font-bold text-red-600">Technical error</dt><dd class="font-mono break-all text-red-500">{{ cmd.error_message }}</dd></div>{% endif %}
+                                </dl>
+                            </details>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6" class="px-4 py-16 text-center text-sm text-gray-400 italic">
+                        <td colspan="4" class="px-4 py-16 text-center text-sm text-gray-400 italic">
                             <i class="fa fa-terminal text-3xl text-gray-200 dark:text-gray-700 mb-3 block"></i>
                             No remote commands have been sent to this gateway yet.
                         </td>

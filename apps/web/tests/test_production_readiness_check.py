@@ -33,6 +33,7 @@ PRODUCTION_SETTINGS = {
     "CSRF_TRUSTED_ORIGINS": ["https://novenaplatform.com", "https://app.novenaplatform.com"],
     "MQTT_DYNSEC_ADMIN_USER": "novena-dynsec-admin",
     "MQTT_DYNSEC_ADMIN_PASS": "novena-dynsec-password",
+    "MQTT_PROVISIONING_REQUIRED": True,
     "MQTT_ACCEPT_LEGACY_SHARED_INBOUND": False,
     "AWS_SES_REGION_NAME": "ap-southeast-1",
     "AWS_SES_ACCESS_KEY_ID": "ses-key",

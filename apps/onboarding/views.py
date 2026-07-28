@@ -320,7 +320,10 @@ def gateway_status_poll(request, team_slug):
     if not gateway_id:
         return render(request, "onboarding/partials/gateway_status_badge.html", {"status": "unknown"})
     gateway = Gateway.objects.filter(id=gateway_id, team=request.team).first()
-    status = gateway.status if gateway else "unknown"
+    # Resolve the badge from heartbeat freshness, not only the last persisted
+    # status. This prevents the setup screen from saying "online" during the
+    # interval before the background timeout task marks a stale gateway offline.
+    status = "online" if gateway and gateway.freshness.status == "live" else ("offline" if gateway else "unknown")
     return render(
         request,
         "onboarding/partials/gateway_status_badge.html",
@@ -448,6 +451,17 @@ def step_3_discover(request, team_slug):
                         continue
                     item = create_or_update_candidate_item(run=run, index=index, candidate=candidate)
                     connection = connection_from_candidate(candidate)
+                    if not item.device:
+                        from apps.subscriptions.enforcement import can_add_device, get_device_limit_for_team
+
+                        if not can_add_device(request.team):
+                            limit = get_device_limit_for_team(request.team)
+                            messages.error(
+                                request,
+                                f"Your current plan supports up to {limit} equipment "
+                                f"item{'s' if limit != 1 else ''}. Upgrade your plan or remove unused equipment first.",
+                            )
+                            break
                     device = item.device or Device.objects.create(
                         team=request.team,
                         gateway=gateway,
@@ -581,6 +595,16 @@ def step_3_discover(request, team_slug):
             if not name:
                 messages.error(request, "Equipment name is required.")
                 return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+            from apps.subscriptions.enforcement import can_add_device, get_device_limit_for_team
+
+            if not can_add_device(request.team):
+                limit = get_device_limit_for_team(request.team)
+                messages.error(
+                    request,
+                    f"Your current plan supports up to {limit} equipment "
+                    f"item{'s' if limit != 1 else ''}. Upgrade your plan or remove unused equipment first.",
+                )
+                return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
             device_type = request.POST.get("manual_device_type", "other")
             if device_type not in {choice[0] for choice in DeviceTemplate.DEVICE_TYPE_CHOICES}:
                 device_type = "other"
@@ -683,6 +707,13 @@ def step_3_discover(request, team_slug):
             return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
 
         if action == "deploy":
+            if not guided_capable:
+                messages.error(
+                    request,
+                    "Update this Gateway before deploying settings. "
+                    "Secure remote setup is not available on its current software.",
+                )
+                return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
             run = sync_setup_run(run)
             validated_items = list(
                 run.items.filter(

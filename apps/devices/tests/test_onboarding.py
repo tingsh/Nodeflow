@@ -1,9 +1,11 @@
+import base64
+import json
 from unittest.mock import patch
 
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
-from apps.devices.models import Device, DeviceTemplate, Gateway, Site
+from apps.devices.models import Device, DeviceTemplate, Gateway, GatewayConfig, Site
 from apps.devices.solution_profiles import apply_solution_profile_presets, rank_templates_for_profile
 from apps.teams.models import Membership, Team
 from apps.teams.roles import ROLE_ADMIN
@@ -31,6 +33,36 @@ class OnboardingConnectionTest(TestCase):
         )
         self.client = Client()
         self.client.force_login(self.user)
+
+    @override_settings(REMOTE_CONTROL_SIGNING_PRIVATE_KEY=base64.b64encode(b"1" * 32).decode())
+    def test_gateway_config_endpoint_contract(self):
+        url = reverse("web_team:devices:gateway_push_config", args=[self.team.slug, self.gateway.pk])
+        self.gateway.gateway_capabilities = ["guided_setup_v1"]
+        self.gateway.save(update_fields=["gateway_capabilities"])
+
+        invalid = self.client.post(
+            url,
+            {"action": "connector_update", "config": json.dumps({"connectors": [{"name": "Missing type"}]})},
+        )
+        self.assertEqual(invalid.status_code, 400)
+        self.assertFalse(GatewayConfig.objects.filter(gateway=self.gateway).exists())
+
+        self.gateway.gateway_capabilities = []
+        self.gateway.save(update_fields=["gateway_capabilities"])
+        update_required = self.client.post(
+            url,
+            {"action": "connector_update", "config": json.dumps({"connectors": []})},
+        )
+        self.assertEqual(update_required.status_code, 409)
+
+        self.gateway.gateway_capabilities = ["guided_setup_v1"]
+        self.gateway.save(update_fields=["gateway_capabilities"])
+        queued = self.client.post(
+            url,
+            {"action": "connector_update", "config": json.dumps({"connectors": []})},
+        )
+        self.assertEqual(queued.status_code, 202)
+        self.assertEqual(GatewayConfig.objects.get(gateway=self.gateway).status, "queued")
 
     def _victim_infrastructure(self):
         victim_team = Team.objects.create(name="Victim Team", slug="victim-team")
@@ -158,6 +190,27 @@ class OnboardingConnectionTest(TestCase):
 
         self.assertEqual(response.status_code, 404)
         self.assertFalse(Device.objects.filter(name="Private Attack").exists())
+        push_config.assert_not_called()
+
+    def test_htmx_device_create_enforces_team_device_limit(self):
+        for index in range(3):
+            Device.objects.create(
+                team=self.team,
+                site=self.site,
+                gateway=self.gateway,
+                name=f"Existing Device {index}",
+                device_type="power_meter",
+                protocol="modbus_tcp",
+            )
+        url = reverse("web_team:devices:htmx_device_create", args=[self.team.slug])
+        url = f"{url}?site_id={self.site.id}&gateway_id={self.gateway.id}&port=limit-test"
+
+        with patch("apps.devices.views._push_gateway_config_after_commit") as push_config:
+            response = self.client.post(url, {"name": "Over Limit", "template_id": self.template.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You've reached your device limit")
+        self.assertFalse(Device.objects.filter(team=self.team, name="Over Limit").exists())
         push_config.assert_not_called()
 
     def test_htmx_device_create_resolve_replaces_same_team_device(self):
@@ -302,6 +355,25 @@ class OnboardingConnectionTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.gateway.refresh_from_db()
         self.assertEqual(self.gateway.site, self.site)
+
+    def test_gateway_update_cannot_change_claimed_identity_or_observed_status(self):
+        url = reverse("web_team:devices:gateway_edit", args=[self.team.slug, self.gateway.pk])
+
+        response = self.client.post(
+            url,
+            {
+                "site": self.site.id,
+                "name": "Renamed Gateway",
+                "serial_number": "FORGED-SERIAL",
+                "status": "online",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.gateway.refresh_from_db()
+        self.assertEqual(self.gateway.name, "Renamed Gateway")
+        self.assertEqual(self.gateway.serial_number, "SN-1234")
+        self.assertEqual(self.gateway.status, "offline")
 
 
 class SolutionProfileOnboardingTest(TestCase):

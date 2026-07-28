@@ -147,6 +147,12 @@ PUBLIC_MQTT_BROKER_PORT = env.int("PUBLIC_MQTT_BROKER_PORT", default=MQTT_BROKER
 GATEWAY_CLAIM_SECRET = env("GATEWAY_CLAIM_SECRET", default="change-me-in-production")
 GATEWAY_ACTIVATION_ENCRYPTION_KEY = env("GATEWAY_ACTIVATION_ENCRYPTION_KEY", default="")
 GATEWAY_ACTIVATION_TTL_HOURS = env.int("GATEWAY_ACTIVATION_TTL_HOURS", default=24)
+GATEWAY_ACTIVATION_REISSUE_COOLDOWN_SECONDS = env.int(
+    "GATEWAY_ACTIVATION_REISSUE_COOLDOWN_SECONDS", default=300
+)
+MQTT_DYNSEC_RESPONSE_TIMEOUT_SECONDS = env.int("MQTT_DYNSEC_RESPONSE_TIMEOUT_SECONDS", default=5)
+GATEWAY_RELEASE_LEASE_SECONDS = env.int("GATEWAY_RELEASE_LEASE_SECONDS", default=60)
+GATEWAY_RELEASE_RETRY_MAX_SECONDS = env.int("GATEWAY_RELEASE_RETRY_MAX_SECONDS", default=300)
 
 # Hardware health and telemetry freshness thresholds.
 DEVICE_OFFLINE_MIN_SECONDS = env.int("DEVICE_OFFLINE_MIN_SECONDS", default=30)
@@ -596,6 +602,14 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.devices.tasks.dispatch_due_gateway_config_outboxes",
         "schedule": 30.0,
     },
+    "dispatch-due-gateway-releases": {
+        "task": "apps.devices.tasks.dispatch_due_gateway_releases",
+        "schedule": 30.0,
+    },
+    "dispatch-due-plan-reconciliations": {
+        "task": "apps.devices.tasks.dispatch_due_plan_reconciliations",
+        "schedule": 60.0,
+    },
     "dispatch-due-remote-command-outboxes": {
         "task": "apps.devices.tasks.dispatch_due_remote_command_outboxes",
         "schedule": 5.0,
@@ -659,6 +673,8 @@ REMOTE_CONTROL_OUTBOX_RETRY_MAX_SECONDS = env.int(
 GATEWAY_CONFIG_ENVELOPE_TTL_SECONDS = env.int("GATEWAY_CONFIG_ENVELOPE_TTL_SECONDS", default=300)
 GATEWAY_CONFIG_OUTBOX_LEASE_SECONDS = env.int("GATEWAY_CONFIG_OUTBOX_LEASE_SECONDS", default=60)
 GATEWAY_CONFIG_OUTBOX_MAX_ATTEMPTS = env.int("GATEWAY_CONFIG_OUTBOX_MAX_ATTEMPTS", default=5)
+GATEWAY_CONFIG_INTENT_TTL_SECONDS = env.int("GATEWAY_CONFIG_INTENT_TTL_SECONDS", default=86400)
+GATEWAY_CONFIG_APPLY_TIMEOUT_SECONDS = env.int("GATEWAY_CONFIG_APPLY_TIMEOUT_SECONDS", default=300)
 GUIDED_SETUP_FIRST_TELEMETRY_TIMEOUT_SECONDS = env.int(
     "GUIDED_SETUP_FIRST_TELEMETRY_TIMEOUT_SECONDS",
     default=180,

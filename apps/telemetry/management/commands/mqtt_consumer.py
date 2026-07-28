@@ -88,7 +88,7 @@ class Command(BaseCommand):
             logger.error("Error processing MQTT message on %s: %s", msg.topic, e, exc_info=True)
 
     def _resolve_inbound_gateway(self, topic, payload):
-        from apps.devices.models import Gateway
+        from apps.devices.models import GatewayInventory
 
         parts = topic.split("/")
         message_type = None
@@ -135,8 +135,13 @@ class Command(BaseCommand):
             logger.warning("Rejected MQTT %s on %s because no gateway serial was identified.", message_type, topic)
             return None, None
 
-        gateway = Gateway.objects.filter(serial_number=topic_serial).first()
-        if not gateway:
+        inventory = (
+            GatewayInventory.objects.select_related("gateway")
+            .filter(serial_number=topic_serial, status="claimed", gateway__isnull=False)
+            .first()
+        )
+        gateway = inventory.gateway if inventory else None
+        if not gateway or gateway.lifecycle_status in {"release_pending", "released"}:
             logger.warning("Rejected MQTT %s for unknown gateway serial %s.", message_type, topic_serial)
             return None, None
 
@@ -154,6 +159,7 @@ class Command(BaseCommand):
             queued_payload["_cloud_received_at"] = cloud_received_at.isoformat()
             if trusted_gateway_sn:
                 queued_payload["_topic_gateway_sn"] = trusted_gateway_sn
+                queued_payload["_topic_gateway_id"] = gateway.pk
             self.redis_client.rpush("telemetry_ingest_queue", json.dumps(queued_payload))
         except Exception as e:
             logger.error("Failed to queue telemetry raw payload to Redis: %s", e)
@@ -162,7 +168,7 @@ class Command(BaseCommand):
             from asgiref.sync import async_to_sync
             from channels.layers import get_channel_layer
 
-            from apps.devices.models import Device, Gateway
+            from apps.devices.models import Device
             from apps.telemetry.mqtt_parser import parse_mqtt_payload
             from apps.utils.timezones import format_site_datetime, site_timezone_metadata
 
@@ -187,10 +193,12 @@ class Command(BaseCommand):
                     continue
 
                 if gateway_sn not in gateway_cache:
-                    try:
-                        gateway_cache[gateway_sn] = Gateway.objects.get(serial_number=gateway_sn)
-                    except Gateway.DoesNotExist:
+                    from apps.devices.services import current_claimed_gateway
+
+                    resolved = current_claimed_gateway(gateway_sn)
+                    if not resolved:
                         continue
+                    gateway_cache[gateway_sn] = resolved
                 gateway = gateway_cache[gateway_sn]
 
                 target_device = None
@@ -210,15 +218,24 @@ class Command(BaseCommand):
                     target_device = device_cache[cache_key]
 
                 if not target_device:
-                    target_device = Device.objects.filter(gateway=gateway).first()
-                    if target_device:
+                    legacy_candidates = list(Device.objects.filter(gateway=gateway).order_by("id")[:2])
+                    if len(legacy_candidates) == 1:
+                        target_device = legacy_candidates[0]
                         logger.warning(
-                            "Using legacy first-device telemetry fallback for gateway %s. "
+                            "Using legacy first-device telemetry fallback for gateway %s (single configured device). "
                             "Payload device_id=%s device_name=%s resolved_device=%s.",
                             gateway_sn,
                             device_id,
                             device_name,
                             target_device.id,
+                        )
+                    elif len(legacy_candidates) > 1:
+                        logger.warning(
+                            "Rejected ambiguous live telemetry for gateway %s. "
+                            "Payload device_id=%s device_name=%s; the gateway has multiple configured devices.",
+                            gateway_sn,
+                            device_id,
+                            device_name,
                         )
 
                 if target_device:
@@ -244,6 +261,7 @@ class Command(BaseCommand):
             queued_payload = dict(payload)
             if gateway:
                 queued_payload["_topic_gateway_sn"] = gateway.serial_number
+                queued_payload["_topic_gateway_id"] = gateway.pk
             self.redis_client.rpush("logs_ingest_queue", json.dumps(queued_payload))
         except Exception as e:
             logger.error(f"Failed to queue logs raw payload to Redis: {e}")
@@ -252,36 +270,40 @@ class Command(BaseCommand):
 
     def _handle_bootstrap_hello(self, payload, gateway=None):
         """Mark a released/unclaimed gateway as visible in bootstrap mode."""
-        from apps.devices.activation import retry_activation_for_gateway
-        from apps.devices.models import Gateway
+        from apps.devices.activation import reissue_activation_for_gateway
+        from apps.devices.services import current_claimed_gateway
 
         gateway_sn = gateway.serial_number if gateway else payload.get("serial_number")
         if not gateway_sn:
             return
-        gateway = gateway or Gateway.objects.filter(serial_number=gateway_sn).first()
+        current_gateway = current_claimed_gateway(gateway_sn)
+        gateway = None if gateway and (not current_gateway or current_gateway.pk != gateway.pk) else current_gateway
         if not gateway:
             logger.info("Bootstrap hello from unknown gateway %s", gateway_sn)
             return
         gateway.last_bootstrap_seen_at = timezone.now()
-        if gateway.lifecycle_status in ("claimed", "release_pending"):
+        if gateway.lifecycle_status == "claimed":
             gateway.lifecycle_status = "bootstrap_seen"
             gateway.save(update_fields=["last_bootstrap_seen_at", "lifecycle_status"])
         else:
             gateway.save(update_fields=["last_bootstrap_seen_at"])
-        retry_activation_for_gateway(gateway)
+        try:
+            reissue_activation_for_gateway(gateway)
+        except ValueError as exc:
+            logger.warning("Rejected activation reissue for %s: %s", gateway_sn, exc)
 
     def _handle_attributes(self, payload, gateway=None):
         """Update gateway status from heartbeat attributes or LWT."""
-        from apps.devices.models import Gateway, GatewayConfig
+        from apps.devices.models import GatewayConfig
+        from apps.devices.services import current_claimed_gateway
 
         gateway_sn = gateway.serial_number if gateway else payload.get("serial_number")
         if not gateway_sn:
             return
 
         if not gateway:
-            try:
-                gateway = Gateway.objects.get(serial_number=gateway_sn)
-            except Gateway.DoesNotExist:
+            gateway = current_claimed_gateway(gateway_sn)
+            if not gateway:
                 logger.warning("Gateway %s not found for attribute sync", gateway_sn)
                 return
 
@@ -409,63 +431,19 @@ class Command(BaseCommand):
         config_request_id = attrs.get("config_update_request_id")
         if config_request_id:
             try:
-                config_record = GatewayConfig.objects.get(request_id=config_request_id, gateway=gateway)
-                config_status = attrs.get("config_update_status", "unknown")
-                acknowledged_revision = attrs.get("config_revision")
-                acknowledged_checksum = attrs.get("config_checksum")
-                acknowledged_idempotency = attrs.get("config_idempotency_key")
-                if acknowledged_revision is not None and int(acknowledged_revision) != config_record.revision:
-                    logger.warning("Rejected mismatched config revision for request %s", config_request_id)
-                    return
-                if acknowledged_checksum and acknowledged_checksum != config_record.checksum:
-                    logger.warning("Rejected mismatched config checksum for request %s", config_request_id)
-                    return
-                if acknowledged_idempotency and str(acknowledged_idempotency) != str(config_record.idempotency_key):
-                    logger.warning("Rejected mismatched config idempotency key for request %s", config_request_id)
-                    return
-                incoming_status = "active" if config_status == "success" else config_status
-                config_status_order = {
-                    "queued": 0,
-                    "delivered": 1,
-                    "accepted": 2,
-                    "active": 3,
-                    "failed": 3,
-                    "rolled_back": 3,
-                }
-                status_advanced = config_status_order.get(incoming_status, -1) >= config_status_order.get(
-                    config_record.status, -1
-                )
-                if status_advanced:
-                    from apps.devices.deployment_setup import customer_safe_error
+                from apps.devices.deployment_setup import customer_safe_error
+                from apps.devices.gateway_config_delivery import acknowledge_gateway_config
 
-                    config_record.status = incoming_status
-                    config_record.technical_error = attrs.get("config_update_error", "") or ""
-                    config_record.error_message = (
-                        customer_safe_error(config_record.technical_error) if config_record.technical_error else ""
-                    )
-                    config_record.error_code = attrs.get("config_update_error_code", "") or ""
-                    config_record.rollback_performed = bool(attrs.get("rollback_performed", False))
-                    config_record.connector_results = attrs.get("connector_results", []) or []
-                    config_record.rollback_connector_results = attrs.get("rollback_connector_results", []) or []
-                config_record.acknowledged_at = timezone.now()
-                config_record.save(
-                    update_fields=[
-                        "status",
-                        "error_message",
-                        "error_code",
-                        "technical_error",
-                        "rollback_performed",
-                        "connector_results",
-                        "rollback_connector_results",
-                        "acknowledged_at",
-                    ]
-                )
+                config_record = acknowledge_gateway_config(gateway, attrs)
+                if config_record.technical_error:
+                    config_record.error_message = customer_safe_error(config_record.technical_error)
+                    config_record.save(update_fields=["error_message", "updated_at"])
                 if config_record.status == "active":
                     gateway.lifecycle_status = "active"
                     gateway.save(update_fields=["lifecycle_status"])
                 logger.info("Config update %s acknowledged: %s", config_request_id, config_record.status)
-            except GatewayConfig.DoesNotExist:
-                pass
+            except (GatewayConfig.DoesNotExist, TypeError, ValueError) as exc:
+                logger.warning("Rejected config acknowledgement %s: %s", config_request_id, exc)
 
         credential_status = attrs.get("credential_update_status")
         if credential_status:
@@ -477,6 +455,7 @@ class Command(BaseCommand):
                 activation = acknowledge_gateway_activation(
                     gateway,
                     credential_request_id,
+                    attrs.get("credential_update_generation"),
                     credential_status,
                     attrs.get("credential_update_error", "") or "",
                 )

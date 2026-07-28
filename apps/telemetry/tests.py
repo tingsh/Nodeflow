@@ -6,10 +6,11 @@ from django.http import Http404
 from django.test import RequestFactory
 from django.utils import timezone
 
-from apps.devices.models import Device, DeviceTemplate, Gateway, GatewayConfig, RpcCommand, Site
+from apps.devices.models import Device, DeviceTemplate, Gateway, GatewayConfig, GatewayInventory, RpcCommand, Site
 from apps.teams.models import Team
 from apps.telemetry.management.commands.mqtt_consumer import Command as MqttConsumerCommand
 from apps.telemetry.models import GatewayLog, TelemetryData
+from apps.telemetry.services import ingest_telemetry_data
 from apps.telemetry.tasks import flush_logs_buffer_task, flush_telemetry_buffer_task
 from apps.users.models import CustomUser
 
@@ -18,6 +19,23 @@ class MqttMessage:
     def __init__(self, topic, payload):
         self.topic = topic
         self.payload = json.dumps(payload).encode("utf-8")
+
+
+def claim_gateway(gateway):
+    GatewayInventory.objects.create(
+        serial_number=gateway.serial_number,
+        status="claimed",
+        gateway=gateway,
+        claimed_by_team=gateway.team,
+    )
+
+
+def buffered_gateway_payload(gateway, payload):
+    return {
+        **payload,
+        "_topic_gateway_sn": gateway.serial_number,
+        "_topic_gateway_id": gateway.pk,
+    }
 
 
 @pytest.mark.django_db
@@ -31,11 +49,14 @@ def test_gateway_attribute_ingest_persists_edge_diagnostics():
         serial_number="GW-DIAG-001",
         access_token="diag-token",
     )
+    claim_gateway(gateway)
     config_record = GatewayConfig.objects.create(
         team=team,
         gateway=gateway,
         config_json={"connectors": []},
         request_id="11111111-1111-1111-1111-111111111111",
+        revision=1,
+        checksum="diagnostic-checksum",
     )
 
     command = MqttConsumerCommand()
@@ -65,6 +86,9 @@ def test_gateway_attribute_ingest_persists_edge_diagnostics():
                 "ota_error": "health check failed",
                 "ota_rollback_performed": True,
                 "config_update_request_id": str(config_record.request_id),
+                "config_revision": config_record.revision,
+                "config_checksum": config_record.checksum,
+                "config_idempotency_key": str(config_record.idempotency_key),
                 "config_update_status": "rolled_back",
                 "config_update_error": "Broken Modbus",
                 "rollback_performed": True,
@@ -99,6 +123,7 @@ def test_scoped_mqtt_rejects_payload_topic_serial_mismatch(caplog):
     site_b = Site.objects.create(team=team_b, name="Site B")
     gateway_a = Gateway.objects.create(team=team_a, site=site_a, name="GW-A", serial_number="GW-A", access_token="a")
     gateway_b = Gateway.objects.create(team=team_b, site=site_b, name="GW-B", serial_number="GW-B", access_token="b")
+    claim_gateway(gateway_a)
 
     command = MqttConsumerCommand()
     command.redis_client = MagicMock()
@@ -119,6 +144,7 @@ def test_scoped_mqtt_queues_trusted_topic_gateway_identity():
     team = Team.objects.create(name="Scoped Queue", slug="scoped-queue")
     site = Site.objects.create(team=team, name="Factory")
     gateway = Gateway.objects.create(team=team, site=site, name="GW", serial_number="GW-SCOPED", access_token="tok")
+    claim_gateway(gateway)
 
     command = MqttConsumerCommand()
     command.redis_client = MagicMock()
@@ -146,6 +172,7 @@ def test_flush_telemetry_uses_trusted_topic_gateway_over_payload_serial():
     gateway_b = Gateway.objects.create(
         team=team_b, site=site_b, name="GW-B", serial_number="GW-TRUST-B", access_token="b"
     )
+    claim_gateway(gateway_a)
     device_a = Device.objects.create(
         team=team_a,
         site=site_a,
@@ -162,12 +189,14 @@ def test_flush_telemetry_uses_trusted_topic_gateway_over_payload_serial():
         device_type="power_meter",
         protocol="modbus_tcp",
     )
-    payload = {
-        "_topic_gateway_sn": gateway_a.serial_number,
-        "serial_number": gateway_b.serial_number,
-        "device_id": device_a.id,
-        "values": {"active_power": 101.0},
-    }
+    payload = buffered_gateway_payload(
+        gateway_a,
+        {
+            "serial_number": gateway_b.serial_number,
+            "device_id": device_a.id,
+            "values": {"active_power": 101.0},
+        },
+    )
     raw_payload = json.dumps(payload).encode("utf-8")
     mock_redis = MagicMock()
     mock_pipeline = MagicMock()
@@ -193,11 +222,14 @@ def test_flush_logs_uses_trusted_topic_gateway_over_payload_serial():
     gateway_b = Gateway.objects.create(
         team=team_b, site=site_b, name="GW-B", serial_number="GW-LOG-B", access_token="b"
     )
-    payload = {
-        "_topic_gateway_sn": gateway_a.serial_number,
-        "serial_number": gateway_b.serial_number,
-        "logs": [{"ts": 1714000000000, "level": "INFO", "logger": "test", "message": "hello"}],
-    }
+    claim_gateway(gateway_a)
+    payload = buffered_gateway_payload(
+        gateway_a,
+        {
+            "serial_number": gateway_b.serial_number,
+            "logs": [{"ts": 1714000000000, "level": "INFO", "logger": "test", "message": "hello"}],
+        },
+    )
     raw_payload = json.dumps(payload).encode("utf-8")
     mock_redis = MagicMock()
     mock_pipeline = MagicMock()
@@ -223,6 +255,7 @@ def test_scoped_attribute_mismatch_does_not_update_other_gateway():
     gateway_b = Gateway.objects.create(
         team=team_b, site=site_b, name="GW-B", serial_number="GW-ATTR-B", access_token="b"
     )
+    claim_gateway(gateway_a)
     command = MqttConsumerCommand()
 
     command.on_message(
@@ -252,6 +285,7 @@ def test_scoped_attribute_ack_cannot_update_another_gateway_config():
     gateway_b = Gateway.objects.create(
         team=team_b, site=site_b, name="GW-B", serial_number="GW-CFG-B", access_token="b"
     )
+    claim_gateway(gateway_a)
     config_b = GatewayConfig.objects.create(
         team=team_b,
         gateway=gateway_b,
@@ -291,6 +325,7 @@ def test_scoped_rpc_response_cannot_complete_another_gateway_command():
     gateway_b = Gateway.objects.create(
         team=team_b, site=site_b, name="GW-B", serial_number="GW-RPC-B", access_token="b"
     )
+    claim_gateway(gateway_a)
     rpc_b = RpcCommand.objects.create(
         team=team_b,
         gateway=gateway_b,
@@ -327,6 +362,7 @@ def test_flush_telemetry_buffer_task():
     gateway = Gateway.objects.create(
         team=team, site=site, name="Telemetry Gateway", serial_number="GW-001", access_token="tok_123"
     )
+    claim_gateway(gateway)
     device = Device.objects.create(
         team=team,
         site=site,
@@ -338,7 +374,10 @@ def test_flush_telemetry_buffer_task():
     )
 
     # 2. Prepare mock raw MQTT payload in Format A
-    payload = {"serial_number": "GW-001", "values": {"device_name": "Test Device", "active_power": 123.4}}
+    payload = buffered_gateway_payload(
+        gateway,
+        {"serial_number": "GW-001", "values": {"device_name": "Test Device", "active_power": 123.4}},
+    )
     raw_payload = json.dumps(payload).encode("utf-8")
 
     # Mock Redis client and its pipeline
@@ -357,6 +396,108 @@ def test_flush_telemetry_buffer_task():
     assert TelemetryData.objects.filter(device=device, key="active_power").exists()
     data = TelemetryData.objects.get(device=device, key="active_power")
     assert data.value_numeric == 123.4
+
+
+@pytest.mark.django_db
+def test_direct_ingestion_keeps_legacy_fallback_for_single_device():
+    team = Team.objects.create(name="Legacy Team", slug="legacy-team")
+    site = Site.objects.create(team=team, name="Legacy Site")
+    gateway = Gateway.objects.create(
+        team=team,
+        site=site,
+        name="Legacy Gateway",
+        serial_number="GW-LEGACY-ONE",
+        access_token="legacy-one",
+    )
+    claim_gateway(gateway)
+    device = Device.objects.create(
+        team=team,
+        site=site,
+        gateway=gateway,
+        name="Only Device",
+        device_type="plc",
+        protocol="modbus_tcp",
+    )
+
+    resolved = ingest_telemetry_data(gateway.serial_number, {"active_power": 42.0})
+
+    assert resolved == device
+    assert TelemetryData.objects.filter(device=device, key="active_power", value_numeric=42.0).exists()
+
+
+@pytest.mark.django_db
+def test_direct_ingestion_rejects_ambiguous_multi_device_identity(caplog):
+    team = Team.objects.create(name="Ambiguous Team", slug="ambiguous-team")
+    site = Site.objects.create(team=team, name="Ambiguous Site")
+    gateway = Gateway.objects.create(
+        team=team,
+        site=site,
+        name="Ambiguous Gateway",
+        serial_number="GW-AMBIGUOUS",
+        access_token="ambiguous",
+    )
+    claim_gateway(gateway)
+    for name in ("Meter A", "Meter B"):
+        Device.objects.create(
+            team=team,
+            site=site,
+            gateway=gateway,
+            name=name,
+            device_type="power_meter",
+            protocol="modbus_tcp",
+        )
+
+    resolved = ingest_telemetry_data(
+        gateway.serial_number,
+        {"active_power": 99.0},
+        device_id="not-a-device",
+    )
+
+    assert resolved is None
+    assert not TelemetryData.objects.filter(device__gateway=gateway).exists()
+    assert "Rejected ambiguous telemetry" in caplog.text
+
+
+@pytest.mark.django_db
+def test_buffered_ingestion_rejects_ambiguous_multi_device_identity():
+    team = Team.objects.create(name="Buffered Ambiguous", slug="buffered-ambiguous")
+    site = Site.objects.create(team=team, name="Buffered Site")
+    gateway = Gateway.objects.create(
+        team=team,
+        site=site,
+        name="Buffered Gateway",
+        serial_number="GW-BUFFERED-AMBIGUOUS",
+        access_token="buffered-ambiguous",
+    )
+    claim_gateway(gateway)
+    for name in ("Meter A", "Meter B"):
+        Device.objects.create(
+            team=team,
+            site=site,
+            gateway=gateway,
+            name=name,
+            device_type="power_meter",
+            protocol="modbus_tcp",
+        )
+    raw_payload = json.dumps(
+        buffered_gateway_payload(
+            gateway,
+            {
+                "serial_number": gateway.serial_number,
+                "values": {"active_power": 123.0},
+            },
+        )
+    ).encode("utf-8")
+    mock_redis = MagicMock()
+    mock_pipeline = MagicMock()
+    mock_redis.pipeline.return_value.__enter__.return_value = mock_pipeline
+    mock_pipeline.execute.return_value = [[raw_payload], 1]
+
+    with patch("redis.Redis.from_url", return_value=mock_redis):
+        result = flush_telemetry_buffer_task()
+
+    assert result == "Ingested 0 points."
+    assert not TelemetryData.objects.filter(device__gateway=gateway).exists()
 
 
 @pytest.mark.django_db
@@ -658,6 +799,7 @@ def test_flush_telemetry_matches_device_id_before_name():
         serial_number="GW-MATCH-001",
         access_token="tok_match_001",
     )
+    claim_gateway(gateway)
     device_by_id = Device.objects.create(
         team=team,
         site=site,
@@ -676,12 +818,15 @@ def test_flush_telemetry_matches_device_id_before_name():
         protocol="modbus_tcp",
         status="offline",
     )
-    payload = {
-        "serial_number": gateway.serial_number,
-        "device_id": device_by_id.id,
-        "device_name": device_by_name.name,
-        "values": {"active_power": 111.0},
-    }
+    payload = buffered_gateway_payload(
+        gateway,
+        {
+            "serial_number": gateway.serial_number,
+            "device_id": device_by_id.id,
+            "device_name": device_by_name.name,
+            "values": {"active_power": 111.0},
+        },
+    )
     raw_payload = json.dumps(payload).encode("utf-8")
     mock_redis = MagicMock()
     mock_pipeline = MagicMock()
@@ -708,6 +853,7 @@ def test_flush_telemetry_logs_legacy_first_device_fallback(caplog):
         serial_number="GW-FALLBACK-001",
         access_token="tok_fallback_001",
     )
+    claim_gateway(gateway)
     device = Device.objects.create(
         team=team,
         site=site,
@@ -717,10 +863,13 @@ def test_flush_telemetry_logs_legacy_first_device_fallback(caplog):
         protocol="modbus_tcp",
         status="offline",
     )
-    payload = {
-        "serial_number": gateway.serial_number,
-        "values": {"active_power": 222.0},
-    }
+    payload = buffered_gateway_payload(
+        gateway,
+        {
+            "serial_number": gateway.serial_number,
+            "values": {"active_power": 222.0},
+        },
+    )
     raw_payload = json.dumps(payload).encode("utf-8")
     mock_redis = MagicMock()
     mock_pipeline = MagicMock()

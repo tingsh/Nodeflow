@@ -21,6 +21,9 @@ The first production target is a lean VPS deployment:
 - Celery worker and Celery Beat for background and scheduled jobs.
 - Celery Beat must include `apps.devices.tasks.dispatch_due_remote_command_outboxes`; alert on dead-lettered command outbox rows and repeatedly expired leases.
 - Celery Beat must include `apps.devices.tasks.dispatch_due_gateway_config_outboxes`; alert on dead-lettered configuration rows and repeatedly expired leases.
+- Celery Beat must include `apps.devices.tasks.dispatch_due_gateway_releases`; a Gateway stays quarantined and its inventory stays claimed until Mosquitto confirms credential revocation.
+- Celery Beat must include `apps.devices.tasks.expire_and_retry_gateway_activations`; this expires secrets and retries durable activation delivery without exposing plaintext credentials.
+- Celery Beat must include `apps.devices.tasks.dispatch_due_plan_reconciliations`; this recovers queued or abandoned subscription-driven configuration work.
 - MQTT consumer for gateway telemetry ingestion.
 - Mosquitto with Dynamic Security for gateway credentials.
 - Host Nginx for HTTPS and WebSocket reverse proxy.
@@ -69,6 +72,7 @@ Then fill real values for:
 - Django: `SECRET_KEY`, `ALLOWED_HOSTS`, `APP_BASE_URL`, `HEALTH_CHECK_TOKENS`.
 - Database: `POSTGRES_PASSWORD`, `DATABASE_URL`.
 - MQTT: `MQTT_DYNSEC_ADMIN_USER`, `MQTT_DYNSEC_ADMIN_PASS`, `GATEWAY_CLAIM_SECRET`.
+- Gateway security: `GATEWAY_ACTIVATION_ENCRYPTION_KEY`, `MQTT_PROVISIONING_REQUIRED=True`, and `MQTT_ACCEPT_LEGACY_SHARED_INBOUND=False`.
 - Public gateway instructions: `PUBLIC_MQTT_BROKER_HOST=mqtt.novenaplatform.com`, `PUBLIC_MQTT_BROKER_PORT=8883`.
 - SES: `AWS_SES_ACCESS_KEY_ID`, `AWS_SES_SECRET_ACCESS_KEY`, sender emails.
 - WhatsApp: Meta phone ID, access token, verify token, approved alert template.
@@ -78,7 +82,8 @@ Then fill real values for:
 ### Guided Setup configuration delivery
 
 Guided Setup uses the same Ed25519 signing authority as governed remote commands. Set
-`GATEWAY_CONFIG_ENVELOPE_TTL_SECONDS` between 60 and 900 seconds and
+`GATEWAY_CONFIG_ENVELOPE_TTL_SECONDS` between 60 and 900 seconds,
+`GATEWAY_CONFIG_INTENT_TTL_SECONDS` to the required offline-delivery window (86400 seconds by default), and
 `GATEWAY_CONFIG_OUTBOX_MAX_ATTEMPTS` between 1 and 10. Celery Beat must run
 `apps.devices.tasks.dispatch_due_gateway_config_outboxes` so queued or abandoned
 delivery leases recover after worker restarts. Set
@@ -93,13 +98,17 @@ Before enabling `guided_setup_v1` on a Gateway:
 3. Prove a failed connector activation restores the last-known-good configuration.
 4. Confirm the Hub receives matching revision, checksum, and idempotency evidence.
 
-Until those checks pass, the Gateway does not advertise the capability and Hub keeps
-using the compatible legacy setup path. Never copy a Hub private signing key to a
-Gateway.
+Until those checks pass, the Gateway does not advertise the capability and Hub reports
+that a Gateway update is required. Hub does not send unsigned configuration. Never copy
+a Hub private signing key to a Gateway.
 
 ## First Server Build
 
 From the Hub repo on the VPS:
+
+Deploy migrations first. Then deploy the matching web, worker, Beat, and MQTT consumer
+processes together so new lifecycle states and acknowledgement fields are interpreted
+consistently.
 
 ```bash
 docker compose -f docker-compose.prod.yml config

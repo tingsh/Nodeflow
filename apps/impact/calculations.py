@@ -1,4 +1,5 @@
 import hashlib
+import math
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, time, timedelta
@@ -125,11 +126,15 @@ def _source_register(source):
 
 
 def _source_expected_interval(source):
-    template = source.device.template
     register = _source_register(source)
-    value = register.get("expected_interval_seconds") or (template.default_polling_interval if template else 5)
+    from apps.subscriptions.enforcement import get_effective_polling_interval_seconds
+
+    value = max(
+        float(register.get("expected_interval_seconds") or 0),
+        get_effective_polling_interval_seconds(source.device),
+    )
     try:
-        return max(1, int(value))
+        return max(1, math.ceil(value))
     except (TypeError, ValueError):
         return 5
 

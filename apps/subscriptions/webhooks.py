@@ -1,6 +1,7 @@
 import logging
 
 from django.core.mail import mail_admins
+from django.db import transaction
 from djstripe.event_handlers import djstripe_receiver
 from djstripe.models import Customer, Price, Subscription
 
@@ -9,6 +10,10 @@ from apps.teams.models import Team
 from .helpers import provision_subscription
 
 log = logging.getLogger("novena_hub.subscription")
+
+
+def _event_key(event, fallback):
+    return str(getattr(event, "id", None) or getattr(event, "pk", None) or fallback)
 
 
 @djstripe_receiver("checkout.session.completed")
@@ -24,7 +29,11 @@ def checkout_session_completed(event, **kwargs):
         client_reference_id = session.get("client_reference_id")
         subscription_id = session.get("subscription")
         subscription_holder = Team.objects.get(id=client_reference_id)
-        provision_subscription(subscription_holder, subscription_id)
+        provision_subscription(
+            subscription_holder,
+            subscription_id,
+            source_key=f"stripe:{_event_key(event, subscription_id)}",
+        )
 
 
 @djstripe_receiver("customer.subscription.updated")
@@ -51,11 +60,32 @@ def update_customer_subscription(event, **kwargs):
 
     # find associated subscription and change the price details accordingly
     dj_subscription = Subscription.objects.get(id=subscription_id)
+    team = Team.objects.filter(subscription=dj_subscription).first()
+    previous_interval = None
+    if team:
+        from apps.subscriptions.enforcement import get_latency_limit_for_team
+
+        previous_interval = get_latency_limit_for_team(team)
     subscription_item = dj_subscription.items.get()
     subscription_item.price = Price.objects.get(id=new_price["id"])
     subscription_item.save()
     dj_subscription.cancel_at_period_end = get_cancel_at_period_end(event.data)
     dj_subscription.save()
+    if team:
+        team.clear_cached_subscription()
+        new_interval = get_latency_limit_for_team(team)
+
+        transaction.on_commit(
+            lambda: __import__(
+                "apps.devices.plan_reconciliation",
+                fromlist=["queue_team_plan_reconciliation"],
+            ).queue_team_plan_reconciliation(
+                Team.objects.get(pk=team.pk),
+                previous_interval,
+                new_interval,
+                f"stripe:{_event_key(event, subscription_id)}",
+            )
+        )
 
 
 @djstripe_receiver("customer.subscription.deleted")
@@ -65,6 +95,24 @@ def email_admins_when_subscriptions_canceled(event, **kwargs):
         customer_email = Customer.objects.get(id=event.data["object"]["customer"]).email
     except Customer.DoesNotExist:
         customer_email = "unavailable"
+
+    subscription_id = event.data["object"].get("id")
+    team = Team.objects.filter(subscription_id=subscription_id).first()
+    if team:
+        from apps.subscriptions.enforcement import DEFAULT_LATENCY_LIMIT, get_latency_limit_for_team
+
+        previous_interval = get_latency_limit_for_team(team)
+        transaction.on_commit(
+            lambda: __import__(
+                "apps.devices.plan_reconciliation",
+                fromlist=["queue_team_plan_reconciliation"],
+            ).queue_team_plan_reconciliation(
+                Team.objects.get(pk=team.pk),
+                previous_interval,
+                DEFAULT_LATENCY_LIMIT,
+                f"stripe:{_event_key(event, subscription_id)}",
+            )
+        )
 
     mail_admins(
         "Someone just canceled their subscription!",

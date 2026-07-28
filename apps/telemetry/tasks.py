@@ -53,6 +53,7 @@ def flush_telemetry_buffer_task():
             payload_dict = json.loads(raw_payload.decode("utf-8"))
             cloud_received_at = _parse_cloud_received_at(payload_dict.pop("_cloud_received_at", None))
             trusted_gateway_sn = payload_dict.pop("_topic_gateway_sn", None)
+            trusted_gateway_id = payload_dict.pop("_topic_gateway_id", None)
             parsed_events = parse_mqtt_payload(
                 "v1/gateway/telemetry",
                 payload_dict,
@@ -60,6 +61,7 @@ def flush_telemetry_buffer_task():
             )
             for event in parsed_events:
                 event["_cloud_received_at"] = cloud_received_at
+                event["_topic_gateway_id"] = trusted_gateway_id
             events.extend(parsed_events)
         except Exception as e:
             logger.error("Error parsing buffered telemetry payload: %s", e)
@@ -71,9 +73,20 @@ def flush_telemetry_buffer_task():
     if not gateway_sns:
         return "No gateways identified in events"
 
-    gateways = {g.serial_number: g for g in Gateway.objects.filter(serial_number__in=gateway_sns)}
+    gateway_ids_from_transport = {
+        int(e["_topic_gateway_id"])
+        for e in events
+        if e.get("_topic_gateway_id") is not None and str(e["_topic_gateway_id"]).isdigit()
+    }
+    gateways_by_id = {
+        g.pk: g
+        for g in Gateway.objects.filter(
+            pk__in=gateway_ids_from_transport,
+            inventory_record__status="claimed",
+        ).exclude(lifecycle_status__in=["release_pending", "released"])
+    }
 
-    gateway_ids = [g.id for g in gateways.values()]
+    gateway_ids = list(gateways_by_id)
     devices = list(Device.objects.filter(gateway_id__in=gateway_ids))
     device_cache = {(d.gateway_id, d.name): d for d in devices}
     device_by_id = {d.id: d for d in devices}
@@ -90,10 +103,13 @@ def flush_telemetry_buffer_task():
 
     for event in events:
         gateway_sn = event.get("gateway_sn")
-        if not gateway_sn or gateway_sn not in gateways:
+        gateway_id = event.get("_topic_gateway_id")
+        try:
+            gateway = gateways_by_id.get(int(gateway_id))
+        except (TypeError, ValueError):
+            gateway = None
+        if not gateway or gateway.serial_number != gateway_sn:
             continue
-
-        gateway = gateways[gateway_sn]
         timestamp = event.get("timestamp") or timezone.now()
         cloud_received_at = event.get("_cloud_received_at") or db_flushed_at
         device_id = event.get("device_id")
@@ -124,15 +140,23 @@ def flush_telemetry_buffer_task():
 
         if not target_device:
             gateway_devices = devices_by_gateway.get(gateway.id, [])
-            if gateway_devices:
+            if len(gateway_devices) == 1:
                 target_device = gateway_devices[0]
                 logger.warning(
-                    "Using legacy first-device telemetry fallback for gateway %s. "
+                    "Using legacy first-device telemetry fallback for gateway %s (single configured device). "
                     "Payload device_id=%s device_name=%s resolved_device=%s.",
                     gateway_sn,
                     device_id,
                     device_name,
                     target_device.id,
+                )
+            elif len(gateway_devices) > 1:
+                logger.warning(
+                    "Rejected ambiguous telemetry for gateway %s. Payload device_id=%s device_name=%s; "
+                    "the gateway has multiple configured devices.",
+                    gateway_sn,
+                    device_id,
+                    device_name,
                 )
 
         if not target_device:
@@ -216,21 +240,28 @@ def flush_logs_buffer_task():
         try:
             payload = json.loads(raw_payload.decode("utf-8"))
             gateway_sn = payload.pop("_topic_gateway_sn", None) or payload.get("serial_number")
-            if not gateway_sn:
+            gateway_id = payload.pop("_topic_gateway_id", None)
+            if not gateway_sn or gateway_id is None:
                 continue
-            grouped_logs.setdefault(gateway_sn, []).extend(payload.get("logs", []))
+            grouped_logs.setdefault((str(gateway_id), gateway_sn), []).extend(payload.get("logs", []))
         except Exception as e:
             logger.error("Error parsing buffered log payload: %s", e)
 
     if not grouped_logs:
         return "No logs grouped"
 
-    gateways = {g.serial_number: g for g in Gateway.objects.filter(serial_number__in=grouped_logs.keys())}
+    gateway_ids = [int(key[0]) for key in grouped_logs if key[0].isdigit()]
+    gateways = {
+        str(g.pk): g
+        for g in Gateway.objects.filter(pk__in=gateway_ids, inventory_record__status="claimed").exclude(
+            lifecycle_status__in=["release_pending", "released"]
+        )
+    }
 
     logs_to_create = []
-    for gateway_sn, entries in grouped_logs.items():
-        gateway = gateways.get(gateway_sn)
-        if not gateway:
+    for (gateway_id, gateway_sn), entries in grouped_logs.items():
+        gateway = gateways.get(gateway_id)
+        if not gateway or gateway.serial_number != gateway_sn:
             logger.warning("Gateway %s not found for log batch.", gateway_sn)
             continue
 

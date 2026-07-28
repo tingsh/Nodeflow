@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime
 
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth.hashers import make_password
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
@@ -15,7 +16,6 @@ from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonRespons
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse_lazy
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
@@ -320,6 +320,9 @@ class GatewayListView(PermissionRequiredMixin, ListView):
     template_name = "devices/gateway_list.html"
     context_object_name = "gateways"
 
+    def get_queryset(self):
+        return super().get_queryset().exclude(lifecycle_status="released")
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["active_tab"] = "gateways"
@@ -339,6 +342,8 @@ class GatewayDetailView(PermissionRequiredMixin, DetailView):
         from .models import FirmwareRelease
 
         gateway = self.object
+        context["release_request"] = gateway.release_requests.first()
+        context["latest_activation"] = gateway.activations.first()
         context["recent_logs"] = GatewayLog.objects.filter(gateway=gateway)[:20]
         context["recent_rpc"] = RpcCommand.objects.filter(gateway=gateway)[:10]
         context["recent_configs"] = GatewayConfig.objects.filter(gateway=gateway)[:5]
@@ -407,7 +412,11 @@ class GatewayCreateView(PermissionRequiredMixin, CreateView):
 class GatewayUpdateView(PermissionRequiredMixin, UpdateView):
     permission_required = "manage_devices"
     model = Gateway
-    fields = ["site", "name", "serial_number", "status"]
+    # The appliance identity and observed connectivity state are managed by the
+    # claim/heartbeat flows. Allowing either to be edited here can strand a
+    # gateway under an identity that its MQTT credentials do not own or display
+    # a customer-selected status that contradicts the latest heartbeat.
+    fields = ["site", "name"]
     template_name = "devices/gateway_form.html"
 
     def get_form(self, form_class=None):
@@ -432,30 +441,33 @@ class GatewayDeleteView(PermissionRequiredMixin, DeleteView):
             form.add_error(None, "Type the gateway serial number exactly to confirm deletion.")
             return self.form_invalid(form)
 
-        success_url = self.get_success_url()
+        from .gateway_release import request_gateway_release
 
-        # Release for self-serve onboarding redo. The Gateway row is preserved so
-        # the same serial number + printed claim code can be used again.
-        self._deprovision_mqtt_credentials()
-        from .services import release_gateway_for_redo
-
-        release_gateway_for_redo(self.object)
-
-        return HttpResponseRedirect(success_url)
-
-    def _deprovision_mqtt_credentials(self):
-        try:
-            from .mqtt_provisioning import deprovision_gateway_mqtt
-
-            deprovision_gateway_mqtt(self.object)
-        except Exception as e:
-            logger.warning("Mosquitto deprovisioning failed for gateway %s: %s", self.object.serial_number, e)
+        request_gateway_release(self.object, requested_by=self.request.user)
+        return HttpResponseRedirect(
+            reverse_lazy("web_team:devices:gateway_detail", args=[self.request.team.slug, self.object.pk])
+        )
 
     def get_success_url(self):
         return reverse_lazy("web_team:devices:gateway_list", args=[self.request.team.slug])
 
 
 # ── Gateway Management Views (Cloud ↔ Edge) ────────────────────────────
+
+
+@require_permission("manage_devices")
+@require_POST
+def gateway_retry_activation(request, team_slug, pk):
+    from .activation import reissue_activation_for_gateway
+
+    gateway = Gateway.objects.get(pk=pk, team=request.team)
+    try:
+        reissue_activation_for_gateway(gateway, force=True)
+    except ValueError as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.info(request, "Novena is securely retrying Gateway activation.")
+    return HttpResponseRedirect(reverse_lazy("web_team:devices:gateway_detail", args=[team_slug, pk]))
 
 
 @require_permission("manage_devices")
@@ -469,6 +481,12 @@ def gateway_rotate_password(request, team_slug, pk):
     from .mqtt_provisioning import rotate_gateway_password
 
     gateway = Gateway.objects.get(pk=pk, team=request.team)
+
+    if gateway.lifecycle_status in {"release_pending", "released"}:
+        return JsonResponse(
+            {"code": "gateway_quarantined", "error": "This Gateway is being securely released."},
+            status=409,
+        )
 
     if gateway.status != "online":
         return JsonResponse({"error": "Gateway must be online to rotate password."}, status=400)
@@ -538,18 +556,59 @@ def gateway_send_rpc(request, team_slug, pk):
 @require_POST
 def gateway_push_config(request, team_slug, pk):
     """Push a config update to a gateway."""
-    from apps.telemetry.mqtt_publisher import publish_config_update
+    from .gateway_config_delivery import GatewayConfigUnsupported, queue_gateway_config
 
     gateway = Gateway.objects.get(pk=pk, team=request.team)
     action = request.POST.get("action", "full_update")
-    config = json.loads(request.POST.get("config"))
+    if action not in {"full_update", "connector_update", "connector_add", "connector_remove"}:
+        return JsonResponse({"code": "invalid_action", "message": "Choose a supported settings action."}, status=400)
+    try:
+        config = json.loads(request.POST.get("config", ""))
+    except (TypeError, json.JSONDecodeError):
+        return JsonResponse({"code": "invalid_config", "message": "Settings must be valid JSON."}, status=400)
+    if not isinstance(config, dict) or not config:
+        return JsonResponse({"code": "invalid_config", "message": "Settings must be a non-empty object."}, status=400)
+
+    try:
+        config_record = queue_gateway_config(gateway, action, config)
+    except GatewayConfigUnsupported as exc:
+        return JsonResponse({"code": "gateway_update_required", "message": str(exc)}, status=409)
+    except ValueError as exc:
+        return JsonResponse({"code": "invalid_config", "message": str(exc)}, status=400)
 
     gateway.lifecycle_status = "commissioning"
     gateway.save(update_fields=["lifecycle_status"])
 
-    config_record = publish_config_update(gateway, action, config)
+    return JsonResponse(
+        {
+            "request_id": str(config_record.request_id),
+            "revision": config_record.revision,
+            "action": action,
+            "status": config_record.status,
+        },
+        status=202,
+    )
 
-    return JsonResponse({"request_id": str(config_record.request_id), "action": action, "status": "sent"})
+
+@require_permission("manage_devices")
+@require_POST
+def gateway_retry_config(request, team_slug, pk, config_pk):
+    from .gateway_config_delivery import GatewayConfigUnsupported, retry_gateway_config
+
+    config_record = GatewayConfig.objects.select_related("gateway").get(
+        pk=config_pk,
+        gateway_id=pk,
+        team=request.team,
+    )
+    try:
+        replacement = retry_gateway_config(config_record)
+    except GatewayConfigUnsupported as exc:
+        messages.error(request, str(exc))
+    except ValueError as exc:
+        messages.info(request, str(exc))
+    else:
+        messages.info(request, f"Settings revision {replacement.revision} is queued for secure delivery.")
+    return HttpResponseRedirect(reverse_lazy("web_team:devices:gateway_detail", args=[team_slug, pk]))
 
 
 @require_permission("view_devices")
@@ -987,8 +1046,29 @@ def htmx_device_create(request, team_slug):
                     "identification": discovery_entry.get("identification"),
                 }
 
+            replacement = None
             if resolve == "true":
-                Device.objects.filter(team=request.team, site=site, gateway=gateway, port=port).delete()
+                replacement = Device.objects.filter(
+                    team=request.team,
+                    site=site,
+                    gateway=gateway,
+                    port=port,
+                ).first()
+
+            if not replacement:
+                from apps.subscriptions.enforcement import can_add_device, get_device_limit_for_team
+
+                if not can_add_device(request.team):
+                    limit = get_device_limit_for_team(request.team)
+                    count = Device.objects.filter(team=request.team).count()
+                    return render(
+                        request,
+                        "devices/upgrade_required.html",
+                        {"limit": limit, "count": count},
+                    )
+
+            if replacement:
+                replacement.delete()
 
             device = Device.objects.create(
                 team=request.team,
@@ -1065,7 +1145,8 @@ def template_library_search(request, team_slug):
     return render(request, template_name, {"templates": templates[:10]})
 
 
-@csrf_exempt
+@require_permission("manage_devices")
+@require_POST
 def gateway_discovery_api(request, team_slug):
     """
     API for the Edge Gateway to report discovered devices.
@@ -1086,7 +1167,13 @@ def gateway_discovery_api(request, team_slug):
         serial = data.get("serial_number")
         discovered = data.get("discovered_devices", [])
 
-        gateway = Gateway.objects.get(serial_number=serial)
+        gateway = Gateway.objects.get(
+            team=request.team,
+            serial_number=serial,
+            inventory_record__status="claimed",
+        )
+        if gateway.lifecycle_status in {"release_pending", "released"}:
+            return JsonResponse({"error": "This Gateway is being securely released."}, status=409)
         from .discovery_matching import enrich_discovered_device
 
         discovered = [enrich_discovered_device(device) for device in discovered]
