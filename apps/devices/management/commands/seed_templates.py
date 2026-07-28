@@ -145,6 +145,43 @@ class Command(BaseCommand):
                 ],
             },
             {
+                "name": "Cold Room Temp Door Compressor Monitor",
+                "manufacturer": "Novena Curated",
+                "model_number": "CCR-IO-01",
+                "device_type": "temp_sensor",
+                "protocol": "modbus_rtu",
+                "category": "cold_chain",
+                "register_map": {
+                    "temperature": {"address": 0, "type": "int16", "scale": 0.1, "unit": "°C", "functionCode": 4},
+                    "humidity": {"address": 1, "type": "int16", "scale": 0.1, "unit": "%", "functionCode": 4},
+                    "door_open": {"address": 2, "type": "bool", "functionCode": 1},
+                    "compressor_status": {"address": 3, "type": "bool", "functionCode": 1},
+                },
+                "alert_presets": [
+                    {
+                        "name": "Cold Room High Temperature",
+                        "key": "temperature",
+                        "condition": "gt",
+                        "threshold": 4,
+                        "severity": "critical",
+                    },
+                    {
+                        "name": "Door Open Too Long",
+                        "key": "door_open",
+                        "condition": "eq",
+                        "threshold": 1,
+                        "severity": "warning",
+                    },
+                    {
+                        "name": "Compressor Inactive",
+                        "key": "compressor_status",
+                        "condition": "eq",
+                        "threshold": 0,
+                        "severity": "warning",
+                    },
+                ],
+            },
+            {
                 "name": "Eastron SDM120-Modbus",
                 "manufacturer": "Eastron",
                 "model_number": "SDM120",
@@ -232,6 +269,37 @@ class Command(BaseCommand):
                         "threshold": 45,
                         "severity": "warning",
                     }
+                ],
+            },
+            {
+                "name": "Generic HVAC Chiller Monitor",
+                "manufacturer": "Novena Curated",
+                "model_number": "HVAC-CH-01",
+                "device_type": "chiller",
+                "protocol": "bacnet",
+                "category": "factory",
+                "register_map": {
+                    "temperature": {"address": 100, "type": "float32", "unit": "°C", "functionCode": 3},
+                    "active_power": {"address": 101, "type": "float32", "unit": "kW", "functionCode": 3},
+                    "run_hours": {"address": 102, "type": "float32", "unit": "h", "functionCode": 3},
+                    "compressor_status": {"address": 103, "type": "bool", "functionCode": 1},
+                    "fan_status": {"address": 104, "type": "bool", "functionCode": 1},
+                },
+                "alert_presets": [
+                    {
+                        "name": "Chiller Temperature Drift",
+                        "key": "temperature",
+                        "condition": "gt",
+                        "threshold": 9,
+                        "severity": "warning",
+                    },
+                    {
+                        "name": "Abnormal Chiller Power",
+                        "key": "active_power",
+                        "condition": "gt",
+                        "threshold": 1500,
+                        "severity": "warning",
+                    },
                 ],
             },
             {

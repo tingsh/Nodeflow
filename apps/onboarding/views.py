@@ -66,7 +66,7 @@ def onboarding_start(request, team_slug):
 def step_profile(request, team_slug):
     from apps.devices.solution_profiles import PROFILES
 
-    selected = request.session.get("solution_profile", "facilities_hvac")
+    selected = request.session.get("solution_profile", "general_iot")
     if request.method == "POST":
         selected = request.POST.get("solution_profile", "general_iot")
         request.session["solution_profile"] = get_profile(selected).key

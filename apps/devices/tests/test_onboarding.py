@@ -5,8 +5,10 @@ from unittest.mock import patch
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
+from apps.alerts.models import AlertRule
 from apps.devices.models import Device, DeviceTemplate, Gateway, GatewayConfig, Site
 from apps.devices.solution_profiles import apply_solution_profile_presets, rank_templates_for_profile
+from apps.maintenance.models import PreventiveSchedule
 from apps.teams.models import Membership, Team
 from apps.teams.roles import ROLE_ADMIN
 from apps.users.models import CustomUser
@@ -384,6 +386,18 @@ class SolutionProfileOnboardingTest(TestCase):
         self.client = Client()
         self.client.force_login(self.user)
 
+    def test_profile_selection_defaults_to_general_iot_without_vertical_assumptions(self):
+        profile_url = reverse("web_team:onboarding:step_profile", args=[self.team.slug])
+
+        response = self.client.get(profile_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_profile"], "general_iot")
+        self.assertContains(response, "General IoT")
+        self.assertContains(response, "Cold Chain Monitoring")
+        self.assertContains(response, "Factory Energy Monitoring")
+        self.assertContains(response, "Facilities / HVAC")
+
     def test_profile_selection_persists_to_created_site(self):
         profile_url = reverse("web_team:onboarding:step_profile", args=[self.team.slug])
         site_url = reverse("web_team:onboarding:step_1_site", args=[self.team.slug])
@@ -429,6 +443,120 @@ class SolutionProfileOnboardingTest(TestCase):
 
         self.assertEqual(ranked[0], hvac)
         self.assertIn(generic, ranked)
+
+    def test_each_profile_has_distinct_recommended_template_ordering(self):
+        power_meter = DeviceTemplate.objects.create(
+            name="Factory Main Meter",
+            device_type="power_meter",
+            protocol="modbus_tcp",
+            category="energy",
+            register_map={
+                "active_power": {"address": 1},
+                "energy": {"address": 2},
+                "voltage": {"address": 3},
+                "current": {"address": 4},
+            },
+            is_verified=True,
+        )
+        cold_room = DeviceTemplate.objects.create(
+            name="Cold Room Door Sensor",
+            device_type="temp_sensor",
+            protocol="modbus_rtu",
+            category="cold_chain",
+            register_map={
+                "temperature": {"address": 1},
+                "door_open": {"address": 2},
+                "compressor_status": {"address": 3},
+            },
+            is_verified=True,
+        )
+        chiller = DeviceTemplate.objects.create(
+            name="HVAC Chiller Monitor",
+            device_type="chiller",
+            protocol="bacnet",
+            category="factory",
+            register_map={
+                "temperature": {"address": 1},
+                "active_power": {"address": 2},
+                "run_hours": {"address": 3},
+                "compressor_status": {"address": 4},
+            },
+            is_verified=True,
+        )
+        generic = DeviceTemplate.objects.create(
+            name="Mixed Equipment Telemetry",
+            device_type="other",
+            protocol="mqtt",
+            category="factory",
+            register_map={"status": {"address": 1}},
+            is_verified=True,
+            usage_count=50,
+        )
+        templates = DeviceTemplate.objects.all()
+
+        self.assertEqual(rank_templates_for_profile(templates, "factory_energy")[0], power_meter)
+        self.assertEqual(rank_templates_for_profile(templates, "cold_chain")[0], cold_room)
+        self.assertEqual(rank_templates_for_profile(templates, "facilities_hvac")[0], chiller)
+        self.assertEqual(rank_templates_for_profile(templates, "general_iot")[0], generic)
+
+    def test_facilities_profile_creates_alert_and_runtime_maintenance_defaults(self):
+        site = Site.objects.create(team=self.team, name="Hotel Plant Room", solution_profile="facilities_hvac")
+        template = DeviceTemplate.objects.create(
+            name="Chiller Monitor",
+            device_type="chiller",
+            protocol="bacnet",
+            category="factory",
+            register_map={
+                "temperature": {"address": 1},
+                "active_power": {"address": 2},
+                "run_hours": {"address": 3},
+            },
+        )
+        device = Device.objects.create(
+            team=self.team,
+            site=site,
+            name="Chiller 1",
+            template=template,
+            device_type="chiller",
+            protocol="bacnet",
+        )
+
+        created = apply_solution_profile_presets(site, self.user)
+
+        self.assertEqual(created["alerts"], 3)
+        self.assertEqual(created["maintenance_schedules"], 1)
+        self.assertTrue(AlertRule.objects.filter(device=device, telemetry_key="temperature").exists())
+        self.assertTrue(
+            PreventiveSchedule.objects.filter(
+                device=device,
+                title="Runtime-based HVAC service",
+                usage_telemetry_key="run_hours",
+                usage_threshold=500,
+            ).exists()
+        )
+
+    def test_general_iot_profile_does_not_create_vertical_alerts_or_maintenance(self):
+        site = Site.objects.create(team=self.team, name="Mixed Lab", solution_profile="general_iot")
+        template = DeviceTemplate.objects.create(
+            name="Mixed Equipment",
+            device_type="other",
+            protocol="mqtt",
+            category="factory",
+            register_map={"status": {"address": 1}, "temperature": {"address": 2}},
+        )
+        Device.objects.create(
+            team=self.team,
+            site=site,
+            name="Mixed Asset",
+            template=template,
+            device_type="other",
+            protocol="mqtt",
+        )
+
+        created = apply_solution_profile_presets(site, self.user)
+
+        self.assertEqual(created["alerts"], 0)
+        self.assertEqual(created["maintenance_schedules"], 0)
 
     def test_solution_profile_presets_are_idempotent(self):
         site = Site.objects.create(
