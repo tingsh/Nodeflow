@@ -49,7 +49,7 @@
                             </label>
                             {% endfor %}
                         </div>
-                        <div id="setup-goal-other" class="mt-4 {% if 'other' not in onboarding_context.setup_goals %}hidden{% endif %}">
+                        <div id="setup-goal-other" class="mt-4" {% if 'other' not in onboarding_context.setup_goals %}hidden{% endif %}>
                             <label for="setup_goal_other" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Tell us what else you want to use Novena for</label>
                             <input type="text" name="setup_goal_other" id="setup_goal_other" value="{{ onboarding_context.setup_goal_other|default:'' }}" maxlength="200" placeholder="e.g., compliance checks, productivity tracking"
                                 class="block w-full px-4 py-3 rounded-xl border-gray-200 dark:border-gray-700 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500 transition">
@@ -157,7 +157,7 @@
             if (!otherField || !otherCheckbox) {
                 return;
             }
-            otherField.classList.toggle("hidden", !otherCheckbox.checked);
+            otherField.hidden = !otherCheckbox.checked;
         };
         window.initOnboardingSetupGoals();
         document.body.addEventListener("htmx:afterSettle", window.initOnboardingSetupGoals);

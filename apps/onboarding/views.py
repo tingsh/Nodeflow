@@ -122,7 +122,17 @@ def _valid_time_value(value, default):
 def _site_onboarding_context(site):
     metadata = getattr(site, "metadata", None) or {}
     onboarding = metadata.get("onboarding", {})
-    return onboarding if isinstance(onboarding, dict) else {}
+    if not isinstance(onboarding, dict):
+        return {"setup_goals": []}
+    onboarding = dict(onboarding)
+    setup_goals = onboarding.get("setup_goals")
+    if isinstance(setup_goals, list):
+        onboarding["setup_goals"] = setup_goals
+    elif onboarding.get("setup_goal"):
+        onboarding["setup_goals"] = [onboarding["setup_goal"]]
+    else:
+        onboarding["setup_goals"] = []
+    return onboarding
 
 
 def _update_site_onboarding_context(site, request):
@@ -296,7 +306,7 @@ def step_1_site(request, team_slug):
         "profile": get_site_profile(site) if site else profile,
         "setup_goal_choices": SETUP_GOAL_CHOICES,
         "operating_hours_choices": OPERATING_HOURS_CHOICES,
-        "onboarding_context": _site_onboarding_context(site) if site else {},
+        "onboarding_context": _site_onboarding_context(site),
     }
     return render(request, "onboarding/step_1_site.html", context)
 
@@ -1124,15 +1134,19 @@ def setup_step_site(request, team_slug):
 def setup_step_connectivity(request, team_slug):
     if request.method == "POST":
         connectivity = request.POST.get("connectivity")
-        request.session["connectivity_type"] = connectivity
         if connectivity == "gateway":
+            request.session["connectivity_type"] = connectivity
             return redirect("web_team:onboarding:step_2_gateway", team_slug=team_slug)
-        else:
-            messages.info(
+        if connectivity == "direct":
+            request.session.pop("connectivity_type", None)
+            messages.warning(
                 request,
-                "Guided Setup uses a Novena Gateway so equipment can be discovered and validated safely.",
+                "Direct cloud onboarding is coming soon. Please use Novena Gateway setup for now.",
             )
-            return redirect("web_team:onboarding:step_2_gateway", team_slug=team_slug)
+            return redirect("web_team:onboarding:step_connectivity", team_slug=team_slug)
+
+        messages.error(request, "Choose Novena Gateway to continue setup.")
+        return redirect("web_team:onboarding:step_connectivity", team_slug=team_slug)
 
     context = {"steps": ONBOARDING_STEPS, "current_step": 2}  # We'll reuse the progress bar
     return render(request, "onboarding/setup_step_connectivity.html", context)

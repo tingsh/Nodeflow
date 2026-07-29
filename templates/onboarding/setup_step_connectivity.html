@@ -26,19 +26,21 @@
                 </div>
             </label>
 
-            <label class="relative block rounded-3xl border border-base-content/10 bg-base-100 p-8 shadow-sm cursor-pointer hover:border-primary-500/50 hover:bg-base-200/50 transition-all group has-[:checked]:border-primary-500 has-[:checked]:ring-2 has-[:checked]:ring-primary-500/20">
-                <input type="radio" name="connectivity" value="direct" class="hidden peer">
-                <div class="w-14 h-14 bg-green-50 dark:bg-green-500/10 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-primary-500 group-hover:text-white transition-colors">
+            <div class="relative block rounded-3xl border border-base-content/10 bg-base-100 p-8 shadow-sm opacity-80 cursor-not-allowed" aria-disabled="true">
+                <input type="radio" name="connectivity" value="direct" class="hidden" disabled aria-disabled="true">
+                <div class="w-14 h-14 bg-green-50 dark:bg-green-500/10 rounded-2xl flex items-center justify-center mb-6 text-base-content/50">
                     <i class="fa fa-wifi text-2xl"></i>
                 </div>
-                <h3 class="text-xl font-bold text-base-content font-heading mb-2">Direct cloud connection</h3>
-                <p class="text-sm text-base-content/50 leading-relaxed">
-                    For modern equipment that can send readings securely to Novena, either directly or through your existing connector.
-                </p>
-                <div class="absolute top-4 right-4 text-primary-500 opacity-0 peer-checked:opacity-100 transition-opacity">
-                    <i class="fa fa-check-circle text-2xl"></i>
+                <div class="flex flex-wrap items-center gap-2 mb-2">
+                    <h3 class="text-xl font-bold text-base-content font-heading">Direct cloud connection</h3>
+                    <span class="inline-flex items-center rounded-full bg-base-200 px-3 py-1 text-xs font-bold uppercase tracking-wide text-base-content/60">
+                        Coming soon
+                    </span>
                 </div>
-            </label>
+                <p class="text-sm text-base-content/50 leading-relaxed">
+                    Direct cloud onboarding is planned for supported equipment that can send readings securely without a Novena Gateway.
+                </p>
+            </div>
         </div>
 
         <div class="flex items-center justify-between pt-10">
