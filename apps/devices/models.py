@@ -37,6 +37,7 @@ class Site(BaseTeamModel):
         blank=True,
         help_text=_("Optional profile-specific site type, such as hotel, clinic, or warehouse."),
     )
+    metadata = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
         return self.name

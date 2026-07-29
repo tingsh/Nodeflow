@@ -40,6 +40,23 @@ ONBOARDING_STEPS = [
     {"num": 5, "label": "Go live"},
 ]
 
+SETUP_GOAL_CHOICES = (
+    ("equipment_health", "Monitor equipment health"),
+    ("energy_usage", "Track energy usage"),
+    ("abnormal_reading_alerts", "Get alerts for abnormal readings"),
+    ("reports_audit_trail", "Prepare reports / audit trail"),
+    ("maintenance_reminders", "Set up maintenance reminders"),
+    ("not_sure", "Not sure yet"),
+    ("other", "Other"),
+)
+
+OPERATING_HOURS_CHOICES = (
+    ("always_on", "24/7"),
+    ("custom", "Custom"),
+    ("irregular_schedule", "Irregular schedule"),
+    ("not_sure", "Not sure yet"),
+)
+
 
 def _bounded_int(value, default, minimum, maximum):
     try:
@@ -81,6 +98,74 @@ def _resolve_onboarding_timezone(request, site=None):
     return "UTC"
 
 
+def _valid_choice_value(value, choices):
+    if value in {choice[0] for choice in choices}:
+        return value
+    return ""
+
+
+def _valid_choice_values(values, choices):
+    allowed_values = {choice[0] for choice in choices}
+    valid_values = []
+    for value in values:
+        if value in allowed_values and value not in valid_values:
+            valid_values.append(value)
+    return valid_values
+
+
+def _valid_time_value(value, default):
+    if re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value or ""):
+        return value
+    return default
+
+
+def _site_onboarding_context(site):
+    metadata = getattr(site, "metadata", None) or {}
+    onboarding = metadata.get("onboarding", {})
+    return onboarding if isinstance(onboarding, dict) else {}
+
+
+def _update_site_onboarding_context(site, request):
+    onboarding = dict(_site_onboarding_context(site))
+    setup_goals = _valid_choice_values(request.POST.getlist("setup_goals"), SETUP_GOAL_CHOICES)
+    operating_hours = _valid_choice_value(request.POST.get("operating_hours", ""), OPERATING_HOURS_CHOICES)
+    posted_values = {
+        "operating_hours": operating_hours,
+    }
+    onboarding.pop("setup_goal", None)
+    if setup_goals:
+        onboarding["setup_goals"] = setup_goals
+    else:
+        onboarding.pop("setup_goals", None)
+
+    setup_goal_other = request.POST.get("setup_goal_other", "").strip()[:200]
+    if "other" in setup_goals and setup_goal_other:
+        onboarding["setup_goal_other"] = setup_goal_other
+    else:
+        onboarding.pop("setup_goal_other", None)
+
+    for key, value in posted_values.items():
+        if value:
+            onboarding[key] = value
+        else:
+            onboarding.pop(key, None)
+
+    if operating_hours == "custom":
+        onboarding["operating_hours_custom"] = {
+            "start": _valid_time_value(request.POST.get("custom_operating_start"), "08:00"),
+            "end": _valid_time_value(request.POST.get("custom_operating_end"), "18:00"),
+        }
+    else:
+        onboarding.pop("operating_hours_custom", None)
+
+    metadata = dict(site.metadata or {})
+    if onboarding:
+        metadata["onboarding"] = onboarding
+    else:
+        metadata.pop("onboarding", None)
+    site.metadata = metadata
+
+
 @require_permission("manage_devices")
 def onboarding_start(request, team_slug):
     if Site.objects.filter(team=request.team).exists():
@@ -120,7 +205,6 @@ def step_1_site(request, team_slug):
         name = request.POST.get("name")
         address = request.POST.get("address", "")
         timezone = _resolve_onboarding_timezone(request, site)
-        site_type = request.POST.get("site_type", "")
         solution_profile = request.POST.get("solution_profile") or request.session.get(
             "solution_profile", "general_iot"
         )
@@ -130,7 +214,7 @@ def step_1_site(request, team_slug):
                 site.address = address
                 site.timezone = timezone
                 site.solution_profile = get_profile(solution_profile).key
-                site.site_type = site_type
+                _update_site_onboarding_context(site, request)
                 site.save()
             else:
                 site = Site.objects.create(
@@ -139,8 +223,9 @@ def step_1_site(request, team_slug):
                     address=address,
                     timezone=timezone,
                     solution_profile=get_profile(solution_profile).key,
-                    site_type=site_type,
                 )
+                _update_site_onboarding_context(site, request)
+                site.save(update_fields=["metadata", "updated_at"])
             request.session["onboarding_site_id"] = site.id
             request.session["solution_profile"] = site.solution_profile
             if flag_is_active(request, "business_impact_roi"):
@@ -209,7 +294,9 @@ def step_1_site(request, team_slug):
         "current_step": 1,
         "site": site,
         "profile": get_site_profile(site) if site else profile,
-        "site_types": profile.site_types,
+        "setup_goal_choices": SETUP_GOAL_CHOICES,
+        "operating_hours_choices": OPERATING_HOURS_CHOICES,
+        "onboarding_context": _site_onboarding_context(site) if site else {},
     }
     return render(request, "onboarding/step_1_site.html", context)
 

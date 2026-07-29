@@ -411,15 +411,31 @@ class SolutionProfileOnboardingTest(TestCase):
                 "name": "Boutique Hotel",
                 "address": "Orchard",
                 "timezone": "Asia/Singapore",
-                "site_type": "small_hotel",
+                "setup_goals": ["energy_usage", "abnormal_reading_alerts", "other"],
+                "setup_goal_other": "Track compressor utilization",
+                "operating_hours": "custom",
+                "custom_operating_start": "07:30",
+                "custom_operating_end": "21:15",
                 "solution_profile": "facilities_hvac",
             },
         )
 
         site = Site.objects.get(team=self.team, name="Boutique Hotel")
         self.assertEqual(site.solution_profile, "facilities_hvac")
-        self.assertEqual(site.site_type, "small_hotel")
+        self.assertEqual(site.site_type, "")
         self.assertEqual(site.timezone, "Asia/Singapore")
+        self.assertEqual(
+            site.metadata["onboarding"],
+            {
+                "setup_goals": ["energy_usage", "abnormal_reading_alerts", "other"],
+                "setup_goal_other": "Track compressor utilization",
+                "operating_hours": "custom",
+                "operating_hours_custom": {
+                    "start": "07:30",
+                    "end": "21:15",
+                },
+            },
+        )
         self.assertRedirects(response, reverse("web_team:onboarding:step_2_gateway", args=[self.team.slug]))
 
     def test_site_step_hides_manual_timezone_selector(self):
@@ -432,6 +448,42 @@ class SolutionProfileOnboardingTest(TestCase):
         self.assertNotContains(response, "<select name=\"timezone\"")
         self.assertContains(response, '<input type="hidden" name="timezone" id="timezone"')
         self.assertContains(response, "Intl.DateTimeFormat().resolvedOptions().timeZone")
+
+    def test_site_step_hides_site_type_and_renders_optional_context_fields(self):
+        site_url = reverse("web_team:onboarding:step_1_site", args=[self.team.slug])
+
+        response = self.client.get(site_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'name="site_type"')
+        self.assertNotContains(response, "Site Type")
+        self.assertNotContains(response, 'name="setup_goal"')
+        self.assertNotContains(response, "<select name=\"setup_goal\"")
+        self.assertContains(response, "What do you want Novena to help with first?")
+        self.assertContains(response, 'name="setup_goals"')
+        self.assertContains(response, "Monitor equipment health")
+        self.assertContains(response, "Track energy usage")
+        self.assertContains(response, "Get alerts for abnormal readings")
+        self.assertContains(response, "Prepare reports / audit trail")
+        self.assertContains(response, "Other")
+        self.assertContains(response, 'id="setup-goal-other"')
+        self.assertContains(response, 'name="setup_goal_other"')
+        self.assertContains(response, "Tell us what else you want to use Novena for")
+        self.assertContains(response, "initOnboardingSetupGoals")
+        self.assertContains(response, "When does this site usually operate?")
+        self.assertContains(response, "24/7")
+        self.assertContains(response, "Custom")
+        self.assertContains(response, "Irregular schedule")
+        self.assertContains(response, "Not sure yet")
+        self.assertNotContains(response, "Weekdays, office hours")
+        self.assertNotContains(response, "Weekdays, extended hours")
+        self.assertNotContains(response, "Weekends included")
+        self.assertContains(response, 'id="custom-operating-hours"')
+        self.assertContains(response, 'name="custom_operating_start"')
+        self.assertContains(response, 'name="custom_operating_end"')
+        self.assertContains(response, 'operatingHoursInput.value !== "custom"')
+        self.assertContains(response, "This helps Novena prioritize the first widgets, alerts, and recommendations.")
+        self.assertContains(response, "This helps Novena avoid noisy recommendations")
 
     def test_site_step_uses_browser_timezone_when_posted(self):
         site_url = reverse("web_team:onboarding:step_1_site", args=[self.team.slug])
@@ -468,6 +520,27 @@ class SolutionProfileOnboardingTest(TestCase):
 
         site = Site.objects.get(team=self.team, name="Fallback Facility")
         self.assertEqual(site.timezone, "Asia/Kuala_Lumpur")
+
+    def test_site_step_ignores_invalid_optional_context_values(self):
+        site_url = reverse("web_team:onboarding:step_1_site", args=[self.team.slug])
+
+        self.client.post(
+            site_url,
+            {
+                "name": "Invalid Context Site",
+                "address": "",
+                "timezone": "Asia/Singapore",
+                "setup_goals": ["surprise_me"],
+                "setup_goal_other": "Should not persist",
+                "operating_hours": "moonlight_only",
+                "site_type": "warehouse",
+                "solution_profile": "general_iot",
+            },
+        )
+
+        site = Site.objects.get(team=self.team, name="Invalid Context Site")
+        self.assertEqual(site.site_type, "")
+        self.assertEqual(site.metadata, {})
 
     def test_template_ranking_prioritizes_selected_profile(self):
         hvac = DeviceTemplate.objects.create(

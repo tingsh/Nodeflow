@@ -40,13 +40,42 @@
                     </div>
 
                     <div>
-                        <label for="site_type" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Site Type <span class="text-gray-400">(Optional)</span></label>
-                        <select name="site_type" id="site_type" class="block w-full px-4 py-3 rounded-xl border-gray-200 dark:border-gray-700 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500 transition">
-                            <option value="">Choose a site type</option>
-                            {% for value, label in site_types %}
-                            <option value="{{ value }}" {% if site.site_type == value %}selected{% endif %}>{{ label }}</option>
+                        <p class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">What do you want Novena to help with first? <span class="text-gray-400">(Optional)</span></p>
+                        <div class="space-y-3">
+                            {% for value, label in setup_goal_choices %}
+                            <label class="flex items-center gap-3 rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 transition hover:border-indigo-300 dark:border-gray-700 dark:text-gray-200 dark:hover:border-indigo-500">
+                                <input type="checkbox" name="setup_goals" value="{{ value }}" {% if value in onboarding_context.setup_goals %}checked{% endif %} onchange="window.initOnboardingSetupGoals && window.initOnboardingSetupGoals()" class="checkbox checkbox-primary checkbox-sm">
+                                <span>{{ label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        <div id="setup-goal-other" class="mt-4 {% if 'other' not in onboarding_context.setup_goals %}hidden{% endif %}">
+                            <label for="setup_goal_other" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Tell us what else you want to use Novena for</label>
+                            <input type="text" name="setup_goal_other" id="setup_goal_other" value="{{ onboarding_context.setup_goal_other|default:'' }}" maxlength="200" placeholder="e.g., compliance checks, productivity tracking"
+                                class="block w-full px-4 py-3 rounded-xl border-gray-200 dark:border-gray-700 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500 transition">
+                        </div>
+                        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">This helps Novena prioritize the first widgets, alerts, and recommendations. You can change it later.</p>
+                    </div>
+
+                    <div>
+                        <label for="operating_hours" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">When does this site usually operate? <span class="text-gray-400">(Optional)</span></label>
+                        <select name="operating_hours" id="operating_hours" onchange="document.getElementById('custom-operating-hours').classList.toggle('hidden', this.value !== 'custom')" class="block w-full px-4 py-3 rounded-xl border-gray-200 dark:border-gray-700 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500 transition">
+                            <option value="">Choose operating hours</option>
+                            {% for value, label in operating_hours_choices %}
+                            <option value="{{ value }}" {% if onboarding_context.operating_hours == value %}selected{% endif %}>{{ label }}</option>
                             {% endfor %}
                         </select>
+                        <div id="custom-operating-hours" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 {% if onboarding_context.operating_hours != 'custom' %}hidden{% endif %}">
+                            <label>
+                                <span class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">Start time</span>
+                                <input type="time" name="custom_operating_start" id="custom_operating_start" value="{{ onboarding_context.operating_hours_custom.start|default:'08:00' }}" class="block w-full px-4 py-3 rounded-xl border-gray-200 dark:border-gray-700 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500 transition">
+                            </label>
+                            <label>
+                                <span class="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">End time</span>
+                                <input type="time" name="custom_operating_end" id="custom_operating_end" value="{{ onboarding_context.operating_hours_custom.end|default:'18:00' }}" class="block w-full px-4 py-3 rounded-xl border-gray-200 dark:border-gray-700 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500 transition">
+                            </label>
+                        </div>
+                        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">This helps Novena avoid noisy recommendations, such as flagging idle equipment when the site is normally closed.</p>
                     </div>
 
                     <div>
@@ -115,13 +144,34 @@
 <script>
     document.addEventListener("DOMContentLoaded", function () {
         var timezoneInput = document.getElementById("timezone");
-        if (!timezoneInput || !window.Intl) {
-            return;
+        if (timezoneInput && window.Intl) {
+            var browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            if (browserTimezone) {
+                timezoneInput.value = browserTimezone;
+            }
         }
-        var browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        if (browserTimezone) {
-            timezoneInput.value = browserTimezone;
-        }
+
+        window.initOnboardingSetupGoals = function () {
+            var otherField = document.getElementById("setup-goal-other");
+            var otherCheckbox = document.querySelector('input[name="setup_goals"][value="other"]');
+            if (!otherField || !otherCheckbox) {
+                return;
+            }
+            otherField.classList.toggle("hidden", !otherCheckbox.checked);
+        };
+        window.initOnboardingSetupGoals();
+        document.body.addEventListener("htmx:afterSettle", window.initOnboardingSetupGoals);
+
+        window.initOnboardingOperatingHours = function () {
+            var operatingHoursInput = document.getElementById("operating_hours");
+            var customHours = document.getElementById("custom-operating-hours");
+            if (!operatingHoursInput || !customHours) {
+                return;
+            }
+            customHours.classList.toggle("hidden", operatingHoursInput.value !== "custom");
+        };
+        window.initOnboardingOperatingHours();
+        document.body.addEventListener("htmx:afterSettle", window.initOnboardingOperatingHours);
     });
 </script>
 {% endblock %}
