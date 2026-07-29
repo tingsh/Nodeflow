@@ -1,7 +1,9 @@
 import ipaddress
 import json
 import re
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.core.serializers.json import DjangoJSONEncoder
@@ -55,6 +57,30 @@ def _bounded_float(value, default, minimum, maximum):
     return min(maximum, max(minimum, parsed))
 
 
+def _is_valid_timezone_name(value):
+    if not value:
+        return False
+    try:
+        ZoneInfo(value)
+    except ZoneInfoNotFoundError:
+        return False
+    return True
+
+
+def _resolve_onboarding_timezone(request, site=None):
+    candidates = (
+        request.POST.get("timezone", "").strip(),
+        getattr(site, "timezone", ""),
+        getattr(request.user, "timezone", ""),
+        getattr(settings, "TIME_ZONE", ""),
+        "UTC",
+    )
+    for candidate in candidates:
+        if _is_valid_timezone_name(candidate):
+            return candidate
+    return "UTC"
+
+
 @require_permission("manage_devices")
 def onboarding_start(request, team_slug):
     if Site.objects.filter(team=request.team).exists():
@@ -93,7 +119,7 @@ def step_1_site(request, team_slug):
     if request.method == "POST":
         name = request.POST.get("name")
         address = request.POST.get("address", "")
-        timezone = request.POST.get("timezone", "Asia/Singapore")
+        timezone = _resolve_onboarding_timezone(request, site)
         site_type = request.POST.get("site_type", "")
         solution_profile = request.POST.get("solution_profile") or request.session.get(
             "solution_profile", "general_iot"

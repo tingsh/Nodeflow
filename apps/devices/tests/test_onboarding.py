@@ -419,7 +419,55 @@ class SolutionProfileOnboardingTest(TestCase):
         site = Site.objects.get(team=self.team, name="Boutique Hotel")
         self.assertEqual(site.solution_profile, "facilities_hvac")
         self.assertEqual(site.site_type, "small_hotel")
+        self.assertEqual(site.timezone, "Asia/Singapore")
         self.assertRedirects(response, reverse("web_team:onboarding:step_2_gateway", args=[self.team.slug]))
+
+    def test_site_step_hides_manual_timezone_selector(self):
+        site_url = reverse("web_team:onboarding:step_1_site", args=[self.team.slug])
+
+        response = self.client.get(site_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, '<label for="timezone"')
+        self.assertNotContains(response, "<select name=\"timezone\"")
+        self.assertContains(response, '<input type="hidden" name="timezone" id="timezone"')
+        self.assertContains(response, "Intl.DateTimeFormat().resolvedOptions().timeZone")
+
+    def test_site_step_uses_browser_timezone_when_posted(self):
+        site_url = reverse("web_team:onboarding:step_1_site", args=[self.team.slug])
+
+        self.client.post(
+            site_url,
+            {
+                "name": "Jakarta Warehouse",
+                "address": "Cakung",
+                "timezone": "Asia/Jakarta",
+                "site_type": "warehouse",
+                "solution_profile": "general_iot",
+            },
+        )
+
+        site = Site.objects.get(team=self.team, name="Jakarta Warehouse")
+        self.assertEqual(site.timezone, "Asia/Jakarta")
+
+    def test_site_step_rejects_invalid_browser_timezone(self):
+        self.user.timezone = "Asia/Kuala_Lumpur"
+        self.user.save(update_fields=["timezone"])
+        site_url = reverse("web_team:onboarding:step_1_site", args=[self.team.slug])
+
+        self.client.post(
+            site_url,
+            {
+                "name": "Fallback Facility",
+                "address": "KL",
+                "timezone": "Not/A_Timezone",
+                "site_type": "warehouse",
+                "solution_profile": "general_iot",
+            },
+        )
+
+        site = Site.objects.get(team=self.team, name="Fallback Facility")
+        self.assertEqual(site.timezone, "Asia/Kuala_Lumpur")
 
     def test_template_ranking_prioritizes_selected_profile(self):
         hvac = DeviceTemplate.objects.create(
