@@ -2,6 +2,7 @@ import base64
 import json
 from unittest.mock import patch
 
+from django.contrib.messages import get_messages
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
@@ -445,7 +446,7 @@ class SolutionProfileOnboardingTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, '<label for="timezone"')
-        self.assertNotContains(response, "<select name=\"timezone\"")
+        self.assertNotContains(response, '<select name="timezone"')
         self.assertContains(response, '<input type="hidden" name="timezone" id="timezone"')
         self.assertContains(response, "Intl.DateTimeFormat().resolvedOptions().timeZone")
 
@@ -458,7 +459,7 @@ class SolutionProfileOnboardingTest(TestCase):
         self.assertNotContains(response, 'name="site_type"')
         self.assertNotContains(response, "Site Type")
         self.assertNotContains(response, 'name="setup_goal"')
-        self.assertNotContains(response, "<select name=\"setup_goal\"")
+        self.assertNotContains(response, '<select name="setup_goal"')
         self.assertContains(response, "What do you want Novena to help with first?")
         self.assertContains(response, 'name="setup_goals"')
         self.assertContains(response, "Monitor equipment health")
@@ -466,7 +467,7 @@ class SolutionProfileOnboardingTest(TestCase):
         self.assertContains(response, "Get alerts for abnormal readings")
         self.assertContains(response, "Prepare reports / audit trail")
         self.assertContains(response, "Other")
-        self.assertContains(response, 'id="setup-goal-other"')
+        self.assertContains(response, 'id="setup-goal-other" class="mt-4" hidden')
         self.assertContains(response, 'name="setup_goal_other"')
         self.assertContains(response, "Tell us what else you want to use Novena for")
         self.assertContains(response, "initOnboardingSetupGoals")
@@ -541,6 +542,63 @@ class SolutionProfileOnboardingTest(TestCase):
         site = Site.objects.get(team=self.team, name="Invalid Context Site")
         self.assertEqual(site.site_type, "")
         self.assertEqual(site.metadata, {})
+
+    def test_connectivity_step_marks_direct_cloud_as_coming_soon(self):
+        connectivity_url = reverse("web_team:onboarding:step_connectivity", args=[self.team.slug])
+
+        response = self.client.get(connectivity_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Novena Gateway")
+        self.assertContains(response, 'name="connectivity" value="gateway"')
+        self.assertContains(response, "Direct cloud connection")
+        self.assertContains(response, "Coming soon")
+        self.assertContains(response, "Direct cloud onboarding is planned")
+        self.assertContains(response, 'name="connectivity" value="direct" class="hidden" disabled')
+        self.assertNotContains(response, "For modern equipment that can send readings securely")
+
+    def test_connectivity_step_rejects_direct_cloud_post(self):
+        connectivity_url = reverse("web_team:onboarding:step_connectivity", args=[self.team.slug])
+
+        response = self.client.post(connectivity_url, {"connectivity": "direct"})
+
+        self.assertRedirects(response, connectivity_url)
+        self.assertNotEqual(self.client.session.get("connectivity_type"), "direct")
+        messages = [str(message) for message in get_messages(response.wsgi_request)]
+        self.assertIn(
+            "Direct cloud onboarding is coming soon. Please use Novena Gateway setup for now.",
+            messages,
+        )
+
+    def test_connectivity_step_accepts_gateway_post(self):
+        connectivity_url = reverse("web_team:onboarding:step_connectivity", args=[self.team.slug])
+        gateway_url = reverse("web_team:onboarding:step_2_gateway", args=[self.team.slug])
+
+        response = self.client.post(connectivity_url, {"connectivity": "gateway"})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], gateway_url)
+        self.assertEqual(self.client.session["connectivity_type"], "gateway")
+
+    def test_gateway_pairing_page_removes_static_progress_chips(self):
+        site = Site.objects.create(team=self.team, name="Pairing Site")
+        session = self.client.session
+        session["onboarding_site_id"] = site.id
+        session.save()
+        gateway_url = reverse("web_team:onboarding:step_2_gateway", args=[self.team.slug])
+
+        response = self.client.get(gateway_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Gateway found")
+        self.assertNotContains(response, "Securing")
+        self.assertNotContains(response, "Ready to scan")
+        self.assertContains(response, "Securely connect your edge gateway")
+        self.assertContains(response, "Find the sticker")
+        self.assertContains(response, "Gateway Name")
+        self.assertContains(response, "Serial Number")
+        self.assertContains(response, "Claim Code")
+        self.assertContains(response, "Pair Gateway")
 
     def test_template_ranking_prioritizes_selected_profile(self):
         hvac = DeviceTemplate.objects.create(
