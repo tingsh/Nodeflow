@@ -53,3 +53,11 @@ DJANGO_SETTINGS_MODULE=novena_hub.settings /home/shouheng/.venvs/novena/bin/pyth
 - Production target remains MQTT over TLS on 8883.
 - Keep browser stream status separate from gateway/device health.
 - If Windows networking, Redis, or process-launch quirks appear, prefer documenting them as local caveats instead of designing production behavior around them.
+
+## GitHub PR Workflow
+
+Use local `git` for working-tree operations: branch creation, status, diff review, staging, and commits.
+
+Use the connected GitHub plugin for PR-related operations whenever tools are available: PR creation, PR metadata, CI/check status, review comments, marking a PR ready, merge actions, and issue/PR summaries. Use `gh` only as a fallback when the plugin cannot perform the needed operation.
+
+The local machine may have GitHub CLI credentials configured for this repository. It is acceptable to use the stored credential through `gh` or normal Git credential helpers when the user has approved that workflow, but do not print tokens, embed tokens in remote URLs, or document token values in repo files. Prefer SSH or the normal credential helper for `git push`; if push authentication is not configured, pause and explain the setup instead of using a token-in-command workaround.
