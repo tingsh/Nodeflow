@@ -58,13 +58,16 @@ def get_user_signups(start: datetime.date | None = None, end: datetime.date | No
 
 
 def _register_items(device, include_writable_display=False):
-    if not device.template or not device.template.register_map:
+    from apps.devices.datapoint_maps import effective_register_map
+
+    register_map = effective_register_map(device)
+    if not register_map:
         return []
     from apps.devices.solution_profiles import profile_key_order
 
     profile_priority = profile_key_order(device.site)
     items = []
-    for key, config in device.template.register_map.items():
+    for key, config in register_map.items():
         if not isinstance(config, dict):
             continue
         writable = bool(config.get("writable"))
@@ -73,6 +76,7 @@ def _register_items(device, include_writable_display=False):
             writable
             and not include_writable_display
             and not config.get("display")
+            and not config.get("display_type")
             and role not in {"primary", "trend", "health", "secondary"}
         ):
             continue
@@ -169,7 +173,18 @@ def _widget_definition(device, key, config):
     height = 3
     widget_config = {}
 
-    if role == "trend" or key_lower in WIDGET_TREND_KEYS:
+    explicit_display = config.get("display_type")
+    if explicit_display == "trend":
+        widget_type = "timeseries"
+        width = 6
+        height = 4
+    elif explicit_display == "status":
+        widget_type = "indicator"
+    elif explicit_display == "gauge":
+        widget_type = "gauge"
+    elif explicit_display == "value":
+        widget_type = "value"
+    elif role == "trend" or key_lower in WIDGET_TREND_KEYS:
         widget_type = "timeseries"
         width = 6
         height = 4
@@ -205,7 +220,7 @@ def _widget_definition(device, key, config):
 
 def generate_default_dashboard(device):
     """Generate a default dashboard from DeviceTemplate register-map hints."""
-    if not device.template or not device.template.register_map:
+    if not _register_items(device):
         return None
 
     dashboard, created = Dashboard.objects.get_or_create(
@@ -530,5 +545,5 @@ def build_device_dashboard_context(device):
         "widgets": widgets,
         "readable_registers": readable_registers,
         "writable_registers": writable_registers,
-        "has_template": bool(device.template and device.template.register_map),
+        "has_template": bool(_register_items(device)),
     }

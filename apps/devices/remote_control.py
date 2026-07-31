@@ -260,7 +260,9 @@ def _normalize_value(value):
 
 
 def resolve_device_params(device: Device, command_key: str, operation: str, value=None) -> tuple[dict, dict]:
-    register_map = device.template.register_map if device.template and device.template.register_map else {}
+    from .datapoint_maps import device_requires_mapping, effective_register_map
+
+    register_map = effective_register_map(device)
     register = register_map.get(command_key)
     if not isinstance(register, dict) or "address" not in register:
         raise CommandDenied(
@@ -269,6 +271,11 @@ def resolve_device_params(device: Device, command_key: str, operation: str, valu
         )
 
     is_write = operation == "write_device"
+    if is_write and device_requires_mapping(device):
+        raise CommandDenied(
+            "Customer-defined writable signals require Novena governed control commissioning.",
+            code="site_defined_control_not_commissioned",
+        )
     if is_write and not register.get("writable"):
         raise CommandDenied(f"'{command_key}' is not configured as writable.", code="key_not_writable")
     if is_write and not device.template.is_verified:

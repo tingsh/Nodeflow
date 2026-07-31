@@ -5,6 +5,7 @@ from django.http import JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
+from apps.devices.datapoint_maps import effective_register_map
 from apps.devices.models import Device
 from apps.teams.decorators import login_and_team_required
 from apps.telemetry.models import TelemetryData
@@ -119,8 +120,9 @@ def export_telemetry_csv(request, team_slug, device_id):
     queryset = TelemetryData.objects.filter(device=device, timestamp__gte=start_time).order_by("-timestamp")
 
     metric_meta = {}
-    if device.template and device.template.register_map:
-        for key, config in device.template.register_map.items():
+    register_map = effective_register_map(device)
+    if register_map:
+        for key, config in register_map.items():
             if not isinstance(config, dict) or config.get("writable"):
                 continue
             metric_meta[key] = {

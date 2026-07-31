@@ -230,9 +230,9 @@ def _normalize_command_value(value):
 
 
 def _register_params_from_template(device, key, command_type, value):
-    register = None
-    if device.template and device.template.register_map:
-        register = device.template.register_map.get(key)
+    from .datapoint_maps import effective_register_map
+
+    register = effective_register_map(device).get(key)
 
     if not register or "address" not in register:
         raise ValueError(f"No mapped register entry found for '{key}'.")

@@ -50,6 +50,7 @@ urlpatterns = [
     path("", views.DeviceListView.as_view(), name="device_list"),
     path("create/", views.DeviceCreateView.as_view(), name="device_create"),
     path("<int:pk>/", views.DeviceDetailView.as_view(), name="device_detail"),
+    path("<int:pk>/signals/", views.device_datapoint_mapping, name="device_datapoint_mapping"),
     path("<int:pk>/edit/", views.DeviceUpdateView.as_view(), name="device_edit"),
     path("<int:pk>/delete/", views.DeviceDeleteView.as_view(), name="device_delete"),
     # HTMX endpoints

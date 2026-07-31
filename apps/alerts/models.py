@@ -67,7 +67,9 @@ class AlertRule(BaseTeamModel):
 
     @property
     def metric_config(self):
-        register_map = getattr(getattr(self.device, "template", None), "register_map", None) or {}
+        from apps.devices.datapoint_maps import effective_register_map
+
+        register_map = effective_register_map(self.device) if self.device else {}
         config = register_map.get(self.telemetry_key, {})
         return config if isinstance(config, dict) else {}
 

@@ -12,6 +12,12 @@ from django.utils import timezone
 from apps.dashboard.services import generate_default_dashboard
 
 from .config_generator import normalized_datapoints
+from .datapoint_maps import (
+    datapoints_for_device,
+    device_requires_mapping,
+    mapping_checksum,
+    record_device_datapoint_validation,
+)
 from .models import (
     DeploymentSetupEvent,
     DeploymentSetupItem,
@@ -299,14 +305,25 @@ def create_or_update_candidate_item(*, run, index: int, candidate: dict) -> Depl
     return item
 
 
-def start_validation(*, item: DeploymentSetupItem, template, requested_by):
+def start_validation(*, item: DeploymentSetupItem, template, requested_by, connection_only=False):
     from .remote_control import request_remote_command
 
     item.selected_template = template
     item.trust_level = trust_level_for_template(template)
-    item.datapoints = normalized_datapoints(template, team=item.run.team)
+    item.datapoints = (
+        datapoints_for_device(item.device, require_confirmed=False)
+        if item.device and device_requires_mapping(item.device)
+        else normalized_datapoints(template, team=item.run.team)
+    )
+    if not item.datapoints and not connection_only:
+        raise ValueError("Add at least one signal before running live validation.")
     item.state = DeploymentSetupItem.State.VALIDATING
+    item.validation_result = {"mode": "connection" if connection_only else "datapoints", "status": "pending"}
     item.save()
+    if item.device and device_requires_mapping(item.device) and not connection_only:
+        mapping = item.device.datapoint_map
+        mapping.status = mapping.Status.TESTING
+        mapping.save(update_fields=["status", "updated_at"])
     command = request_remote_command(
         gateway=item.run.gateway,
         operation="deployment_validate",
@@ -314,20 +331,25 @@ def start_validation(*, item: DeploymentSetupItem, template, requested_by):
         params={
             "protocol": template.protocol,
             "connection": item.connection,
+            "connection_only": connection_only,
+            "mapping_checksum": mapping_checksum(item.device, item.datapoints) if item.device else "",
             "datapoints": [
                 {
                     "key": point["key"],
                     "address": point["address"],
-                    "functionCode": point["functionCode"],
-                    "objectsCount": point["objectsCount"],
+                    "functionCode": point.get("read_function_code", point.get("functionCode", 3)),
+                    "objectsCount": point.get("objects_count", point.get("objectsCount", 1)),
                     "data_type": point["data_type"],
-                    "scale": point["scale"],
+                    "scale": point.get("multiplier", point.get("scale", 1)),
                     "offset": point["offset"],
                     "unit": point["unit"],
-                    "quality": point["quality"],
+                    "quality": {
+                        "min": point.get("safety_min"),
+                        "max": point.get("safety_max"),
+                    },
                 }
                 for point in item.datapoints
-                if point["access"] == "read"
+                if point.get("access") in {"read", "read_only", "read_write"}
             ][:20],
         },
         reason="Validate equipment during Guided Setup",
@@ -341,7 +363,11 @@ def start_validation(*, item: DeploymentSetupItem, template, requested_by):
         f"Checking live signals for {template.name}.",
         item=item,
         actor=requested_by,
-        evidence={"command_id": str(command.pk), "template_id": template.pk},
+        evidence={
+            "command_id": str(command.pk),
+            "template_id": template.pk,
+            "connection_only": connection_only,
+        },
     )
     return command
 
@@ -406,6 +432,7 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
             rpc = RpcCommand.objects.filter(remote_command=item.validation_command).order_by("-sent_at").first()
             if rpc and rpc.status in {"success", "error", "timeout"}:
                 result = rpc.result or {}
+                requested_connection_only = item.validation_result.get("mode") == "connection"
                 item.validation_result = {
                     **result,
                     "transport_status": rpc.status,
@@ -417,16 +444,26 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
                     else result.get("error", ""),
                     "technical_error": rpc.error_message,
                 }
-                if rpc.status == "success" and result.get("status") == "success":
-                    item.state = DeploymentSetupItem.State.VALIDATED
-                    item.trust_level = (
-                        DeploymentSetupItem.Trust.NOVENA_VERIFIED
-                        if item.selected_template and item.selected_template.is_verified
-                        else DeploymentSetupItem.Trust.CUSTOMER_VALIDATED
-                    )
+                connection_only = requested_connection_only or result.get("mode") == "connection"
+                if rpc.status == "success" and result.get("status") == "success" and connection_only:
+                    item.state = DeploymentSetupItem.State.TEMPLATE_SELECTED
+                    message = result.get("message") or "The Gateway reached the equipment connection endpoint."
+                    event_type = "connection_test_succeeded"
+                elif rpc.status == "success" and result.get("status") == "success":
+                    if item.device and device_requires_mapping(item.device):
+                        record_device_datapoint_validation(device=item.device, result=item.validation_result)
+                        item.state = DeploymentSetupItem.State.AWAITING_CONFIRMATION
+                        item.trust_level = DeploymentSetupItem.Trust.UNVALIDATED
+                    else:
+                        item.state = DeploymentSetupItem.State.VALIDATED
+                        item.trust_level = (
+                            DeploymentSetupItem.Trust.NOVENA_VERIFIED
+                            if item.selected_template and item.selected_template.is_verified
+                            else DeploymentSetupItem.Trust.CUSTOMER_VALIDATED
+                        )
                     message = result.get("message") or "Selected live signals were read successfully."
                     event_type = "validation_succeeded"
-                    if item.device:
+                    if item.device and not device_requires_mapping(item.device):
                         metadata = dict(item.device.metadata or {})
                         metadata["guided_setup_validation"] = "validated"
                         item.device.metadata = metadata
@@ -437,7 +474,9 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
                         result.get("message") or rpc.error_message or "Novena could not validate the selected signals."
                     )
                     event_type = "validation_failed"
-                    if item.device:
+                    if item.device and device_requires_mapping(item.device) and not connection_only:
+                        record_device_datapoint_validation(device=item.device, result=item.validation_result)
+                    if item.device and not device_requires_mapping(item.device):
                         metadata = dict(item.device.metadata or {})
                         metadata["guided_setup_validation"] = "failed"
                         item.device.metadata = metadata

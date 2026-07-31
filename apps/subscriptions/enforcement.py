@@ -91,7 +91,12 @@ def get_effective_polling_interval_seconds(device):
         template_interval = float(template_interval or 5)
     except (TypeError, ValueError):
         template_interval = 5.0
-    return max(1.0, template_interval, float(get_latency_limit_for_team(device.team)))
+    requested_interval = (getattr(device, "connection_config", None) or {}).get("requested_polling_interval")
+    try:
+        requested_interval = float(requested_interval or template_interval)
+    except (TypeError, ValueError):
+        requested_interval = template_interval
+    return max(1.0, requested_interval, float(get_latency_limit_for_team(device.team)))
 
 
 def get_retention_limit_days_for_team(team):
