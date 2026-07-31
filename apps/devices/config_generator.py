@@ -247,9 +247,7 @@ def human_config_preview(gateway):
                 "target": device.port or "",
                 "slave_id": (device.connection_config or {}).get("slave_id"),
                 "polling_interval": (get_effective_polling_interval_seconds(device) if device.template else None),
-                "telemetry_keys": [
-                    datapoint["key"] for datapoint in normalized_device_datapoints(device)
-                ]
+                "telemetry_keys": [datapoint["key"] for datapoint in normalized_device_datapoints(device)]
                 if device.template
                 else [],
             }

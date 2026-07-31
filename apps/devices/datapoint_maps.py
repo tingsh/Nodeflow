@@ -146,8 +146,10 @@ def register_map_to_datapoints(register_map) -> list[dict]:
         legacy_function_code = config.get("functionCode", 3)
         read_function_code = config.get("readFunctionCode")
         if read_function_code is None:
-            read_function_code = legacy_function_code if legacy_function_code in READ_FUNCTION_CODES else (
-                1 if config.get("type") == "bool" else 3
+            read_function_code = (
+                legacy_function_code
+                if legacy_function_code in READ_FUNCTION_CODES
+                else (1 if config.get("type") == "bool" else 3)
             )
         write_function_code = config.get("writeFunctionCode")
         if write_function_code is None and legacy_function_code in WRITE_FUNCTION_CODES:
@@ -281,8 +283,10 @@ def record_device_datapoint_validation(*, device, result) -> DeviceDatapointMap:
     mapping.last_validation = result if isinstance(result, dict) else {}
     mapping.last_tested_at = timezone.now()
     signals = mapping.last_validation.get("signals") or []
-    successful = bool(signals) and len(signals) == len(mapping.datapoints) and all(
-        signal.get("status") == "success" for signal in signals
+    successful = (
+        bool(signals)
+        and len(signals) == len(mapping.datapoints)
+        and all(signal.get("status") == "success" for signal in signals)
     )
     current_checksum = mapping_checksum(device, mapping.datapoints)
     tested_checksum = str(mapping.last_validation.get("mapping_checksum") or "")

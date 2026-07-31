@@ -348,9 +348,7 @@ class OnboardingConnectionTest(TestCase):
         self.assertEqual(mapping.status, DeviceDatapointMap.Status.DRAFT)
         self.assertEqual(mapping.datapoints, [])
 
-        page = self.client.get(
-            reverse("web_team:devices:device_datapoint_mapping", args=[self.team.slug, device.pk])
-        )
+        page = self.client.get(reverse("web_team:devices:device_datapoint_mapping", args=[self.team.slug, device.pk]))
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, "Map Line PLC")
         self.assertContains(page, "Validate readings")

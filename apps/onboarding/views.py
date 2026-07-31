@@ -610,9 +610,7 @@ def step_3_discover(request, team_slug):
                         item.selected_template = template
                         item.datapoints = mapping.datapoints
                         item.state = DeploymentSetupItem.State.TEMPLATE_SELECTED
-                        item.save(
-                            update_fields=["selected_template", "datapoints", "state", "updated_at"]
-                        )
+                        item.save(update_fields=["selected_template", "datapoints", "state", "updated_at"])
                         request.session["onboarding_device_id"] = device.pk
                         messages.info(
                             request,
