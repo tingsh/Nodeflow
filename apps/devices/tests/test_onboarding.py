@@ -7,7 +7,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from apps.alerts.models import AlertRule
-from apps.devices.models import Device, DeviceTemplate, Gateway, GatewayConfig, Site
+from apps.devices.models import Device, DeviceDatapointMap, DeviceTemplate, Gateway, GatewayConfig, Site
 from apps.devices.solution_profiles import apply_solution_profile_presets, rank_templates_for_profile
 from apps.maintenance.models import PreventiveSchedule
 from apps.teams.models import Membership, Team
@@ -312,6 +312,47 @@ class OnboardingConnectionTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Device.objects.filter(name="Forged Form Device").exists())
 
+    def test_device_create_routes_site_defined_equipment_to_draft_mapping(self):
+        starter = DeviceTemplate.objects.create(
+            name="Siemens S7-1200 Starter",
+            manufacturer="Siemens",
+            model_number="S7-1200",
+            device_type="plc",
+            protocol="modbus_tcp",
+            mapping_strategy="site_defined",
+            register_map={},
+        )
+        url = reverse("web_team:devices:device_create", args=[self.team.slug])
+
+        response = self.client.post(
+            url,
+            {
+                "gateway": self.gateway.id,
+                "site": self.site.id,
+                "template": starter.id,
+                "name": "Line PLC",
+                "device_type": "plc",
+                "protocol": "modbus_tcp",
+                "energy_category": "none",
+                "connection_config": '{"host": "192.168.1.50", "port": 502}',
+            },
+        )
+
+        device = Device.objects.get(team=self.team, name="Line PLC")
+        mapping = DeviceDatapointMap.objects.get(team=self.team, device=device)
+        self.assertRedirects(
+            response,
+            reverse("web_team:devices:device_datapoint_mapping", args=[self.team.slug, device.pk]),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(mapping.status, DeviceDatapointMap.Status.DRAFT)
+        self.assertEqual(mapping.datapoints, [])
+
+        page = self.client.get(reverse("web_team:devices:device_datapoint_mapping", args=[self.team.slug, device.pk]))
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Map Line PLC")
+        self.assertContains(page, "Validate readings")
+
     def test_device_create_form_rejects_other_team_private_template(self):
         victim_team, _, _ = self._victim_infrastructure()
         private_template = DeviceTemplate.objects.create(
@@ -340,6 +381,35 @@ class OnboardingConnectionTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Device.objects.filter(name="Private Form Attack").exists())
+
+    def test_datapoint_mapping_page_is_team_scoped(self):
+        victim_team, victim_site, victim_gateway = self._victim_infrastructure()
+        starter = DeviceTemplate.objects.create(
+            name="Global PLC Starter",
+            device_type="plc",
+            protocol="modbus_tcp",
+            mapping_strategy="site_defined",
+            register_map={},
+        )
+        victim_device = Device.objects.create(
+            team=victim_team,
+            site=victim_site,
+            gateway=victim_gateway,
+            template=starter,
+            name="Victim PLC",
+            device_type="plc",
+            protocol="modbus_tcp",
+        )
+
+        response = self.client.get(
+            reverse(
+                "web_team:devices:device_datapoint_mapping",
+                args=[self.team.slug, victim_device.pk],
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(DeviceDatapointMap.objects.filter(device=victim_device).exists())
 
     def test_gateway_update_form_rejects_other_team_site(self):
         _, victim_site, _ = self._victim_infrastructure()

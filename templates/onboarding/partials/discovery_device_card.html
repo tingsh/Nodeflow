@@ -30,7 +30,7 @@
                         <option value="">Choose a template</option>
                         {% for tpl in templates %}
                         <option value="{{ tpl.id }}" {% if candidate.matched_template and candidate.matched_template.id == tpl.id %}selected{% endif %}>
-                            {{ tpl.name }}{% if tpl.manufacturer %} · {{ tpl.manufacturer }}{% endif %}{% if tpl.is_verified %} · Novena verified{% elif tpl.source == "ai_generated" %} · AI draft{% else %} · Unvalidated{% endif %}
+                            {{ tpl.name }}{% if tpl.manufacturer %} · {{ tpl.manufacturer }}{% endif %}{% if tpl.mapping_strategy == "site_defined" %} · Signal mapping required{% elif tpl.is_verified %} · Novena verified{% elif tpl.source == "ai_generated" %} · AI draft{% else %} · Unvalidated{% endif %}
                         </option>
                         {% endfor %}
                     </select>

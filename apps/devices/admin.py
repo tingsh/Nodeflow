@@ -5,6 +5,7 @@ from .models import (
     DeploymentSetupItem,
     DeploymentSetupRun,
     Device,
+    DeviceDatapointMap,
     DeviceTemplate,
     EquipmentTemplateRequest,
     FirmwareRelease,
@@ -155,6 +156,13 @@ class DeploymentSetupRunAdmin(admin.ModelAdmin):
 class DeploymentSetupItemAdmin(admin.ModelAdmin):
     list_display = ("run", "device", "selected_template", "confidence_score", "trust_level", "state")
     list_filter = ("state", "trust_level")
+
+
+@admin.register(DeviceDatapointMap)
+class DeviceDatapointMapAdmin(admin.ModelAdmin):
+    list_display = ("device", "team", "status", "last_tested_at", "confirmed_at")
+    list_filter = ("status", "team")
+    readonly_fields = ("tested_checksum", "confirmed_checksum", "last_validation")
 
 
 @admin.register(DeploymentSetupEvent)

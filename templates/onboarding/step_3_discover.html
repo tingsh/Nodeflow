@@ -89,15 +89,18 @@
                         {% if item.validation_result.message %}<p class="mt-2 text-sm text-base-content/70">{{ item.validation_result.message }}</p>{% endif %}
                         {% if item.validation_result.error %}<p class="mt-2 text-sm text-error">{{ item.validation_result.error }}</p>{% endif %}
                     </div>
-                    <span class="badge {% if item.state == 'validated' or item.state == 'telemetry_confirmed' %}badge-success{% elif item.state == 'needs_attention' or item.state == 'failed' %}badge-warning{% else %}badge-ghost{% endif %}">
+                    <div class="flex items-center gap-2">
+                    {% if item.device.template.mapping_strategy == "site_defined" %}<a class="btn btn-ghost btn-xs" href="{% url 'web_team:devices:device_datapoint_mapping' request.team.slug item.device.pk %}">Edit signals</a>{% endif %}
+                    <span class="badge {% if item.state == 'validated' or item.state == 'telemetry_confirmed' %}badge-success{% elif item.state == 'needs_attention' or item.state == 'failed' or item.state == 'awaiting_confirmation' %}badge-warning{% else %}badge-ghost{% endif %}">
                         {{ item.get_state_display }}
                     </span>
+                    </div>
                 </div>
                 {% if item.validation_result.signals %}
                 <div class="mt-3 flex flex-wrap gap-2">
                     {% for signal in item.validation_result.signals %}
                     <span class="badge badge-sm {% if signal.status == 'success' %}badge-success{% else %}badge-error{% endif %}">
-                        {{ signal.key|title }}
+                        {{ signal.key|title }}{% if signal.status == 'success' %}: {{ signal.value }} {{ signal.unit }}{% endif %}
                     </span>
                     {% endfor %}
                 </div>

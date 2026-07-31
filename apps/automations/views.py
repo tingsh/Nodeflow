@@ -6,6 +6,7 @@ from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
+from apps.devices.datapoint_maps import effective_register_map
 from apps.devices.models import Device
 from apps.teams.mixins import PermissionRequiredMixin
 
@@ -80,18 +81,14 @@ class AutomationCreateView(PermissionRequiredMixin, CreateView):
         # Prepare devices data for the step-by-step logic builder
         devices_data = {}
         for device in Device.objects.filter(team=self.request.team).select_related("template"):
-            keys = []
-            if device.template and isinstance(device.template.register_map, dict):
-                keys = list(device.template.register_map.keys())
-            if not keys:
+            register_map = effective_register_map(device)
+            keys = list(register_map.keys())
+            site_defined = getattr(device.template, "mapping_strategy", "fixed") == "site_defined"
+            if not keys and not site_defined:
                 keys = ["temp", "humidity", "pressure", "voltage", "current", "status"]
 
-            writable_keys = []
-            if device.template and isinstance(device.template.register_map, dict):
-                writable_keys = [
-                    k for k, v in device.template.register_map.items() if isinstance(v, dict) and v.get("writable")
-                ]
-            if not writable_keys:
+            writable_keys = [k for k, v in register_map.items() if isinstance(v, dict) and v.get("writable")]
+            if not writable_keys and not site_defined:
                 writable_keys = ["turn_on", "turn_off", "set_speed", "reset"]
 
             devices_data[str(device.id)] = {
@@ -152,18 +149,14 @@ class AutomationUpdateView(PermissionRequiredMixin, UpdateView):
         # Prepare devices data for the step-by-step logic builder
         devices_data = {}
         for device in Device.objects.filter(team=self.request.team).select_related("template"):
-            keys = []
-            if device.template and isinstance(device.template.register_map, dict):
-                keys = list(device.template.register_map.keys())
-            if not keys:
+            register_map = effective_register_map(device)
+            keys = list(register_map.keys())
+            site_defined = getattr(device.template, "mapping_strategy", "fixed") == "site_defined"
+            if not keys and not site_defined:
                 keys = ["temp", "humidity", "pressure", "voltage", "current", "status"]
 
-            writable_keys = []
-            if device.template and isinstance(device.template.register_map, dict):
-                writable_keys = [
-                    k for k, v in device.template.register_map.items() if isinstance(v, dict) and v.get("writable")
-                ]
-            if not writable_keys:
+            writable_keys = [k for k, v in register_map.items() if isinstance(v, dict) and v.get("writable")]
+            if not writable_keys and not site_defined:
                 writable_keys = ["turn_on", "turn_off", "set_speed", "reset"]
 
             devices_data[str(device.id)] = {

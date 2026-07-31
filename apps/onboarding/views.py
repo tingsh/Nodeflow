@@ -603,6 +603,24 @@ def step_3_discover(request, team_slug):
                     item.device = device
                     item.connection = connection
                     item.save(update_fields=["device", "connection", "updated_at"])
+                    if template.mapping_strategy == "site_defined":
+                        from apps.devices.datapoint_maps import ensure_device_datapoint_map
+
+                        mapping = ensure_device_datapoint_map(device)
+                        item.selected_template = template
+                        item.datapoints = mapping.datapoints
+                        item.state = DeploymentSetupItem.State.TEMPLATE_SELECTED
+                        item.save(update_fields=["selected_template", "datapoints", "state", "updated_at"])
+                        request.session["onboarding_device_id"] = device.pk
+                        messages.info(
+                            request,
+                            "This programmable device needs a site-specific signal map before deployment.",
+                        )
+                        return redirect(
+                            "web_team:devices:device_datapoint_mapping",
+                            team_slug=team_slug,
+                            pk=device.pk,
+                        )
                     if guided_capable:
                         start_validation(item=item, template=template, requested_by=request.user)
                     else:
@@ -737,7 +755,8 @@ def step_3_discover(request, team_slug):
                 model_number=model_number,
                 device_type=device_type,
                 protocol=protocol,
-                register_map=register_map,
+                mapping_strategy="site_defined",
+                register_map={},
                 source="user_created",
                 created_by_team=request.team,
                 is_verified=False,
@@ -765,22 +784,23 @@ def step_3_discover(request, team_slug):
                 confidence_score=0,
                 confidence_explanation="Configured manually by the customer.",
             )
-            try:
-                start_validation(item=item, template=template, requested_by=request.user)
-                request.session["onboarding_device_id"] = device.pk
-                messages.info(request, "Manual setup saved as a private draft. Novena is checking the live signals.")
-            except Exception as exc:
-                from apps.devices.deployment_setup import customer_safe_error
+            from apps.devices.datapoint_maps import register_map_to_datapoints, save_device_datapoint_map
 
-                item.state = DeploymentSetupItem.State.NEEDS_ATTENTION
-                item.validation_result = {
-                    "error": customer_safe_error(str(exc), target=port_key),
-                    "technical_error": str(exc),
-                    "retryable": True,
-                }
-                item.save(update_fields=["state", "validation_result", "updated_at"])
-                messages.error(request, item.validation_result["error"])
-            return redirect("web_team:onboarding:step_3_discover", team_slug=team_slug)
+            mapping = save_device_datapoint_map(
+                device=device,
+                team=request.team,
+                datapoints=register_map_to_datapoints(register_map),
+            )
+            item.datapoints = mapping.datapoints
+            item.state = DeploymentSetupItem.State.TEMPLATE_SELECTED
+            item.save(update_fields=["datapoints", "state", "updated_at"])
+            request.session["onboarding_device_id"] = device.pk
+            messages.info(request, "Manual setup saved as a private draft. Validate the live readings next.")
+            return redirect(
+                "web_team:devices:device_datapoint_mapping",
+                team_slug=team_slug,
+                pk=device.pk,
+            )
 
         if action == "request_template":
             documentation_file = request.FILES.get("documentation_file")

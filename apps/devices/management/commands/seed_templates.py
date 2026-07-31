@@ -341,6 +341,7 @@ class Command(BaseCommand):
                     "model_number": t_data["model_number"],
                     "device_type": t_data["device_type"],
                     "protocol": t_data["protocol"],
+                    "mapping_strategy": "site_defined" if t_data["device_type"] == "plc" else "fixed",
                     "category": t_data["category"],
                     "register_map": t_data["register_map"],
                     "alert_presets": t_data.get("alert_presets", []),

@@ -5,6 +5,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from waffle import flag_is_active
 
+from apps.devices.datapoint_maps import effective_register_map
 from apps.devices.models import Device, Site
 from apps.devices.solution_profiles import get_site_profile
 from apps.utils.timezones import format_site_datetime, site_timezone_metadata
@@ -41,8 +42,9 @@ def _device_telemetry_columns(device):
     columns = []
     seen = set()
 
-    if device.template and device.template.register_map:
-        for key, config in device.template.register_map.items():
+    register_map = effective_register_map(device)
+    if register_map:
+        for key, config in register_map.items():
             if not isinstance(config, dict) or config.get("writable"):
                 continue
             columns.append(
@@ -117,8 +119,9 @@ def device_metrics_api(request, team_slug, device_id):
     device = get_object_or_404(Device, id=device_id, team__slug=team_slug)
 
     metrics = []
-    if device.template and device.template.register_map:
-        for key, val in device.template.register_map.items():
+    register_map = effective_register_map(device)
+    if register_map:
+        for key, val in register_map.items():
             if isinstance(val, dict) and not val.get("writable"):
                 metrics.append(
                     {"key": key, "label": val.get("label", key.replace("_", " ").title()), "unit": val.get("unit", "")}
@@ -288,9 +291,7 @@ def _site_profile_report_rows(site, days):
     rows = []
 
     for device in devices:
-        register_map = (
-            device.template.register_map if device.template and isinstance(device.template.register_map, dict) else {}
-        )
+        register_map = effective_register_map(device)
         for key in profile.key_priority:
             if register_map and key not in register_map:
                 continue

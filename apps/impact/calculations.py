@@ -121,8 +121,9 @@ def is_operating_time(site_profile, timestamp):
 
 
 def _source_register(source):
-    template = source.device.template
-    return (template.register_map or {}).get(source.telemetry_key, {}) if template else {}
+    from apps.devices.datapoint_maps import effective_register_map
+
+    return effective_register_map(source.device).get(source.telemetry_key, {})
 
 
 def _source_expected_interval(source):

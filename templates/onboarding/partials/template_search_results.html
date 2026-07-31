@@ -10,7 +10,7 @@
             </p>
         </div>
         <span class="badge badge-sm {% if template.is_verified %}badge-success{% elif template.source == 'ai_generated' %}badge-warning{% else %}badge-outline{% endif %}">
-            {% if template.is_verified %}Novena verified{% elif template.source == "ai_generated" %}AI draft{% else %}Unvalidated{% endif %}
+            {% if template.mapping_strategy == "site_defined" %}Starter · map signals{% elif template.is_verified %}Novena verified{% elif template.source == "ai_generated" %}AI draft{% else %}Unvalidated{% endif %}
         </span>
     </div>
     <p class="mt-2 text-xs text-base-content/45">Choose this name in the Equipment template selector for the discovered item above, then run live validation.</p>

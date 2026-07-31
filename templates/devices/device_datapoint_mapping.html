@@ -1,0 +1,142 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+{% block app %}
+{{ mapping.datapoints|json_script:"initial-datapoints" }}
+{% if setup_item.state == "validating" %}<script>window.setTimeout(() => window.location.reload(), 3000);</script>{% endif %}
+<script>
+function datapointMapping() {
+    const initial = JSON.parse(document.getElementById('initial-datapoints').textContent || '[]');
+    const blank = () => ({
+        key: '', label: '', address: 0, read_function_code: 3, data_type: 'uint16',
+        objects_count: 1, unit: '', multiplier: 1, offset: 0, access: 'read_only',
+        write_function_code: null, display_type: 'value', normal_min: null, normal_max: null,
+        safety_min: null, safety_max: null, alert_suggestion: ''
+    });
+    return {
+        rows: initial.length ? initial : [blank()],
+        addRow() { if (this.rows.length < 20) this.rows.push(blank()); },
+        removeRow(index) { if (this.rows.length > 1) this.rows.splice(index, 1); }
+    };
+}
+</script>
+<div class="mx-auto max-w-7xl space-y-6 px-4 py-10 sm:px-6 lg:px-8" x-data="datapointMapping()">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+            <p class="text-xs font-black uppercase tracking-widest text-indigo-600">Signals and datapoints</p>
+            <h1 class="mt-1 text-3xl font-black">Map {{ device.name }}</h1>
+            <p class="mt-2 max-w-3xl text-sm text-base-content/60">
+                {{ device.template.name }} identifies the equipment and protocol. You define what each address means at this site, then confirm the decoded live readings before deployment.
+            </p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            <span class="badge badge-outline">{{ device.get_protocol_display }}</span>
+            <span class="badge {% if mapping.status == 'confirmed' %}badge-success{% elif mapping.status == 'needs_attention' %}badge-warning{% else %}badge-ghost{% endif %}">{{ mapping.get_status_display }}</span>
+        </div>
+    </div>
+
+    <section class="rounded-2xl border border-base-content/10 bg-base-100 p-6 shadow-sm">
+        <div class="mb-5">
+            <h2 class="text-xl font-black">1. Connection</h2>
+            <p class="mt-1 text-sm text-base-content/55">Basic settings are shown first. Advanced byte and serial settings stay available for commissioning engineers.</p>
+        </div>
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save">
+            <input type="hidden" name="datapoints_json" :value="JSON.stringify(rows)">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+                {% if device.protocol == "modbus_tcp" %}
+                <label class="form-control md:col-span-2"><span class="label-text mb-1 text-xs font-bold">Equipment IP address</span><input required name="host" value="{{ connection.host|default:'' }}" class="input input-bordered rounded-lg" placeholder="192.168.1.50"></label>
+                <label class="form-control"><span class="label-text mb-1 text-xs font-bold">Port</span><input required type="number" min="1" max="65535" name="port" value="{{ connection.port|default:502 }}" class="input input-bordered rounded-lg"></label>
+                {% else %}
+                <label class="form-control md:col-span-2"><span class="label-text mb-1 text-xs font-bold">RS485 interface</span><input required name="serial_port" value="{{ connection.serial_port|default:'' }}" class="input input-bordered rounded-lg" placeholder="/dev/ttyUSB0"></label>
+                <label class="form-control"><span class="label-text mb-1 text-xs font-bold">Baud rate</span><input type="number" name="baudrate" value="{{ connection.baudrate|default:9600 }}" class="input input-bordered rounded-lg"></label>
+                {% endif %}
+                <label class="form-control"><span class="label-text mb-1 text-xs font-bold">Slave ID</span><input type="number" min="1" max="247" name="slave_id" value="{{ connection.slave_id|default:1 }}" class="input input-bordered rounded-lg"></label>
+                <label class="form-control"><span class="label-text mb-1 text-xs font-bold">Polling interval (seconds)</span><input type="number" min="1" max="3600" step="1" name="polling_interval" value="{{ connection.requested_polling_interval|default:5 }}" class="input input-bordered rounded-lg"></label>
+                <label class="form-control"><span class="label-text mb-1 text-xs font-bold">Timeout (seconds)</span><input type="number" min="1" max="10" step="0.5" name="timeout" value="{{ connection.timeout|default:3 }}" class="input input-bordered rounded-lg"></label>
+            </div>
+            <details class="rounded-xl border border-base-content/10 p-4">
+                <summary class="cursor-pointer text-sm font-bold">Advanced connection settings</summary>
+                <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
+                    <label class="form-control"><span class="label-text mb-1 text-xs font-bold">Byte order</span><select name="byte_order" class="select select-bordered"><option {% if connection.byteOrder != 'LITTLE' %}selected{% endif %}>BIG</option><option {% if connection.byteOrder == 'LITTLE' %}selected{% endif %}>LITTLE</option></select></label>
+                    <label class="form-control"><span class="label-text mb-1 text-xs font-bold">Word order</span><select name="word_order" class="select select-bordered"><option {% if connection.wordOrder != 'LITTLE' %}selected{% endif %}>BIG</option><option {% if connection.wordOrder == 'LITTLE' %}selected{% endif %}>LITTLE</option></select></label>
+                    {% if device.protocol == "modbus_rtu" %}
+                    <label class="form-control"><span class="label-text mb-1 text-xs font-bold">Parity</span><select name="parity" class="select select-bordered"><option value="N">None</option><option value="E">Even</option><option value="O">Odd</option></select></label>
+                    <label class="form-control"><span class="label-text mb-1 text-xs font-bold">Stop bits</span><select name="stopbits" class="select select-bordered"><option>1</option><option>2</option></select></label>
+                    {% endif %}
+                </div>
+            </details>
+
+            <div class="border-t border-base-content/10 pt-6">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div><h2 class="text-xl font-black">2. Signal mapping</h2><p class="mt-1 text-sm text-base-content/55">Use names operators understand. Open Advanced on a row for scaling, limits, and future write intent.</p></div>
+                    <div class="text-right"><button type="button" class="btn btn-outline btn-sm" @click="addRow()" :disabled="rows.length >= 20"><i class="fa fa-plus mr-2"></i>Add signal</button><p class="mt-1 text-xs text-base-content/45" x-text="`${rows.length} of 20 signals`"></p></div>
+                </div>
+                <div class="mt-5 space-y-3">
+                    <template x-for="(row, index) in rows" :key="index">
+                        <div class="rounded-xl border border-base-content/10 p-4">
+                            <div class="grid grid-cols-1 gap-3 lg:grid-cols-[1.2fr_1.4fr_.8fr_1fr_1fr_auto] lg:items-end">
+                                <label class="form-control"><span class="label-text mb-1 text-xs font-bold">Signal key</span><input required x-model="row.key" class="input input-bordered input-sm" placeholder="process_temperature"></label>
+                                <label class="form-control"><span class="label-text mb-1 text-xs font-bold">Signal name</span><input required x-model="row.label" class="input input-bordered input-sm" placeholder="Process Temperature"></label>
+                                <label class="form-control"><span class="label-text mb-1 text-xs font-bold">Address</span><input required type="number" min="0" max="65535" x-model.number="row.address" class="input input-bordered input-sm"></label>
+                                <label class="form-control"><span class="label-text mb-1 text-xs font-bold">Where stored?</span><select x-model.number="row.read_function_code" class="select select-bordered select-sm"><option :value="3">Holding register</option><option :value="4">Input register</option><option :value="1">Coil</option><option :value="2">Discrete input</option></select></label>
+                                <label class="form-control"><span class="label-text mb-1 text-xs font-bold">Display</span><select x-model="row.display_type" class="select select-bordered select-sm"><option value="value">Value</option><option value="gauge">Gauge</option><option value="trend">Trend chart</option><option value="status">Status indicator</option></select></label>
+                                <button type="button" class="btn btn-ghost btn-sm text-error" @click="removeRow(index)" aria-label="Delete signal"><i class="fa fa-trash"></i></button>
+                            </div>
+                            <details class="mt-3 rounded-lg bg-base-200/40 p-3">
+                                <summary class="cursor-pointer text-xs font-bold">Advanced signal settings</summary>
+                                <div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
+                                    <label class="form-control"><span class="label-text text-xs">Data type</span><select x-model="row.data_type" class="select select-bordered select-sm"><option value="bool">Boolean</option><option value="uint16">16-bit unsigned</option><option value="int16">16-bit signed</option><option value="uint32">32-bit unsigned</option><option value="int32">32-bit signed</option><option value="float32">32-bit float</option><option value="uint64">64-bit unsigned</option><option value="int64">64-bit signed</option><option value="float64">64-bit float</option></select></label>
+                                    <label class="form-control"><span class="label-text text-xs">Object count</span><input type="number" min="1" max="4" x-model.number="row.objects_count" class="input input-bordered input-sm"></label>
+                                    <label class="form-control"><span class="label-text text-xs">Unit</span><input x-model="row.unit" class="input input-bordered input-sm" placeholder="°C"></label>
+                                    <label class="form-control"><span class="label-text text-xs">Multiplier</span><input type="number" step="any" x-model.number="row.multiplier" class="input input-bordered input-sm"></label>
+                                    <label class="form-control"><span class="label-text text-xs">Offset</span><input type="number" step="any" x-model.number="row.offset" class="input input-bordered input-sm"></label>
+                                    <label class="form-control"><span class="label-text text-xs">Access</span><select x-model="row.access" class="select select-bordered select-sm"><option value="read_only">Read only</option><option value="read_write">Writable intent</option></select></label>
+                                    <label x-show="row.access === 'read_write'" class="form-control"><span class="label-text text-xs">Write function</span><select x-model.number="row.write_function_code" class="select select-bordered select-sm"><option :value="null">Automatic</option><option :value="5">5 · Single coil</option><option :value="6">6 · Single register</option><option :value="15">15 · Multiple coils</option><option :value="16">16 · Multiple registers</option></select></label>
+                                    <label class="form-control"><span class="label-text text-xs">Normal minimum</span><input type="number" step="any" x-model.number="row.normal_min" class="input input-bordered input-sm"></label>
+                                    <label class="form-control"><span class="label-text text-xs">Normal maximum</span><input type="number" step="any" x-model.number="row.normal_max" class="input input-bordered input-sm"></label>
+                                    <label class="form-control"><span class="label-text text-xs">Safety minimum</span><input type="number" step="any" x-model.number="row.safety_min" class="input input-bordered input-sm"></label>
+                                    <label class="form-control"><span class="label-text text-xs">Safety maximum</span><input type="number" step="any" x-model.number="row.safety_max" class="input input-bordered input-sm"></label>
+                                    <label class="form-control md:col-span-2"><span class="label-text text-xs">Alert suggestion</span><input x-model="row.alert_suggestion" class="input input-bordered input-sm" placeholder="Warn above 80 °C"></label>
+                                </div>
+                                <p class="mt-3 text-xs text-base-content/45">Writable intent is recorded, but controls remain blocked until Novena’s governed safety commissioning is complete.</p>
+                            </details>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            <button class="btn btn-primary" type="submit">Save connection and signals</button>
+        </form>
+    </section>
+
+    <section class="rounded-2xl border border-base-content/10 bg-base-100 p-6 shadow-sm">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div><h2 class="text-xl font-black">3. Validate live readings</h2><p class="mt-1 text-sm text-base-content/55">Connection tests do not deploy settings. Live validation reads and decodes every mapped signal through the Gateway.</p></div>
+            <div class="flex flex-wrap gap-2">
+                <form method="post">{% csrf_token %}<input type="hidden" name="action" value="test_connection"><button class="btn btn-outline btn-sm">Test connection</button></form>
+                <form method="post">{% csrf_token %}<input type="hidden" name="action" value="validate"><button class="btn btn-primary btn-sm">Validate readings</button></form>
+            </div>
+        </div>
+        {% if mapping.last_validation.message %}<p class="mt-4 rounded-lg bg-base-200/50 p-3 text-sm">{{ mapping.last_validation.message }}</p>{% endif %}
+        {% if setup_item.validation_result.message and not mapping.last_validation.message %}<p class="mt-4 rounded-lg bg-base-200/50 p-3 text-sm">{{ setup_item.validation_result.message }}</p>{% endif %}
+        {% if mapping.last_validation.signals %}
+        <div class="mt-5 overflow-x-auto"><table class="table table-sm"><thead><tr><th>Signal</th><th>Address</th><th>Raw objects</th><th>Decoded reading</th><th>Status</th></tr></thead><tbody>
+        {% for signal in mapping.last_validation.signals %}<tr><td class="font-bold">{{ signal.key|title }}</td><td>{{ signal.address }}</td><td class="font-mono text-xs">{{ signal.sample|default:"—" }}</td><td class="font-mono">{{ signal.value|default:"—" }} {{ signal.unit }}</td><td><span class="badge badge-sm {% if signal.status == 'success' %}badge-success{% else %}badge-error{% endif %}">{{ signal.status|title }}</span>{% if signal.reason %}<p class="mt-1 text-xs text-error">{{ signal.reason }}</p>{% endif %}</td></tr>{% endfor %}
+        </tbody></table></div>
+        {% endif %}
+        {% if mapping.status == "awaiting_confirmation" %}
+        <form method="post" class="mt-5 rounded-xl border border-success/30 bg-success/5 p-4">
+            {% csrf_token %}<input type="hidden" name="action" value="confirm">
+            <p class="font-bold">Do these decoded readings match the equipment and process?</p><p class="mt-1 text-sm text-base-content/55">Confirmation locks the tested connection and signal definitions for deployment.</p>
+            <button class="btn btn-success btn-sm mt-4" type="submit">Confirm readings are correct</button>
+        </form>
+        {% endif %}
+    </section>
+
+    {% if clone_sources %}
+    <section class="rounded-2xl border border-base-content/10 bg-base-100 p-6 shadow-sm"><h2 class="text-lg font-black">Clone a confirmed mapping</h2><p class="mt-1 text-sm text-base-content/55">The copied mapping returns to Draft and must be validated on this equipment.</p><form method="post" class="mt-4 flex flex-col gap-3 sm:flex-row">{% csrf_token %}<input type="hidden" name="action" value="clone"><select required name="source_device" class="select select-bordered grow"><option value="">Choose equipment</option>{% for source in clone_sources %}<option value="{{ source.pk }}">{{ source.name }} · {{ source.site.name }}</option>{% endfor %}</select><button class="btn btn-outline" type="submit">Clone mapping</button></form></section>
+    {% endif %}
+
+    <div class="flex items-center justify-between"><a href="{% url 'web_team:onboarding:step_3_discover' request.team.slug %}" class="btn btn-ghost btn-sm"><i class="fa fa-chevron-left mr-2"></i>Back to equipment setup</a>{% if mapping.status == 'confirmed' %}<span class="text-sm font-bold text-success"><i class="fa fa-circle-check mr-2"></i>Ready to deploy</span>{% endif %}</div>
+</div>
+{% endblock %}

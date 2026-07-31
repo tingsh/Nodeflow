@@ -13,8 +13,8 @@ from django.core.files.storage import default_storage
 from django.db import transaction
 from django.db.models import Q
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
-from django.shortcuts import get_object_or_404, render
-from django.urls import reverse_lazy
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
@@ -915,9 +915,19 @@ class DeviceCreateView(PermissionRequiredMixin, CreateView):
             form.add_error("gateway", "Select a gateway that belongs to the selected site.")
             return self.form_invalid(form)
         form.instance.team = self.request.team
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        if self.object.template and self.object.template.mapping_strategy == "site_defined":
+            from .datapoint_maps import ensure_device_datapoint_map
+
+            ensure_device_datapoint_map(self.object)
+        return response
 
     def get_success_url(self):
+        if self.object.template and self.object.template.mapping_strategy == "site_defined":
+            return reverse_lazy(
+                "web_team:devices:device_datapoint_mapping",
+                args=[self.request.team.slug, self.object.pk],
+            )
         return reverse_lazy("web_team:devices:device_list", args=[self.request.team.slug])
 
 
@@ -927,8 +937,207 @@ class DeviceUpdateView(PermissionRequiredMixin, UpdateView):
     fields = ["name", "device_type", "protocol", "energy_category", "connection_config", "status"]
     template_name = "devices/device_form.html"
 
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        connection_changed = "connection_config" in form.changed_data
+        if connection_changed and self.object.template and self.object.template.mapping_strategy == "site_defined":
+            from .datapoint_maps import ensure_device_datapoint_map
+
+            mapping = ensure_device_datapoint_map(self.object)
+            mapping.status = mapping.Status.DRAFT
+            mapping.last_validation = {}
+            mapping.tested_checksum = ""
+            mapping.confirmed_checksum = ""
+            mapping.last_tested_at = None
+            mapping.confirmed_by = None
+            mapping.confirmed_at = None
+            mapping.save()
+        return response
+
     def get_success_url(self):
         return reverse_lazy("web_team:devices:device_list", args=[self.request.team.slug])
+
+
+@require_permission("manage_devices")
+def device_datapoint_mapping(request, team_slug, pk):
+    """Edit, live-test, and explicitly confirm a programmable device's signals."""
+    from .datapoint_maps import (
+        clone_device_datapoint_map,
+        confirm_device_datapoint_map,
+        device_requires_mapping,
+        ensure_device_datapoint_map,
+        save_device_datapoint_map,
+    )
+    from .deployment_setup import (
+        append_setup_event,
+        get_or_create_setup_run,
+        start_validation,
+        sync_setup_run,
+    )
+    from .models import DeploymentSetupItem, DeviceDatapointMap
+
+    device = get_object_or_404(
+        Device.objects.select_related("template", "gateway", "site"),
+        pk=pk,
+        team=request.team,
+    )
+    if not device.gateway or not device_requires_mapping(device):
+        messages.info(request, "This equipment uses a fixed Novena signal map.")
+        return redirect("web_team:devices:device_detail", team_slug=team_slug, pk=device.pk)
+
+    mapping = ensure_device_datapoint_map(device)
+    run = get_or_create_setup_run(team=request.team, gateway=device.gateway, initiated_by=request.user)
+    item, _ = DeploymentSetupItem.objects.get_or_create(
+        team=request.team,
+        run=run,
+        device=device,
+        defaults={
+            "selected_template": device.template,
+            "connection": device.connection_config,
+            "candidate_data": {
+                "signature": device.name,
+                "connection": device.protocol,
+                "interface": device.port or "",
+            },
+            "state": DeploymentSetupItem.State.TEMPLATE_SELECTED,
+        },
+    )
+    run = sync_setup_run(run)
+    mapping.refresh_from_db()
+    item.refresh_from_db()
+
+    if request.method == "POST":
+        action = request.POST.get("action", "save")
+        try:
+            if action == "save":
+                raw_datapoints = json.loads(request.POST.get("datapoints_json", "[]"))
+                connection = dict(device.connection_config or {})
+                connection["slave_id"] = int(request.POST.get("slave_id", 1))
+                connection["timeout"] = float(request.POST.get("timeout", 3))
+                connection["byteOrder"] = request.POST.get("byte_order", "BIG")
+                connection["wordOrder"] = request.POST.get("word_order", "BIG")
+                connection["requested_polling_interval"] = float(request.POST.get("polling_interval", 5))
+                if connection["byteOrder"] not in {"BIG", "LITTLE"} or connection["wordOrder"] not in {
+                    "BIG",
+                    "LITTLE",
+                }:
+                    raise ValidationError("Choose a valid byte and word order.")
+                if not 1 <= connection["slave_id"] <= 247:
+                    raise ValidationError("Slave ID must be between 1 and 247.")
+                if not 1 <= connection["timeout"] <= 10:
+                    raise ValidationError("Timeout must be between 1 and 10 seconds.")
+                if not 1 <= connection["requested_polling_interval"] <= 3600:
+                    raise ValidationError("Polling interval must be between 1 and 3600 seconds.")
+                if device.protocol == "modbus_tcp":
+                    import ipaddress
+
+                    host = request.POST.get("host", "").strip()
+                    ipaddress.ip_address(host)
+                    connection["host"] = host
+                    connection["port"] = int(request.POST.get("port", 502))
+                    if not 1 <= connection["port"] <= 65535:
+                        raise ValidationError("Port must be between 1 and 65535.")
+                    device.port = f"{host}:{connection['port']}"
+                else:
+                    serial_port = request.POST.get("serial_port", "").strip()
+                    if not serial_port:
+                        raise ValidationError("Select the connected RS485 interface.")
+                    connection["serial_port"] = serial_port
+                    connection["baudrate"] = int(request.POST.get("baudrate", 9600))
+                    connection["parity"] = request.POST.get("parity", "N")
+                    connection["stopbits"] = int(request.POST.get("stopbits", 1))
+                    if connection["parity"] not in {"N", "E", "O"}:
+                        raise ValidationError("Choose a valid parity setting.")
+                    device.port = serial_port
+                device.connection_config = connection
+                device.save(update_fields=["connection_config", "port", "updated_at"])
+                mapping = save_device_datapoint_map(device=device, team=request.team, datapoints=raw_datapoints)
+                item.connection = connection
+                item.datapoints = mapping.datapoints
+                item.state = DeploymentSetupItem.State.TEMPLATE_SELECTED
+                item.validation_result = {}
+                item.save(update_fields=["connection", "datapoints", "state", "validation_result", "updated_at"])
+                messages.success(request, "Signal mapping saved. Run a live validation before confirming it.")
+            elif action in {"test_connection", "validate"}:
+                start_validation(
+                    item=item,
+                    template=device.template,
+                    requested_by=request.user,
+                    connection_only=action == "test_connection",
+                )
+                messages.info(
+                    request,
+                    "The Gateway is checking the connection."
+                    if action == "test_connection"
+                    else "The Gateway is reading and decoding the mapped signals.",
+                )
+            elif action == "confirm":
+                mapping = confirm_device_datapoint_map(
+                    device=device,
+                    team=request.team,
+                    confirmed_by=request.user,
+                )
+                item.state = DeploymentSetupItem.State.VALIDATED
+                item.trust_level = DeploymentSetupItem.Trust.CUSTOMER_VALIDATED
+                item.datapoints = mapping.datapoints
+                item.validation_result = mapping.last_validation
+                item.save(update_fields=["state", "trust_level", "datapoints", "validation_result", "updated_at"])
+                metadata = dict(device.metadata or {})
+                metadata["guided_setup_validation"] = "validated"
+                device.metadata = metadata
+                device.save(update_fields=["metadata", "updated_at"])
+                append_setup_event(
+                    run,
+                    "mapping_confirmed",
+                    f"The live readings for {device.name} were explicitly confirmed.",
+                    item=item,
+                    actor=request.user,
+                    evidence={"checksum": mapping.confirmed_checksum, "signal_count": len(mapping.datapoints)},
+                )
+                messages.success(request, "Live readings confirmed. This equipment is ready for deployment.")
+            elif action == "clone":
+                source = get_object_or_404(
+                    Device.objects.select_related("template"),
+                    pk=request.POST.get("source_device"),
+                    team=request.team,
+                    protocol=device.protocol,
+                    datapoint_map__status=DeviceDatapointMap.Status.CONFIRMED,
+                )
+                mapping = clone_device_datapoint_map(source_device=source, target_device=device, team=request.team)
+                item.datapoints = mapping.datapoints
+                item.state = DeploymentSetupItem.State.TEMPLATE_SELECTED
+                item.validation_result = {}
+                item.save(update_fields=["datapoints", "state", "validation_result", "updated_at"])
+                messages.success(request, "Mapping cloned. Validate it against this equipment before confirmation.")
+            else:
+                raise ValidationError("Unknown mapping action.")
+        except (ValidationError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            message = exc.messages[0] if isinstance(exc, ValidationError) and exc.messages else str(exc)
+            messages.error(request, message)
+        return redirect("web_team:devices:device_datapoint_mapping", team_slug=team_slug, pk=device.pk)
+
+    clone_sources = (
+        Device.objects.filter(
+            team=request.team,
+            protocol=device.protocol,
+            template__mapping_strategy="site_defined",
+            datapoint_map__status=DeviceDatapointMap.Status.CONFIRMED,
+        )
+        .exclude(pk=device.pk)
+        .order_by("name")
+    )
+    return render(
+        request,
+        "devices/device_datapoint_mapping.html",
+        {
+            "device": device,
+            "mapping": mapping,
+            "setup_item": item,
+            "setup_run": run,
+            "clone_sources": clone_sources,
+            "connection": device.connection_config or {},
+        },
+    )
 
 
 class DeviceDeleteView(PermissionRequiredMixin, DeleteView):
@@ -1070,6 +1279,9 @@ def htmx_device_create(request, team_slug):
             if replacement:
                 replacement.delete()
 
+            from .deployment_setup import connection_from_candidate
+
+            connection_config = connection_from_candidate(discovery_entry) if discovery_entry else {}
             device = Device.objects.create(
                 team=request.team,
                 site=site,
@@ -1079,7 +1291,7 @@ def htmx_device_create(request, team_slug):
                 template=template,
                 device_type=template.device_type,
                 protocol=template.protocol,
-                connection_config=template.register_map,
+                connection_config=connection_config,
                 discovery_meta=disc_meta,
             )
 
@@ -1093,7 +1305,20 @@ def htmx_device_create(request, team_slug):
                 site=device.site,
                 user=request.user,
             )
-            transaction.on_commit(lambda: _push_gateway_config_after_commit(gateway.id, request.team.id))
+            if template.mapping_strategy == "site_defined":
+                from .datapoint_maps import ensure_device_datapoint_map
+
+                ensure_device_datapoint_map(device)
+            else:
+                transaction.on_commit(lambda: _push_gateway_config_after_commit(gateway.id, request.team.id))
+
+        if template.mapping_strategy == "site_defined":
+            response = HttpResponse(status=204)
+            response["HX-Redirect"] = reverse(
+                "web_team:devices:device_datapoint_mapping",
+                args=[request.team.slug, device.pk],
+            )
+            return response
 
         test_register = _first_readable_register(template)
 

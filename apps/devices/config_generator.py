@@ -13,6 +13,8 @@ The generated config follows the Novena Gateway connector schema:
 import logging
 import math
 
+from .datapoint_maps import effective_register_map, register_map_to_datapoints
+
 logger = logging.getLogger("novena_hub")
 
 MODBUS_TYPE_MAP = {
@@ -86,8 +88,9 @@ def _build_modbus_connector(protocol, devices):
 def _build_slave_config(device, is_tcp):
     """Build a single Modbus slave config from a Device + DeviceTemplate."""
     template = device.template
-    if not template or not template.register_map:
-        logger.info("Device %s has no template/register_map, skipping config generation", device.name)
+    register_map = effective_register_map(device)
+    if not template or not register_map:
+        logger.info("Device %s has no confirmed datapoint map, skipping config generation", device.name)
         return None
 
     discovery = device.discovery_meta or {}
@@ -134,13 +137,13 @@ def _build_slave_config(device, is_tcp):
         slave["bytesize"] = connection.get("bytesize", 8)
         slave["parity"] = connection.get("parity", "N")
 
-    for key, reg in template.register_map.items():
+    for key, reg in register_map.items():
         if not isinstance(reg, dict):
             continue
         entry = {
             "tag": key,
             "type": _normalize_modbus_type(reg.get("type", "16int")),
-            "functionCode": reg.get("functionCode", 3),
+            "functionCode": reg.get("readFunctionCode", reg.get("functionCode", 3)),
             "objectsCount": reg.get("objectsCount", _default_objects_count(reg.get("type"))),
             "address": reg.get("address", 0),
         }
@@ -148,10 +151,12 @@ def _build_slave_config(device, is_tcp):
             entry["multiplier"] = reg["scale"]
         if "multiplier" in reg:
             entry["multiplier"] = reg["multiplier"]
+        if "offset" in reg:
+            entry["offset"] = reg["offset"]
 
         if reg.get("attribute"):
             slave["attributes"].append(entry)
-        elif not reg.get("writable"):
+        elif reg.get("poll", not reg.get("writable")):
             slave["timeseries"].append(entry)
 
     return slave
@@ -211,6 +216,12 @@ def normalized_datapoints(template, *, team=None):
     return datapoints
 
 
+def normalized_device_datapoints(device, *, require_confirmed=True):
+    """Return normalized metadata from a fixed template or a per-device map."""
+    register_map = effective_register_map(device, require_confirmed=require_confirmed)
+    return register_map_to_datapoints(register_map)
+
+
 def human_config_preview(gateway):
     from apps.subscriptions.enforcement import get_effective_polling_interval_seconds
 
@@ -236,9 +247,7 @@ def human_config_preview(gateway):
                 "target": device.port or "",
                 "slave_id": (device.connection_config or {}).get("slave_id"),
                 "polling_interval": (get_effective_polling_interval_seconds(device) if device.template else None),
-                "telemetry_keys": [
-                    datapoint["key"] for datapoint in normalized_datapoints(device.template, team=device.team)
-                ]
+                "telemetry_keys": [datapoint["key"] for datapoint in normalized_device_datapoints(device)]
                 if device.template
                 else [],
             }

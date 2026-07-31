@@ -233,10 +233,10 @@ def rank_templates_for_profile(templates, profile):
 
 
 def recommended_alerts_for_device(device, profile=None):
+    from .datapoint_maps import effective_register_map
+
     profile = get_site_profile(device.site) if profile is None else get_profile(profile)
-    register_map = (
-        device.template.register_map if device.template and isinstance(device.template.register_map, dict) else {}
-    )
+    register_map = effective_register_map(device)
     presets = []
     for preset in profile.alert_presets:
         if preset.key in register_map:
@@ -329,11 +329,9 @@ def apply_solution_profile_presets(site, user=None):
             if device.device_type not in preset.device_types:
                 continue
             if preset.usage_telemetry_key:
-                register_map = (
-                    device.template.register_map
-                    if device.template and isinstance(device.template.register_map, dict)
-                    else {}
-                )
+                from .datapoint_maps import effective_register_map
+
+                register_map = effective_register_map(device)
                 if preset.usage_telemetry_key not in register_map:
                     continue
             _schedule, was_created = PreventiveSchedule.objects.get_or_create(

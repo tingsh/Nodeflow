@@ -296,6 +296,10 @@ class DeviceTemplate(models.Model):
         ("mqtt", _("MQTT")),
         ("bacnet", _("BACnet")),
     )
+    MAPPING_STRATEGY_CHOICES = (
+        ("fixed", _("Fixed equipment map")),
+        ("site_defined", _("Site-defined signals")),
+    )
     VERTICAL_CHOICES = (
         ("energy", _("Energy Monitoring")),
         ("cold_chain", _("Cold Chain")),
@@ -307,6 +311,12 @@ class DeviceTemplate(models.Model):
     model_number = models.CharField(max_length=200, blank=True)
     device_type = models.CharField(max_length=30, choices=DEVICE_TYPE_CHOICES)
     protocol = models.CharField(max_length=20, choices=PROTOCOL_CHOICES)
+    mapping_strategy = models.CharField(
+        max_length=20,
+        choices=MAPPING_STRATEGY_CHOICES,
+        default="fixed",
+        help_text=_("Whether the template supplies a deployable map or only a device/protocol starter."),
+    )
     register_map = models.JSONField(help_text=_("Definition of registers. Keys can have 'writable': true."))
     discovery_hints = models.JSONField(default=dict, blank=True)
     default_polling_interval = models.IntegerField(default=5)
@@ -394,6 +404,48 @@ class Device(BaseTeamModel):
         from apps.devices.freshness import device_gateway_context_display
 
         return device_gateway_context_display(self)
+
+
+class DeviceDatapointMap(BaseTeamModel):
+    """Customer/site-specific semantic signal mapping for programmable equipment."""
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", _("Draft")
+        TESTING = "testing", _("Testing")
+        AWAITING_CONFIRMATION = "awaiting_confirmation", _("Awaiting confirmation")
+        CONFIRMED = "confirmed", _("Confirmed")
+        NEEDS_ATTENTION = "needs_attention", _("Needs attention")
+
+    device = models.OneToOneField(Device, on_delete=models.CASCADE, related_name="datapoint_map")
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.DRAFT)
+    schema_version = models.PositiveSmallIntegerField(default=1)
+    datapoints = models.JSONField(default=list, blank=True)
+    last_validation = models.JSONField(default=dict, blank=True)
+    tested_checksum = models.CharField(max_length=64, blank=True)
+    confirmed_checksum = models.CharField(max_length=64, blank=True)
+    last_tested_at = models.DateTimeField(null=True, blank=True)
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="confirmed_device_datapoint_maps",
+    )
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    cloned_from = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="clones",
+    )
+
+    class Meta:
+        ordering = ["device__name"]
+        indexes = [models.Index(fields=["team", "status"])]
+
+    def __str__(self):
+        return f"{self.device.name} datapoints ({self.get_status_display()})"
 
 
 class GatewayConfig(BaseTeamModel):
@@ -543,6 +595,7 @@ class DeploymentSetupItem(BaseTeamModel):
         DISCOVERED = "discovered", _("Discovered")
         TEMPLATE_SELECTED = "template_selected", _("Template selected")
         VALIDATING = "validating", _("Validating")
+        AWAITING_CONFIRMATION = "awaiting_confirmation", _("Awaiting confirmation")
         VALIDATED = "validated", _("Validated")
         QUEUED = "queued", _("Queued")
         APPLIED = "applied", _("Applied")

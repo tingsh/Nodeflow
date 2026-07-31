@@ -162,30 +162,8 @@
       "model_number": "CP1L / CP1H",
       "device_type": "plc",
       "protocol": "modbus_tcp",
-      "register_map": {
-        "running_status": {
-          "address": 0,
-          "functionCode": 1,
-          "type": "bool",
-          "label": "System Running Status",
-          "writable": false
-        },
-        "error_code": {
-          "address": 10,
-          "functionCode": 3,
-          "type": "uint16",
-          "label": "PLC Error Code",
-          "writable": false
-        },
-        "production_count": {
-          "address": 20,
-          "functionCode": 3,
-          "type": "uint32",
-          "label": "Total Production Count",
-          "objectsCount": 2,
-          "writable": false
-        }
-      },
+      "mapping_strategy": "site_defined",
+      "register_map": {},
       "default_polling_interval": 5,
       "category": "factory",
       "alert_presets": [],
@@ -207,35 +185,8 @@
       "model_number": "S7-1200",
       "device_type": "plc",
       "protocol": "modbus_tcp",
-      "register_map": {
-        "temperature": {
-          "address": 100,
-          "functionCode": 3,
-          "type": "float32",
-          "unit": "°C",
-          "label": "Process Temperature",
-          "objectsCount": 2,
-          "writable": false
-        },
-        "pressure": {
-          "address": 104,
-          "functionCode": 3,
-          "type": "float32",
-          "unit": "bar",
-          "label": "Pipe Pressure",
-          "objectsCount": 2,
-          "writable": false
-        },
-        "flow_rate": {
-          "address": 108,
-          "functionCode": 3,
-          "type": "float32",
-          "unit": "m³/h",
-          "label": "Fluid Flow Rate",
-          "objectsCount": 2,
-          "writable": false
-        }
-      },
+      "mapping_strategy": "site_defined",
+      "register_map": {},
       "default_polling_interval": 5,
       "category": "factory",
       "alert_presets": [],
