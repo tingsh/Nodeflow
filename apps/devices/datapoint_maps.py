@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import json
 import re
 
@@ -10,7 +12,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from .models import DeviceDatapointMap
+from .models import DeviceDatapointMap, DeviceDatapointMapRevision
 
 KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,99}$")
 DATA_TYPES = {"bool", "uint16", "int16", "uint32", "int32", "float32", "uint64", "int64", "float64"}
@@ -18,6 +20,25 @@ DISPLAY_TYPES = {"value", "gauge", "trend", "status"}
 ACCESS_TYPES = {"read_only", "read_write"}
 READ_FUNCTION_CODES = {1, 2, 3, 4}
 WRITE_FUNCTION_CODES = {5, 6, 15, 16}
+CSV_COLUMNS = (
+    "key",
+    "label",
+    "address",
+    "function_code",
+    "data_type",
+    "register_count",
+    "unit",
+    "scale",
+    "offset",
+    "access",
+    "write_function_code",
+    "display_type",
+    "normal_min",
+    "normal_max",
+    "safety_min",
+    "safety_max",
+    "alert_suggestion",
+)
 
 
 def device_requires_mapping(device) -> bool:
@@ -138,6 +159,106 @@ def normalize_datapoints(datapoints) -> list[dict]:
     return normalized
 
 
+def datapoints_to_csv(datapoints) -> str:
+    """Serialize a normalized map using spreadsheet-friendly column names."""
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=CSV_COLUMNS, lineterminator="\r\n")
+    writer.writeheader()
+    for point in datapoints or []:
+        writer.writerow(
+            {
+                "key": point.get("key", ""),
+                "label": point.get("label", ""),
+                "address": point.get("address", ""),
+                "function_code": point.get("read_function_code", ""),
+                "data_type": point.get("data_type", ""),
+                "register_count": point.get("objects_count", ""),
+                "unit": point.get("unit", ""),
+                "scale": point.get("multiplier", ""),
+                "offset": point.get("offset", ""),
+                "access": point.get("access", ""),
+                "write_function_code": point.get("write_function_code") or "",
+                "display_type": point.get("display_type", ""),
+                "normal_min": point.get("normal_min") if point.get("normal_min") is not None else "",
+                "normal_max": point.get("normal_max") if point.get("normal_max") is not None else "",
+                "safety_min": point.get("safety_min") if point.get("safety_min") is not None else "",
+                "safety_max": point.get("safety_max") if point.get("safety_max") is not None else "",
+                "alert_suggestion": point.get("alert_suggestion", ""),
+            }
+        )
+    return output.getvalue()
+
+
+def datapoints_from_csv(content: str) -> list[dict]:
+    """Parse a complete map and report all discoverable errors with CSV row numbers."""
+    try:
+        reader = csv.DictReader(io.StringIO(content, newline=""))
+        headers = [str(header or "").strip().lower() for header in (reader.fieldnames or [])]
+    except csv.Error as exc:
+        raise ValidationError(f"The CSV file could not be read: {exc}") from exc
+
+    if not headers:
+        raise ValidationError("The CSV file must include a header row.")
+    if len(headers) != len(set(headers)):
+        raise ValidationError("The CSV header contains duplicate columns.")
+    missing = [column for column in ("key", "address") if column not in headers]
+    unknown = [column for column in headers if column not in CSV_COLUMNS]
+    errors = []
+    if missing:
+        errors.append(f"Missing required column(s): {', '.join(missing)}.")
+    if unknown:
+        errors.append(f"Unknown column(s): {', '.join(unknown)}.")
+    if errors:
+        raise ValidationError(errors)
+
+    normalized = []
+    seen = {}
+    try:
+        for row_number, row in enumerate(reader, start=2):
+            row = {str(key or "").strip().lower(): value for key, value in row.items()}
+            if not any(str(value or "").strip() for value in row.values()):
+                continue
+            raw = {
+                "key": row.get("key"),
+                "label": row.get("label"),
+                "address": row.get("address"),
+                "read_function_code": row.get("function_code") or 3,
+                "data_type": row.get("data_type") or "uint16",
+                "objects_count": row.get("register_count") or None,
+                "unit": row.get("unit"),
+                "multiplier": row.get("scale") or 1,
+                "offset": row.get("offset") or 0,
+                "access": row.get("access") or "read_only",
+                "write_function_code": row.get("write_function_code") or None,
+                "display_type": row.get("display_type") or None,
+                "normal_min": row.get("normal_min"),
+                "normal_max": row.get("normal_max"),
+                "safety_min": row.get("safety_min"),
+                "safety_max": row.get("safety_max"),
+                "alert_suggestion": row.get("alert_suggestion"),
+            }
+            try:
+                point = normalize_datapoints([raw])[0]
+            except ValidationError as exc:
+                errors.extend(f"Row {row_number}: {message}" for message in exc.messages)
+                continue
+            if point["key"] in seen:
+                errors.append(f"Row {row_number}: signal key '{point['key']}' duplicates row {seen[point['key']]}.")
+                continue
+            seen[point["key"]] = row_number
+            normalized.append(point)
+    except csv.Error as exc:
+        errors.append(f"The CSV file could not be read: {exc}")
+
+    if len(normalized) > 20:
+        errors.append("The CSV contains more than 20 signals.")
+    if not normalized and not errors:
+        errors.append("The CSV file must contain at least one signal row.")
+    if errors:
+        raise ValidationError(errors)
+    return normalized
+
+
 def register_map_to_datapoints(register_map) -> list[dict]:
     rows = []
     for key, config in (register_map or {}).items():
@@ -219,6 +340,11 @@ def mapping_checksum(device, datapoints=None) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
+def datapoints_checksum(datapoints) -> str:
+    canonical = json.dumps(datapoints or [], sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    return hashlib.sha256(canonical).hexdigest()
+
+
 def effective_register_map(device, *, require_confirmed=True) -> dict:
     """Return deployable/display metadata without confusing a PLC starter with its site map."""
     if not device_requires_mapping(device):
@@ -268,34 +394,73 @@ def save_device_datapoint_map(*, device, team, datapoints) -> DeviceDatapointMap
     mapping.datapoints = normalized
     mapping.status = DeviceDatapointMap.Status.DRAFT
     mapping.last_validation = {}
+    mapping.datapoint_health = {}
     mapping.tested_checksum = ""
     mapping.confirmed_checksum = ""
     mapping.last_tested_at = None
+    mapping.validated_by = None
+    mapping.validated_at = None
     mapping.confirmed_by = None
     mapping.confirmed_at = None
     mapping.save()
+    metadata = dict(device.metadata or {})
+    metadata["guided_setup_validation"] = "pending"
+    device.metadata = metadata
+    device.save(update_fields=["metadata", "updated_at"])
     return mapping
 
 
 @transaction.atomic
-def record_device_datapoint_validation(*, device, result) -> DeviceDatapointMap:
+def record_device_datapoint_validation(*, device, result, validated_by=None) -> DeviceDatapointMap:
     mapping = ensure_device_datapoint_map(device)
-    mapping.last_validation = result if isinstance(result, dict) else {}
-    mapping.last_tested_at = timezone.now()
-    signals = mapping.last_validation.get("signals") or []
+    tested_at = timezone.now()
+    mapping.last_tested_at = tested_at
+    mapping.last_validation = dict(result) if isinstance(result, dict) else {}
+    signals = []
+    for raw_signal in mapping.last_validation.get("signals") or []:
+        signal = dict(raw_signal)
+        signal["decoded_value"] = signal.get("decoded_value", signal.get("value"))
+        signal["raw_value"] = signal.get("raw_value", signal.get("sample"))
+        signal["warning_message"] = signal.get("warning_message", "")
+        signal["error_message"] = signal.get("error_message", "")
+        if not signal["error_message"] and not signal["warning_message"]:
+            signal["error_message"] = signal.get("reason", "")
+        signal["validated_at"] = tested_at.isoformat()
+        signals.append(signal)
+    mapping.last_validation["signals"] = signals
+    mapped_keys = {point.get("key") for point in mapping.datapoints}
+    mapping.datapoint_health = {
+        signal["key"]: {
+            "status": signal.get("status", "failed"),
+            "decoded_value": signal.get("decoded_value", signal.get("value")),
+            "raw_value": signal.get("raw_value", signal.get("sample")),
+            "error_message": signal.get("error_message", signal.get("reason", "")),
+            "warning_message": signal.get("warning_message", ""),
+            "validated_at": tested_at.isoformat(),
+        }
+        for signal in signals
+        if signal.get("key") in mapped_keys
+    }
+    returned_keys = [signal.get("key") for signal in signals]
     successful = (
         bool(signals)
         and len(signals) == len(mapping.datapoints)
-        and all(signal.get("status") == "success" for signal in signals)
+        and len(returned_keys) == len(set(returned_keys))
+        and set(returned_keys) == mapped_keys
+        and all(signal.get("status") in {"success", "warning"} and not signal.get("blocking") for signal in signals)
     )
     current_checksum = mapping_checksum(device, mapping.datapoints)
     tested_checksum = str(mapping.last_validation.get("mapping_checksum") or "")
     if mapping.last_validation.get("status") == "success" and successful and tested_checksum == current_checksum:
         mapping.status = DeviceDatapointMap.Status.AWAITING_CONFIRMATION
         mapping.tested_checksum = tested_checksum
+        mapping.validated_by = validated_by if getattr(validated_by, "is_authenticated", False) else None
+        mapping.validated_at = tested_at
     else:
         mapping.status = DeviceDatapointMap.Status.NEEDS_ATTENTION
         mapping.tested_checksum = ""
+        mapping.validated_by = None
+        mapping.validated_at = None
     mapping.confirmed_checksum = ""
     mapping.confirmed_by = None
     mapping.confirmed_at = None
@@ -308,6 +473,7 @@ def confirm_device_datapoint_map(*, device, team, confirmed_by) -> DeviceDatapoi
     if device.team_id != team.id:
         raise ValidationError("Equipment does not belong to this team.")
     mapping = ensure_device_datapoint_map(device)
+    mapping = DeviceDatapointMap.objects.select_for_update().get(pk=mapping.pk)
     current_checksum = mapping_checksum(device, mapping.datapoints)
     if mapping.status != DeviceDatapointMap.Status.AWAITING_CONFIRMATION:
         raise ValidationError("Run a successful live validation before confirming these signals.")
@@ -318,7 +484,37 @@ def confirm_device_datapoint_map(*, device, team, confirmed_by) -> DeviceDatapoi
     mapping.confirmed_by = confirmed_by if getattr(confirmed_by, "is_authenticated", False) else None
     mapping.confirmed_at = timezone.now()
     mapping.save()
+    metadata = dict(device.metadata or {})
+    metadata["guided_setup_validation"] = "validated"
+    device.metadata = metadata
+    device.save(update_fields=["metadata", "updated_at"])
+    latest = mapping.revisions.order_by("-revision_number").first()
+    current_datapoints_checksum = datapoints_checksum(mapping.datapoints)
+    if latest is None or latest.datapoints_checksum != current_datapoints_checksum:
+        DeviceDatapointMapRevision.objects.create(
+            team=team,
+            mapping=mapping,
+            revision_number=(latest.revision_number + 1) if latest else 1,
+            datapoints=mapping.datapoints,
+            datapoints_checksum=current_datapoints_checksum,
+            confirmed_checksum=mapping.confirmed_checksum,
+            validation_result=mapping.last_validation,
+            validated_by=mapping.validated_by,
+            validated_at=mapping.validated_at,
+            confirmed_by=mapping.confirmed_by,
+            confirmed_at=mapping.confirmed_at,
+        )
     return mapping
+
+
+@transaction.atomic
+def rollback_device_datapoint_map(*, device, team, revision) -> DeviceDatapointMap:
+    if device.team_id != team.id or revision.team_id != team.id:
+        raise ValidationError("Mappings can only be restored within the current team.")
+    mapping = ensure_device_datapoint_map(device)
+    if revision.mapping_id != mapping.id:
+        raise ValidationError("Choose a revision for this equipment.")
+    return save_device_datapoint_map(device=device, team=team, datapoints=revision.datapoints)
 
 
 @transaction.atomic

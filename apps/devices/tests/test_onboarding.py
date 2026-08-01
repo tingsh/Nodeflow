@@ -3,6 +3,7 @@ import json
 from unittest.mock import patch
 
 from django.contrib.messages import get_messages
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
@@ -410,6 +411,59 @@ class OnboardingConnectionTest(TestCase):
 
         self.assertEqual(response.status_code, 404)
         self.assertFalse(DeviceDatapointMap.objects.filter(device=victim_device).exists())
+
+    def test_datapoint_csv_import_replaces_draft_atomically_and_exports(self):
+        starter = DeviceTemplate.objects.create(
+            name="CSV PLC Starter",
+            device_type="plc",
+            protocol="modbus_tcp",
+            mapping_strategy="site_defined",
+            register_map={},
+        )
+        device = Device.objects.create(
+            team=self.team,
+            site=self.site,
+            gateway=self.gateway,
+            template=starter,
+            name="CSV PLC",
+            device_type="plc",
+            protocol="modbus_tcp",
+            connection_config={"host": "192.168.1.50", "port": 502},
+        )
+        url = reverse("web_team:devices:device_datapoint_mapping", args=[self.team.slug, device.pk])
+        valid_csv = b"key,label,address,function_code,data_type,unit\nline_speed,Line Speed,10,3,uint16,rpm\n"
+
+        response = self.client.post(
+            url,
+            {
+                "action": "import_csv",
+                "csv_file": SimpleUploadedFile("map.csv", valid_csv, content_type="text/csv"),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        mapping = DeviceDatapointMap.objects.get(device=device)
+        self.assertEqual(mapping.status, DeviceDatapointMap.Status.DRAFT)
+        self.assertEqual([point["key"] for point in mapping.datapoints], ["line_speed"])
+
+        invalid_csv = b"key,address\nline_speed,not-an-address\n"
+        response = self.client.post(
+            url,
+            {
+                "action": "import_csv",
+                "csv_file": SimpleUploadedFile("bad.csv", invalid_csv, content_type="text/csv"),
+            },
+            follow=True,
+        )
+        mapping.refresh_from_db()
+        self.assertContains(response, "Row 2")
+        self.assertEqual([point["key"] for point in mapping.datapoints], ["line_speed"])
+
+        export = self.client.post(url, {"action": "export_csv"})
+        self.assertEqual(export.status_code, 200)
+        self.assertEqual(export["Content-Type"], "text/csv; charset=utf-8")
+        self.assertTrue(export.content.startswith(b"\xef\xbb\xbfkey,label,address"))
+        self.assertIn(b"line_speed,Line Speed,10,3,uint16", export.content)
 
     def test_gateway_update_form_rejects_other_team_site(self):
         _, victim_site, _ = self._victim_infrastructure()

@@ -6,6 +6,7 @@ from .models import (
     DeploymentSetupRun,
     Device,
     DeviceDatapointMap,
+    DeviceDatapointMapRevision,
     DeviceTemplate,
     EquipmentTemplateRequest,
     FirmwareRelease,
@@ -160,9 +161,39 @@ class DeploymentSetupItemAdmin(admin.ModelAdmin):
 
 @admin.register(DeviceDatapointMap)
 class DeviceDatapointMapAdmin(admin.ModelAdmin):
-    list_display = ("device", "team", "status", "last_tested_at", "confirmed_at")
+    list_display = ("device", "team", "status", "validated_at", "confirmed_at")
     list_filter = ("status", "team")
-    readonly_fields = ("tested_checksum", "confirmed_checksum", "last_validation")
+    readonly_fields = ("tested_checksum", "confirmed_checksum", "last_validation", "datapoint_health")
+
+
+@admin.register(DeviceDatapointMapRevision)
+class DeviceDatapointMapRevisionAdmin(admin.ModelAdmin):
+    list_display = ("mapping", "revision_number", "team", "validated_at", "confirmed_at")
+    list_filter = ("team",)
+    readonly_fields = (
+        "mapping",
+        "team",
+        "revision_number",
+        "datapoints",
+        "datapoints_checksum",
+        "confirmed_checksum",
+        "validation_result",
+        "validated_by",
+        "validated_at",
+        "confirmed_by",
+        "confirmed_at",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(DeploymentSetupEvent)
