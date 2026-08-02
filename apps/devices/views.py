@@ -946,12 +946,19 @@ class DeviceUpdateView(PermissionRequiredMixin, UpdateView):
             mapping = ensure_device_datapoint_map(self.object)
             mapping.status = mapping.Status.DRAFT
             mapping.last_validation = {}
+            mapping.datapoint_health = {}
             mapping.tested_checksum = ""
             mapping.confirmed_checksum = ""
             mapping.last_tested_at = None
+            mapping.validated_by = None
+            mapping.validated_at = None
             mapping.confirmed_by = None
             mapping.confirmed_at = None
             mapping.save()
+            metadata = dict(self.object.metadata or {})
+            metadata["guided_setup_validation"] = "pending"
+            self.object.metadata = metadata
+            self.object.save(update_fields=["metadata", "updated_at"])
         return response
 
     def get_success_url(self):
@@ -964,8 +971,11 @@ def device_datapoint_mapping(request, team_slug, pk):
     from .datapoint_maps import (
         clone_device_datapoint_map,
         confirm_device_datapoint_map,
+        datapoints_from_csv,
+        datapoints_to_csv,
         device_requires_mapping,
         ensure_device_datapoint_map,
+        rollback_device_datapoint_map,
         save_device_datapoint_map,
     )
     from .deployment_setup import (
@@ -974,7 +984,7 @@ def device_datapoint_mapping(request, team_slug, pk):
         start_validation,
         sync_setup_run,
     )
-    from .models import DeploymentSetupItem, DeviceDatapointMap
+    from .models import DeploymentSetupItem, DeviceDatapointMap, DeviceDatapointMapRevision
 
     device = get_object_or_404(
         Device.objects.select_related("template", "gateway", "site"),
@@ -1009,7 +1019,44 @@ def device_datapoint_mapping(request, team_slug, pk):
     if request.method == "POST":
         action = request.POST.get("action", "save")
         try:
-            if action == "save":
+            if action == "export_csv":
+                response = HttpResponse(
+                    "\ufeff" + datapoints_to_csv(mapping.datapoints),
+                    content_type="text/csv; charset=utf-8",
+                )
+                response["Content-Disposition"] = f'attachment; filename="device-{device.pk}-datapoints.csv"'
+                return response
+            if action == "import_csv":
+                upload = request.FILES.get("csv_file")
+                if not upload:
+                    raise ValidationError("Choose a CSV file to import.")
+                if upload.size > 256 * 1024:
+                    raise ValidationError("The CSV file must be 256 KB or smaller.")
+                try:
+                    imported = datapoints_from_csv(upload.read().decode("utf-8-sig"))
+                except UnicodeDecodeError as exc:
+                    raise ValidationError("The CSV file must use UTF-8 encoding.") from exc
+                mapping = save_device_datapoint_map(device=device, team=request.team, datapoints=imported)
+                item.connection = device.connection_config
+                item.datapoints = mapping.datapoints
+                item.state = DeploymentSetupItem.State.TEMPLATE_SELECTED
+                item.trust_level = DeploymentSetupItem.Trust.UNVALIDATED
+                item.validation_result = {}
+                item.save(
+                    update_fields=[
+                        "connection",
+                        "datapoints",
+                        "state",
+                        "trust_level",
+                        "validation_result",
+                        "updated_at",
+                    ]
+                )
+                messages.success(
+                    request,
+                    f"Imported {len(imported)} signals as a draft. Validate them before deployment.",
+                )
+            elif action == "save":
                 raw_datapoints = json.loads(request.POST.get("datapoints_json", "[]"))
                 connection = dict(device.connection_config or {})
                 connection["slave_id"] = int(request.POST.get("slave_id", 1))
@@ -1055,8 +1102,18 @@ def device_datapoint_mapping(request, team_slug, pk):
                 item.connection = connection
                 item.datapoints = mapping.datapoints
                 item.state = DeploymentSetupItem.State.TEMPLATE_SELECTED
+                item.trust_level = DeploymentSetupItem.Trust.UNVALIDATED
                 item.validation_result = {}
-                item.save(update_fields=["connection", "datapoints", "state", "validation_result", "updated_at"])
+                item.save(
+                    update_fields=[
+                        "connection",
+                        "datapoints",
+                        "state",
+                        "trust_level",
+                        "validation_result",
+                        "updated_at",
+                    ]
+                )
                 messages.success(request, "Signal mapping saved. Run a live validation before confirming it.")
             elif action in {"test_connection", "validate"}:
                 start_validation(
@@ -1082,10 +1139,6 @@ def device_datapoint_mapping(request, team_slug, pk):
                 item.datapoints = mapping.datapoints
                 item.validation_result = mapping.last_validation
                 item.save(update_fields=["state", "trust_level", "datapoints", "validation_result", "updated_at"])
-                metadata = dict(device.metadata or {})
-                metadata["guided_setup_validation"] = "validated"
-                device.metadata = metadata
-                device.save(update_fields=["metadata", "updated_at"])
                 append_setup_event(
                     run,
                     "mapping_confirmed",
@@ -1104,16 +1157,67 @@ def device_datapoint_mapping(request, team_slug, pk):
                     datapoint_map__status=DeviceDatapointMap.Status.CONFIRMED,
                 )
                 mapping = clone_device_datapoint_map(source_device=source, target_device=device, team=request.team)
+                item.connection = device.connection_config
                 item.datapoints = mapping.datapoints
                 item.state = DeploymentSetupItem.State.TEMPLATE_SELECTED
+                item.trust_level = DeploymentSetupItem.Trust.UNVALIDATED
                 item.validation_result = {}
-                item.save(update_fields=["datapoints", "state", "validation_result", "updated_at"])
+                item.save(
+                    update_fields=[
+                        "connection",
+                        "datapoints",
+                        "state",
+                        "trust_level",
+                        "validation_result",
+                        "updated_at",
+                    ]
+                )
                 messages.success(request, "Mapping cloned. Validate it against this equipment before confirmation.")
+            elif action == "rollback":
+                revision = get_object_or_404(
+                    DeviceDatapointMapRevision,
+                    pk=request.POST.get("revision_id"),
+                    team=request.team,
+                    mapping=mapping,
+                )
+                mapping = rollback_device_datapoint_map(
+                    device=device,
+                    team=request.team,
+                    revision=revision,
+                )
+                item.connection = device.connection_config
+                item.datapoints = mapping.datapoints
+                item.state = DeploymentSetupItem.State.TEMPLATE_SELECTED
+                item.trust_level = DeploymentSetupItem.Trust.UNVALIDATED
+                item.validation_result = {}
+                item.save(
+                    update_fields=[
+                        "connection",
+                        "datapoints",
+                        "state",
+                        "trust_level",
+                        "validation_result",
+                        "updated_at",
+                    ]
+                )
+                append_setup_event(
+                    run,
+                    "mapping_revision_restored",
+                    f"Revision {revision.revision_number} was restored as a draft for {device.name}.",
+                    item=item,
+                    actor=request.user,
+                    evidence={"revision_id": revision.pk, "revision_number": revision.revision_number},
+                )
+                messages.success(
+                    request,
+                    f"Revision {revision.revision_number} restored as a draft. Validate it before deployment.",
+                )
             else:
                 raise ValidationError("Unknown mapping action.")
         except (ValidationError, ValueError, TypeError, json.JSONDecodeError) as exc:
-            message = exc.messages[0] if isinstance(exc, ValidationError) and exc.messages else str(exc)
-            messages.error(request, message)
+            error_messages = exc.messages if isinstance(exc, ValidationError) and exc.messages else [str(exc)]
+            for message in error_messages:
+                messages.error(request, message)
         return redirect("web_team:devices:device_datapoint_mapping", team_slug=team_slug, pk=device.pk)
 
     clone_sources = (
@@ -1135,6 +1239,7 @@ def device_datapoint_mapping(request, team_slug, pk):
             "setup_item": item,
             "setup_run": run,
             "clone_sources": clone_sources,
+            "revisions": mapping.revisions.select_related("validated_by", "confirmed_by").all(),
             "connection": device.connection_config or {},
         },
     )

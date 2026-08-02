@@ -6,13 +6,23 @@ from apps.devices.config_generator import generate_connector_config
 from apps.devices.datapoint_maps import (
     clone_device_datapoint_map,
     confirm_device_datapoint_map,
+    datapoints_from_csv,
+    datapoints_to_csv,
     effective_register_map,
     mapping_checksum,
     record_device_datapoint_validation,
     register_map_to_datapoints,
+    rollback_device_datapoint_map,
     save_device_datapoint_map,
 )
-from apps.devices.models import Device, DeviceDatapointMap, DeviceTemplate, Gateway, Site
+from apps.devices.models import (
+    Device,
+    DeviceDatapointMap,
+    DeviceDatapointMapRevision,
+    DeviceTemplate,
+    Gateway,
+    Site,
+)
 from apps.teams.models import Team
 from apps.users.models import CustomUser
 
@@ -171,7 +181,7 @@ class DeviceDatapointMappingTest(TestCase):
     def test_stale_validation_cannot_confirm_after_connection_change(self):
         mapping = save_device_datapoint_map(device=self.device, team=self.team, datapoints=self.datapoints)
         checksum = mapping_checksum(self.device, mapping.datapoints)
-        record_device_datapoint_validation(
+        mapping = record_device_datapoint_validation(
             device=self.device,
             result={
                 "status": "success",
@@ -187,7 +197,7 @@ class DeviceDatapointMappingTest(TestCase):
 
     def test_failed_live_read_cannot_be_confirmed(self):
         mapping = save_device_datapoint_map(device=self.device, team=self.team, datapoints=self.datapoints)
-        record_device_datapoint_validation(
+        mapping = record_device_datapoint_validation(
             device=self.device,
             result={
                 "status": "failed",
@@ -202,6 +212,9 @@ class DeviceDatapointMappingTest(TestCase):
             },
         )
 
+        health = mapping.datapoint_health["process_temperature"]
+        self.assertEqual(health["status"], "failed")
+        self.assertIn("outside the safety range", health["error_message"])
         with self.assertRaisesRegex(ValidationError, "successful live validation"):
             confirm_device_datapoint_map(device=self.device, team=self.team, confirmed_by=self.user)
 
@@ -250,3 +263,126 @@ class DeviceDatapointMappingTest(TestCase):
         other_team = Team.objects.create(name="Other", slug="other")
         with self.assertRaisesRegex(ValidationError, "current team"):
             clone_device_datapoint_map(source_device=self.device, target_device=target, team=other_team)
+
+    def test_csv_round_trip_and_row_errors(self):
+        exported = datapoints_to_csv(self.datapoints)
+
+        imported = datapoints_from_csv(exported)
+
+        self.assertEqual(imported[0]["key"], "process_temperature")
+        self.assertEqual(imported[0]["objects_count"], 2)
+        self.assertEqual(imported[0]["multiplier"], 0.1)
+        self.assertEqual(imported[0]["safety_max"], 200.0)
+
+        invalid = "key,address,function_code\nvalid_signal,1,3\nbad_address,nope,3\nvalid_signal,2,3\n"
+        with self.assertRaises(ValidationError) as error:
+            datapoints_from_csv(invalid)
+
+        self.assertTrue(any("Row 3" in message for message in error.exception.messages))
+        self.assertTrue(
+            any("Row 4" in message and "duplicates row 2" in message for message in error.exception.messages)
+        )
+
+    def test_validation_audit_and_per_datapoint_warning_health(self):
+        mapping = save_device_datapoint_map(device=self.device, team=self.team, datapoints=self.datapoints)
+        checksum = mapping_checksum(self.device, mapping.datapoints)
+
+        mapping = record_device_datapoint_validation(
+            device=self.device,
+            validated_by=self.user,
+            result={
+                "status": "success",
+                "mapping_checksum": checksum,
+                "signals": [
+                    {
+                        "key": "process_temperature",
+                        "status": "warning",
+                        "raw_value": [16830, 0],
+                        "decoded_value": 85.0,
+                        "warning_message": "Above the configured normal maximum.",
+                        "blocking": False,
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(mapping.status, DeviceDatapointMap.Status.AWAITING_CONFIRMATION)
+        self.assertEqual(mapping.validated_by, self.user)
+        self.assertIsNotNone(mapping.validated_at)
+        health = mapping.datapoint_health["process_temperature"]
+        self.assertEqual(health["status"], "warning")
+        self.assertEqual(health["raw_value"], [16830, 0])
+        self.assertEqual(health["decoded_value"], 85.0)
+        self.assertTrue(health["warning_message"])
+        self.assertTrue(health["validated_at"])
+
+        confirmed = confirm_device_datapoint_map(device=self.device, team=self.team, confirmed_by=self.user)
+        revision = confirmed.revisions.get()
+        self.assertEqual(confirmed.confirmed_by, self.user)
+        self.assertEqual(revision.validated_by, self.user)
+        self.assertEqual(revision.confirmed_by, self.user)
+
+    def test_material_confirmations_create_revisions_and_rollback_requires_revalidation(self):
+        self._save_and_confirm()
+        first = DeviceDatapointMapRevision.objects.get(mapping__device=self.device, revision_number=1)
+        changed = [dict(self.datapoints[0], address=110)]
+        mapping = save_device_datapoint_map(device=self.device, team=self.team, datapoints=changed)
+        record_device_datapoint_validation(
+            device=self.device,
+            validated_by=self.user,
+            result={
+                "status": "success",
+                "mapping_checksum": mapping_checksum(self.device, mapping.datapoints),
+                "signals": [{"key": "process_temperature", "status": "success", "decoded_value": 25.0}],
+            },
+        )
+        confirm_device_datapoint_map(device=self.device, team=self.team, confirmed_by=self.user)
+
+        self.assertEqual(DeviceDatapointMapRevision.objects.filter(mapping__device=self.device).count(), 2)
+        restored = rollback_device_datapoint_map(
+            device=self.device,
+            team=self.team,
+            revision=first,
+        )
+        self.assertEqual(restored.status, DeviceDatapointMap.Status.DRAFT)
+        self.assertEqual(restored.datapoints[0]["address"], 100)
+        self.assertEqual(restored.datapoint_health, {})
+        self.assertFalse(restored.tested_checksum)
+        self.assertFalse(restored.confirmed_checksum)
+        with self.assertRaisesRegex(ValidationError, "successful live validation"):
+            confirm_device_datapoint_map(device=self.device, team=self.team, confirmed_by=self.user)
+
+        restored = record_device_datapoint_validation(
+            device=self.device,
+            validated_by=self.user,
+            result={
+                "status": "success",
+                "mapping_checksum": mapping_checksum(self.device, restored.datapoints),
+                "signals": [{"key": "process_temperature", "status": "success", "decoded_value": 20.0}],
+            },
+        )
+        confirm_device_datapoint_map(device=self.device, team=self.team, confirmed_by=self.user)
+        latest = DeviceDatapointMapRevision.objects.filter(mapping__device=self.device).first()
+        self.assertEqual(DeviceDatapointMapRevision.objects.filter(mapping__device=self.device).count(), 3)
+        self.assertEqual(latest.datapoints[0]["address"], 100)
+
+        other_team = Team.objects.create(name="Revision Attacker", slug="revision-attacker")
+        with self.assertRaisesRegex(ValidationError, "current team"):
+            rollback_device_datapoint_map(device=self.device, team=other_team, revision=first)
+
+    def test_reconfirming_latest_revision_does_not_create_duplicate(self):
+        self._save_and_confirm()
+        revision = DeviceDatapointMapRevision.objects.get(mapping__device=self.device)
+        mapping = rollback_device_datapoint_map(device=self.device, team=self.team, revision=revision)
+        record_device_datapoint_validation(
+            device=self.device,
+            validated_by=self.user,
+            result={
+                "status": "success",
+                "mapping_checksum": mapping_checksum(self.device, mapping.datapoints),
+                "signals": [{"key": "process_temperature", "status": "success", "decoded_value": 20.0}],
+            },
+        )
+        confirm_device_datapoint_map(device=self.device, team=self.team, confirmed_by=self.user)
+
+        self.assertEqual(DeviceDatapointMapRevision.objects.filter(mapping__device=self.device).count(), 1)

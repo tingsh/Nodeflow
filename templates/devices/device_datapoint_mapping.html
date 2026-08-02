@@ -34,6 +34,16 @@ function datapointMapping() {
         </div>
     </div>
 
+    <section class="rounded-xl border border-base-content/10 bg-base-100 p-4 shadow-sm">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div><h2 class="text-base font-black">CSV register map</h2><p class="mt-1 text-sm text-base-content/55">Import replaces the current draft only after every spreadsheet row passes validation.</p></div>
+            <div class="flex flex-col gap-2 sm:flex-row">
+                <form method="post">{% csrf_token %}<input type="hidden" name="action" value="export_csv"><button class="btn btn-outline btn-sm" type="submit"><i class="fa fa-download mr-2"></i>Export CSV</button></form>
+                <form method="post" enctype="multipart/form-data" class="flex gap-2">{% csrf_token %}<input type="hidden" name="action" value="import_csv"><input required type="file" name="csv_file" accept=".csv,text/csv" class="file-input file-input-bordered file-input-sm w-full max-w-xs"><button class="btn btn-outline btn-sm" type="submit"><i class="fa fa-upload mr-2"></i>Import</button></form>
+            </div>
+        </div>
+    </section>
+
     <section class="rounded-2xl border border-base-content/10 bg-base-100 p-6 shadow-sm">
         <div class="mb-5">
             <h2 class="text-xl font-black">1. Connection</h2>
@@ -119,9 +129,15 @@ function datapointMapping() {
         </div>
         {% if mapping.last_validation.message %}<p class="mt-4 rounded-lg bg-base-200/50 p-3 text-sm">{{ mapping.last_validation.message }}</p>{% endif %}
         {% if setup_item.validation_result.message and not mapping.last_validation.message %}<p class="mt-4 rounded-lg bg-base-200/50 p-3 text-sm">{{ setup_item.validation_result.message }}</p>{% endif %}
+        {% if mapping.validated_at or mapping.confirmed_at %}
+        <div class="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-base-content/60">
+            {% if mapping.validated_at %}<span><strong class="text-base-content">Validated:</strong> {{ mapping.validated_by|default:"Gateway test" }} · {{ mapping.validated_at }}</span>{% endif %}
+            {% if mapping.confirmed_at %}<span><strong class="text-base-content">Confirmed:</strong> {{ mapping.confirmed_by|default:"Unknown user" }} · {{ mapping.confirmed_at }}</span>{% endif %}
+        </div>
+        {% endif %}
         {% if mapping.last_validation.signals %}
-        <div class="mt-5 overflow-x-auto"><table class="table table-sm"><thead><tr><th>Signal</th><th>Address</th><th>Raw objects</th><th>Decoded reading</th><th>Status</th></tr></thead><tbody>
-        {% for signal in mapping.last_validation.signals %}<tr><td class="font-bold">{{ signal.key|title }}</td><td>{{ signal.address }}</td><td class="font-mono text-xs">{{ signal.sample|default:"—" }}</td><td class="font-mono">{{ signal.value|default:"—" }} {{ signal.unit }}</td><td><span class="badge badge-sm {% if signal.status == 'success' %}badge-success{% else %}badge-error{% endif %}">{{ signal.status|title }}</span>{% if signal.reason %}<p class="mt-1 text-xs text-error">{{ signal.reason }}</p>{% endif %}</td></tr>{% endfor %}
+        <div class="mt-5 overflow-x-auto"><table class="table table-sm"><thead><tr><th>Signal</th><th>Address</th><th>Raw value</th><th>Decoded reading</th><th>Health</th><th>Checked</th></tr></thead><tbody>
+        {% for signal in mapping.last_validation.signals %}<tr><td class="font-bold">{{ signal.key|title }}</td><td>{{ signal.address }}</td><td class="font-mono text-xs">{{ signal.raw_value|default_if_none:"—" }}</td><td class="font-mono">{{ signal.decoded_value|default_if_none:"—" }} {{ signal.unit }}</td><td><span class="badge badge-sm {% if signal.status == 'success' %}badge-success{% elif signal.status == 'warning' %}badge-warning{% else %}badge-error{% endif %}">{{ signal.status|title }}</span>{% if signal.warning_message %}<p class="mt-1 max-w-sm text-xs text-warning">{{ signal.warning_message }}</p>{% endif %}{% if signal.error_message %}<p class="mt-1 max-w-sm text-xs text-error">{{ signal.error_message }}</p>{% endif %}</td><td class="whitespace-nowrap text-xs">{{ signal.validated_at|default:"—" }}</td></tr>{% endfor %}
         </tbody></table></div>
         {% endif %}
         {% if mapping.status == "awaiting_confirmation" %}
@@ -132,6 +148,15 @@ function datapointMapping() {
         </form>
         {% endif %}
     </section>
+
+    {% if revisions %}
+    <section class="rounded-xl border border-base-content/10 bg-base-100 p-5 shadow-sm">
+        <h2 class="text-lg font-black">Mapping revisions</h2><p class="mt-1 text-sm text-base-content/55">Confirmed versions are preserved. Restoring one creates an unvalidated draft.</p>
+        <div class="mt-4 overflow-x-auto"><table class="table table-sm"><thead><tr><th>Revision</th><th>Signals</th><th>Validated</th><th>Confirmed</th><th></th></tr></thead><tbody>
+        {% for revision in revisions %}<tr><td class="font-bold">{{ revision.revision_number }}</td><td>{{ revision.datapoints|length }}</td><td>{{ revision.validated_by|default:"Gateway test" }}{% if revision.validated_at %}<br><span class="text-xs text-base-content/50">{{ revision.validated_at }}</span>{% endif %}</td><td>{{ revision.confirmed_by|default:"Unknown user" }}{% if revision.confirmed_at %}<br><span class="text-xs text-base-content/50">{{ revision.confirmed_at }}</span>{% endif %}</td><td class="text-right"><form method="post">{% csrf_token %}<input type="hidden" name="action" value="rollback"><input type="hidden" name="revision_id" value="{{ revision.pk }}"><button class="btn btn-ghost btn-sm" type="submit"><i class="fa fa-rotate-left mr-2"></i>Restore as draft</button></form></td></tr>{% endfor %}
+        </tbody></table></div>
+    </section>
+    {% endif %}
 
     {% if clone_sources %}
     <section class="rounded-2xl border border-base-content/10 bg-base-100 p-6 shadow-sm"><h2 class="text-lg font-black">Clone a confirmed mapping</h2><p class="mt-1 text-sm text-base-content/55">The copied mapping returns to Draft and must be validated on this equipment.</p><form method="post" class="mt-4 flex flex-col gap-3 sm:flex-row">{% csrf_token %}<input type="hidden" name="action" value="clone"><select required name="source_device" class="select select-bordered grow"><option value="">Choose equipment</option>{% for source in clone_sources %}<option value="{{ source.pk }}">{{ source.name }} · {{ source.site.name }}</option>{% endfor %}</select><button class="btn btn-outline" type="submit">Clone mapping</button></form></section>

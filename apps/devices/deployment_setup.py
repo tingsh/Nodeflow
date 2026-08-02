@@ -332,10 +332,12 @@ def start_validation(*, item: DeploymentSetupItem, template, requested_by, conne
             "protocol": template.protocol,
             "connection": item.connection,
             "connection_only": connection_only,
+            "validation_profile": "site_defined" if item.device and device_requires_mapping(item.device) else "fixed",
             "mapping_checksum": mapping_checksum(item.device, item.datapoints) if item.device else "",
             "datapoints": [
                 {
                     "key": point["key"],
+                    "label": point.get("label", ""),
                     "address": point["address"],
                     "functionCode": point.get("read_function_code", point.get("functionCode", 3)),
                     "objectsCount": point.get("objects_count", point.get("objectsCount", 1)),
@@ -346,6 +348,10 @@ def start_validation(*, item: DeploymentSetupItem, template, requested_by, conne
                     "quality": {
                         "min": point.get("safety_min"),
                         "max": point.get("safety_max"),
+                    },
+                    "normal": {
+                        "min": point.get("normal_min"),
+                        "max": point.get("normal_max"),
                     },
                 }
                 for point in item.datapoints
@@ -451,7 +457,11 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
                     event_type = "connection_test_succeeded"
                 elif rpc.status == "success" and result.get("status") == "success":
                     if item.device and device_requires_mapping(item.device):
-                        record_device_datapoint_validation(device=item.device, result=item.validation_result)
+                        record_device_datapoint_validation(
+                            device=item.device,
+                            result=item.validation_result,
+                            validated_by=item.validation_command.requested_by,
+                        )
                         item.state = DeploymentSetupItem.State.AWAITING_CONFIRMATION
                         item.trust_level = DeploymentSetupItem.Trust.UNVALIDATED
                     else:
@@ -475,7 +485,11 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
                     )
                     event_type = "validation_failed"
                     if item.device and device_requires_mapping(item.device) and not connection_only:
-                        record_device_datapoint_validation(device=item.device, result=item.validation_result)
+                        record_device_datapoint_validation(
+                            device=item.device,
+                            result=item.validation_result,
+                            validated_by=item.validation_command.requested_by,
+                        )
                     if item.device and not device_requires_mapping(item.device):
                         metadata = dict(item.device.metadata or {})
                         metadata["guided_setup_validation"] = "failed"

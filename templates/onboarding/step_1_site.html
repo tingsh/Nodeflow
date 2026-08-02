@@ -44,7 +44,7 @@
                         <div class="space-y-3">
                             {% for value, label in setup_goal_choices %}
                             <label class="flex items-center gap-3 rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 transition hover:border-indigo-300 dark:border-gray-700 dark:text-gray-200 dark:hover:border-indigo-500">
-                                <input type="checkbox" name="setup_goals" value="{{ value }}" {% if value in onboarding_context.setup_goals %}checked{% endif %} onchange="window.initOnboardingSetupGoals && window.initOnboardingSetupGoals()" class="checkbox checkbox-primary checkbox-sm">
+                                <input type="checkbox" name="setup_goals" value="{{ value }}" {% if value in onboarding_context.setup_goals %}checked{% endif %} {% if value == "other" %}data-setup-goal-other-toggle onchange="document.getElementById('setup-goal-other').hidden = !this.checked"{% endif %} class="checkbox checkbox-primary checkbox-sm">
                                 <span>{{ label }}</span>
                             </label>
                             {% endfor %}
@@ -142,7 +142,7 @@
     </div>
 </div>
 <script>
-    document.addEventListener("DOMContentLoaded", function () {
+    (function () {
         var timezoneInput = document.getElementById("timezone");
         if (timezoneInput && window.Intl) {
             var browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -153,13 +153,18 @@
 
         window.initOnboardingSetupGoals = function () {
             var otherField = document.getElementById("setup-goal-other");
-            var otherCheckbox = document.querySelector('input[name="setup_goals"][value="other"]');
+            var otherCheckbox = document.querySelector("[data-setup-goal-other-toggle]");
             if (!otherField || !otherCheckbox) {
                 return;
             }
             otherField.hidden = !otherCheckbox.checked;
         };
         window.initOnboardingSetupGoals();
+        document.body.addEventListener("change", function (event) {
+            if (event.target && event.target.matches("[data-setup-goal-other-toggle]")) {
+                window.initOnboardingSetupGoals();
+            }
+        });
         document.body.addEventListener("htmx:afterSettle", window.initOnboardingSetupGoals);
 
         window.initOnboardingOperatingHours = function () {
@@ -172,6 +177,6 @@
         };
         window.initOnboardingOperatingHours();
         document.body.addEventListener("htmx:afterSettle", window.initOnboardingOperatingHours);
-    });
+    })();
 </script>
 {% endblock %}

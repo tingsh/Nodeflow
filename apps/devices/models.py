@@ -421,9 +421,18 @@ class DeviceDatapointMap(BaseTeamModel):
     schema_version = models.PositiveSmallIntegerField(default=1)
     datapoints = models.JSONField(default=list, blank=True)
     last_validation = models.JSONField(default=dict, blank=True)
+    datapoint_health = models.JSONField(default=dict, blank=True)
     tested_checksum = models.CharField(max_length=64, blank=True)
     confirmed_checksum = models.CharField(max_length=64, blank=True)
     last_tested_at = models.DateTimeField(null=True, blank=True)
+    validated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="validated_device_datapoint_maps",
+    )
+    validated_at = models.DateTimeField(null=True, blank=True)
     confirmed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -446,6 +455,46 @@ class DeviceDatapointMap(BaseTeamModel):
 
     def __str__(self):
         return f"{self.device.name} datapoints ({self.get_status_display()})"
+
+
+class DeviceDatapointMapRevision(BaseTeamModel):
+    """Immutable snapshot of a confirmed site-defined datapoint map."""
+
+    mapping = models.ForeignKey(DeviceDatapointMap, on_delete=models.CASCADE, related_name="revisions")
+    revision_number = models.PositiveIntegerField()
+    datapoints = models.JSONField(default=list)
+    datapoints_checksum = models.CharField(max_length=64)
+    confirmed_checksum = models.CharField(max_length=64, blank=True)
+    validation_result = models.JSONField(default=dict, blank=True)
+    validated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    validated_at = models.DateTimeField(null=True, blank=True)
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-revision_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["mapping", "revision_number"],
+                name="unique_device_datapoint_map_revision",
+            )
+        ]
+        indexes = [models.Index(fields=["team", "mapping"], name="devices_dpr_team_map_idx")]
+
+    def __str__(self):
+        return f"{self.mapping.device.name} mapping revision {self.revision_number}"
 
 
 class GatewayConfig(BaseTeamModel):
