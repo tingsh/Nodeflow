@@ -592,6 +592,8 @@ class SolutionProfileOnboardingTest(TestCase):
         self.assertContains(response, "Prepare reports / audit trail")
         self.assertContains(response, "Other")
         self.assertContains(response, 'id="setup-goal-other" class="mt-4" hidden')
+        self.assertContains(response, "data-setup-goal-other-toggle")
+        self.assertContains(response, "document.getElementById('setup-goal-other').hidden = !this.checked")
         self.assertContains(response, 'name="setup_goal_other"')
         self.assertContains(response, "Tell us what else you want to use Novena for")
         self.assertContains(response, "initOnboardingSetupGoals")
