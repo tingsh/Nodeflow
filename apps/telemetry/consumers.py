@@ -4,7 +4,7 @@ import time
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
 from apps.devices.models import Device
-from apps.subscriptions.enforcement import get_latency_limit_for_team
+from apps.subscriptions.enforcement import get_effective_polling_interval_seconds
 
 logger = logging.getLogger("novena_hub")
 
@@ -32,8 +32,8 @@ class TelemetryConsumer(AsyncJsonWebsocketConsumer):
                 await self.close()
                 return
 
-            # 3. Determine plan latency limit
-            self.min_interval = await sync_to_async(get_latency_limit_for_team)(device.team)
+            # 3. Use the slower of plan policy and device polling capability.
+            self.min_interval = await sync_to_async(get_effective_polling_interval_seconds)(device)
         except Device.DoesNotExist:
             logger.warning(f"Device {self.device_id} not found for WebSocket connection.")
             await self.close()
@@ -59,7 +59,7 @@ class TelemetryConsumer(AsyncJsonWebsocketConsumer):
         logger.info(f"WebSocket disconnected: group={self.group_name}")
 
     async def telemetry_message(self, event):
-        # Enforce rate-limiting / latency gating based on subscription
+        # Enforce the effective plan/device delivery interval.
         current_time = time.time()
         if current_time - self.last_sent >= self.min_interval:
             self.last_sent = current_time

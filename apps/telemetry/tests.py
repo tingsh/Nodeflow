@@ -1,13 +1,17 @@
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from asgiref.sync import async_to_sync
 from django.http import Http404
-from django.test import RequestFactory
+from django.test import Client, RequestFactory
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.devices.models import Device, DeviceTemplate, Gateway, GatewayConfig, GatewayInventory, RpcCommand, Site
-from apps.teams.models import Team
+from apps.teams.models import Membership, Team
+from apps.teams.roles import ROLE_OWNER
+from apps.telemetry.consumers import TelemetryConsumer
 from apps.telemetry.management.commands.mqtt_consumer import Command as MqttConsumerCommand
 from apps.telemetry.models import GatewayLog, TelemetryData
 from apps.telemetry.services import ingest_telemetry_data
@@ -36,6 +40,29 @@ def buffered_gateway_payload(gateway, payload):
         "_topic_gateway_sn": gateway.serial_number,
         "_topic_gateway_id": gateway.pk,
     }
+
+
+def test_websocket_connection_uses_effective_plan_and_device_interval():
+    user = MagicMock(is_authenticated=True, email="operator@example.com")
+    user.teams.filter.return_value.exists.return_value = True
+    device = MagicMock(id=42, team_id=7)
+    consumer = TelemetryConsumer()
+    consumer.scope = {"url_route": {"kwargs": {"device_id": 42}}, "user": user}
+    consumer.channel_name = "test-channel"
+    consumer.channel_layer = MagicMock()
+    consumer.channel_layer.group_add = AsyncMock()
+    consumer.accept = AsyncMock()
+    consumer.send_json = AsyncMock()
+
+    with (
+        patch("apps.telemetry.consumers.Device.objects.select_related") as select_related,
+        patch("apps.telemetry.consumers.get_effective_polling_interval_seconds", return_value=2.0) as effective,
+    ):
+        select_related.return_value.get.return_value = device
+        async_to_sync(consumer.connect)()
+
+    effective.assert_called_once_with(device)
+    consumer.send_json.assert_awaited_once_with({"type": "connection_established", "min_interval": 2.0})
 
 
 @pytest.mark.django_db
@@ -700,6 +727,96 @@ def test_telemetry_history_api_returns_utc_and_site_local_labels():
     assert data["labels"] == [timestamp.isoformat()]
     assert data["labels_local"] == [format_site_datetime(timestamp, site, "%H:%M:%S")]
     assert data["timezone"] == "Asia/Jakarta"
+
+
+@pytest.mark.django_db
+def test_telemetry_history_api_preserves_boolean_values_for_status_widgets():
+    from apps.telemetry.views import device_telemetry_history_api
+
+    user = CustomUser.objects.create_user(
+        username="history_bool_user",
+        email="history-bool@example.com",
+        password="password123",
+    )
+    team = Team.objects.create(name="History Bool Team", slug="history-bool-team")
+    site = Site.objects.create(team=team, name="Bool Site")
+    device = Device.objects.create(
+        team=team,
+        site=site,
+        name="Pump Controller",
+        device_type="plc",
+        protocol="modbus_tcp",
+        status="online",
+    )
+    timestamp = timezone.now().replace(microsecond=0)
+    TelemetryData.objects.create(device=device, timestamp=timestamp, key="run_status", value_bool=True)
+
+    request = RequestFactory().get(f"/a/{team.slug}/telemetry/api/history/{device.id}/?key=run_status&hours=24")
+    request.user = user
+    request.team = team
+    response = device_telemetry_history_api(request, team.slug, device.id)
+    data = json.loads(response.content)
+
+    assert response.status_code == 200
+    assert data["values"] == [True]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("hours", ["invalid", "-6", "0"])
+def test_telemetry_history_api_handles_invalid_time_windows(hours):
+    from apps.telemetry.views import device_telemetry_history_api
+
+    user = CustomUser.objects.create_user(
+        username=f"history_window_{hours}",
+        email=f"history-window-{hours}@example.com",
+        password="password123",
+    )
+    team = Team.objects.create(name=f"History Window {hours}", slug=f"history-window-{hours}")
+    site = Site.objects.create(team=team, name="History Window Site")
+    device = Device.objects.create(team=team, site=site, name="Window Meter", protocol="modbus_tcp")
+    request = RequestFactory().get(f"/a/{team.slug}/telemetry/api/history/{device.id}/?hours={hours}")
+    request.user = user
+    request.team = team
+
+    response = device_telemetry_history_api(request, team.slug, device.id)
+
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_device_detail_renders_launch_ready_live_telemetry_controls():
+    user = CustomUser.objects.create_user(
+        username="device_live_controls_user",
+        email="device-live-controls@example.com",
+        password="password123",
+    )
+    team = Team.objects.create(name="Device Live Controls", slug="device-live-controls")
+    Membership.objects.create(user=user, team=team, role=ROLE_OWNER)
+    site = Site.objects.create(team=team, name="Live Controls Site")
+    device = Device.objects.create(
+        team=team,
+        site=site,
+        name="Live Controls Meter",
+        device_type="power_meter",
+        protocol="modbus_tcp",
+        status="online",
+    )
+    client = Client()
+    client.force_login(user)
+
+    response = client.get(reverse("web_team:devices:device_detail", args=[team.slug, device.id]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'id="telemetry-history-window"' in content
+    assert 'id="telemetry-pause-button"' in content
+    assert 'id="telemetry-refresh-button"' in content
+    assert 'id="telemetry-sample-filter"' in content
+    assert 'id="telemetry-samples-export"' in content
+    assert "depends on plan and device capability" in content
+    assert "/ws/device/${deviceId}/" in content
+    assert "NovenaTelemetryDiagnostics" in content
+    assert "cdn.jsdelivr.net/npm/chart.js" not in content
 
 
 @pytest.mark.django_db

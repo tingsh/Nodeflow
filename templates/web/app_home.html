@@ -1,28 +1,47 @@
 {% extends "web/app/app_base.html" %}
 {% load i18n %}
+{% load django_vite %}
 {% load team_permissions %}
 {% load waffle_tags %}
 
 {% block app %}
+{% vite_asset 'assets/javascript/app.js' %}
 <div class="px-4 sm:px-6 lg:px-8 py-6">
-    <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
             <h1 class="text-2xl font-bold text-base-content tracking-tight">Command Center</h1>
-            <p class="text-sm text-base-content/60 mt-1">Live operations across gateways, devices, alerts, and work orders.</p>
+            <p class="text-sm text-base-content/60 mt-1">Near-live fleet health across gateways, devices, sites, alerts, and work orders.</p>
         </div>
-        <div class="flex flex-wrap items-center gap-2 text-xs font-semibold">
-            <span class="inline-flex items-center gap-2 rounded-md border border-base-content/10 bg-base-100 px-3 py-2">
-                <span class="h-2 w-2 rounded-full {% if devices_attention %}bg-amber-500{% else %}bg-green-500{% endif %}"></span>
-                {{ devices_live }} / {{ devices_count }} live
-            </span>
-            <span class="inline-flex items-center gap-2 rounded-md border border-base-content/10 bg-base-100 px-3 py-2">
-                <span class="h-2 w-2 rounded-full {% if gateways_offline %}bg-amber-500{% else %}bg-green-500{% endif %}"></span>
-                {{ gateways_online }} / {{ gateways_count }} gateways
-            </span>
+        <div class="flex flex-col gap-2 lg:items-end">
+            <div class="flex flex-wrap items-center gap-2 text-xs font-semibold">
+                <span class="inline-flex items-center gap-2 rounded-md border border-base-content/10 bg-base-100 px-3 py-2">
+                    <span class="h-2 w-2 rounded-full {% if devices_attention %}bg-amber-500{% else %}bg-green-500{% endif %}"></span>
+                    {{ devices_live }} / {{ devices_count }} live
+                </span>
+                <span class="inline-flex items-center gap-2 rounded-md border border-base-content/10 bg-base-100 px-3 py-2">
+                    <span class="h-2 w-2 rounded-full {% if gateways_offline %}bg-amber-500{% else %}bg-green-500{% endif %}"></span>
+                    {{ gateways_online }} / {{ gateways_count }} gateways
+                </span>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <div class="text-right text-[11px] leading-4 text-base-content/50" aria-live="polite">
+                    <p id="fleet-refresh-copy">Fleet summary updates every 60s</p>
+                    <p>Last refreshed at <time id="fleet-last-refreshed">--:--:--</time></p>
+                </div>
+                <label for="fleet-refresh-interval" class="sr-only">Fleet summary refresh interval</label>
+                <select id="fleet-refresh-interval" class="select select-bordered select-sm rounded-md text-xs font-semibold" aria-label="Fleet summary refresh interval">
+                    <option value="15">15s</option>
+                    <option value="30">30s</option>
+                    <option value="60" selected>60s</option>
+                </select>
+                <button id="fleet-refresh-button" type="button" class="btn btn-ghost btn-square btn-sm rounded-md" title="Refresh fleet summary now" aria-label="Refresh fleet summary now">
+                    <i class="fa fa-refresh"></i>
+                </button>
+            </div>
         </div>
     </div>
 
-    <div id="dashboard-live-container" hx-get="{% url 'web_team:home' team.slug %}" hx-trigger="every 60s" hx-select="#dashboard-live-container" hx-swap="outerHTML">
+    <div id="dashboard-live-container" hx-get="{% url 'web_team:home' team.slug %}" hx-trigger="fleetSummaryRefresh from:body" hx-select="#dashboard-live-container" hx-swap="outerHTML">
         {% if devices_count == 0 %}
         <div class="mx-auto max-w-2xl rounded-lg border border-base-content/10 bg-base-100 p-8 text-center shadow-sm">
             <div class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -115,6 +134,8 @@
                 </div>
                 {% else %}
                 <div class="min-h-[260px]"><canvas id="operations-trend-chart"></canvas></div>
+                {{ operations_trend.labels|json_script:"operations-trend-labels" }}
+                {{ operations_trend.values|json_script:"operations-trend-values" }}
                 {% endif %}
             </section>
 
@@ -216,39 +237,162 @@
     </div>
 </div>
 
-{% if not operations_trend.empty %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const canvas = document.getElementById('operations-trend-chart');
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: {{ operations_trend.labels|safe }},
-                datasets: [{
-                    label: '{{ operations_trend.key|escapejs }}',
-                    data: {{ operations_trend.values|safe }},
-                    borderColor: '#2563eb',
-                    backgroundColor: 'rgba(37, 99, 235, 0.08)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.35,
-                    pointRadius: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#94a3b8', font: { size: 10 } } },
-                    y: { beginAtZero: true, grid: { color: 'rgba(148,163,184,0.18)' }, ticks: { color: '#94a3b8', font: { size: 10 } } }
+    (() => {
+        if (window.NovenaFleetSummaryController) {
+            window.NovenaFleetSummaryController.bindControls();
+            return;
+        }
+
+        const storageKey = 'novena.commandCenter.refreshSeconds';
+        const allowedIntervals = [15, 30, 60];
+        let refreshTimer = null;
+        let trendChart = null;
+
+        function readInterval() {
+            try {
+                const stored = Number(window.localStorage.getItem(storageKey));
+                return allowedIntervals.includes(stored) ? stored : 60;
+            } catch (error) {
+                return 60;
+            }
+        }
+
+        function updateRefreshCopy(seconds) {
+            const copy = document.getElementById('fleet-refresh-copy');
+            if (copy) copy.textContent = `Fleet summary updates every ${seconds}s`;
+        }
+
+        function updateLastRefreshed() {
+            const time = document.getElementById('fleet-last-refreshed');
+            if (time) {
+                const now = new Date();
+                time.dateTime = now.toISOString();
+                time.textContent = now.toLocaleTimeString();
+            }
+        }
+
+        function setRefreshBusy(isBusy) {
+            const button = document.getElementById('fleet-refresh-button');
+            if (!button) return;
+            button.disabled = isBusy;
+            button.innerHTML = isBusy
+                ? '<span class="loading loading-spinner loading-xs"></span>'
+                : '<i class="fa fa-refresh"></i>';
+        }
+
+        function requestRefresh() {
+            if (!document.getElementById('dashboard-live-container')) return;
+            window.htmx.trigger(document.body, 'fleetSummaryRefresh');
+        }
+
+        function applyInterval(seconds) {
+            const interval = allowedIntervals.includes(Number(seconds)) ? Number(seconds) : 60;
+            try {
+                window.localStorage.setItem(storageKey, String(interval));
+            } catch (error) {
+                // The 60-second default still works when browser storage is unavailable.
+            }
+            updateRefreshCopy(interval);
+            if (refreshTimer) window.clearInterval(refreshTimer);
+            refreshTimer = window.setInterval(requestRefresh, interval * 1000);
+        }
+
+        function waitForChart() {
+            if (window.Chart) return Promise.resolve();
+            return new Promise((resolve, reject) => {
+                const timeout = window.setTimeout(() => reject(new Error('Chart.js did not load')), 8000);
+                window.addEventListener('novena:chart-ready', () => {
+                    window.clearTimeout(timeout);
+                    resolve();
+                }, {once: true});
+            });
+        }
+
+        async function initTrendChart() {
+            const canvas = document.getElementById('operations-trend-chart');
+            const labels = document.getElementById('operations-trend-labels');
+            const values = document.getElementById('operations-trend-values');
+            if (trendChart) {
+                trendChart.destroy();
+                trendChart = null;
+            }
+            if (!canvas || !labels || !values) return;
+            try {
+                await waitForChart();
+            } catch (error) {
+                console.warn('Command Center chart unavailable', error);
+                return;
+            }
+
+            trendChart = new Chart(canvas.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: JSON.parse(labels.textContent || '[]'),
+                    datasets: [{
+                        data: JSON.parse(values.textContent || '[]'),
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.35,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#94a3b8', font: { size: 10 } } },
+                        y: { beginAtZero: true, grid: { color: 'rgba(148,163,184,0.18)' }, ticks: { color: '#94a3b8', font: { size: 10 } } }
+                    }
                 }
+            });
+        }
+
+        function bindControls() {
+            const selector = document.getElementById('fleet-refresh-interval');
+            const refreshButton = document.getElementById('fleet-refresh-button');
+            if (!selector || !refreshButton) {
+                if (refreshTimer) window.clearInterval(refreshTimer);
+                refreshTimer = null;
+                return;
+            }
+
+            const interval = readInterval();
+            selector.value = String(interval);
+            selector.onchange = () => applyInterval(selector.value);
+            refreshButton.onclick = requestRefresh;
+            applyInterval(interval);
+            updateLastRefreshed();
+            initTrendChart();
+        }
+
+        document.body.addEventListener('htmx:afterRequest', event => {
+            if (event.detail.elt && event.detail.elt.id === 'dashboard-live-container') {
+                setRefreshBusy(false);
+                if (event.detail.successful) updateLastRefreshed();
             }
         });
-    });
+        document.body.addEventListener('htmx:beforeRequest', event => {
+            if (event.detail.elt && event.detail.elt.id === 'dashboard-live-container') setRefreshBusy(true);
+        });
+        document.body.addEventListener('htmx:afterSwap', event => {
+            if (event.detail.target && event.detail.target.id === 'dashboard-live-container') {
+                initTrendChart();
+            } else {
+                bindControls();
+            }
+        });
+
+        window.NovenaFleetSummaryController = {bindControls};
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', bindControls, {once: true});
+        } else {
+            bindControls();
+        }
+    })();
 </script>
-{% endif %}
 {% endblock %}

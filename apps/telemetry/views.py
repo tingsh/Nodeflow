@@ -196,7 +196,10 @@ def device_telemetry_history_api(request, team_slug, device_id):
 
     device = get_object_or_404(Device, id=device_id, team__slug=team_slug)
     key = request.GET.get("key", "active_power")
-    hours = int(request.GET.get("hours", 24))
+    try:
+        hours = max(1, int(request.GET.get("hours", 24)))
+    except (TypeError, ValueError):
+        hours = 24
 
     plan_days = get_retention_limit_days(request.team)
     max_hours = plan_days * 24
@@ -220,7 +223,7 @@ def device_telemetry_history_api(request, team_slug, device_id):
     for point in points:
         labels.append(point.timestamp.isoformat())
         labels_local.append(format_site_datetime(point.timestamp, device.site, "%H:%M:%S"))
-        values.append(point.value_numeric or 0.0)
+        values.append(_telemetry_point_value(point))
 
     return JsonResponse(
         {

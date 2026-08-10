@@ -1,7 +1,9 @@
 {% extends "web/app/app_base.html" %}
 {% load static %}
+{% load django_vite %}
 {% load utils_tags %}
 {% block app %}
+{% vite_asset 'assets/javascript/app.js' %}
 <div class="px-4 sm:px-6 lg:px-8 py-8">
     <nav class="flex mb-8" aria-label="Breadcrumb">
         <ol role="list" class="flex items-center space-x-4">
@@ -68,7 +70,7 @@
                 <span id="latest-value-{{ reading.key }}" class="text-2xl font-mono font-bold text-base-content">{{ reading.display_value }}</span>
                 {% if reading.unit %}<span class="text-xs font-semibold text-base-content/45">{{ reading.unit }}</span>{% endif %}
             </div>
-            {% if reading.timestamp %}<p class="mt-1 text-[10px] text-base-content/40">{{ reading.timestamp|timesince }} ago</p>{% else %}<p class="mt-1 text-[10px] text-base-content/40">Waiting for sample</p>{% endif %}
+            {% if reading.timestamp %}<p id="latest-timestamp-{{ reading.key }}" class="mt-1 text-[10px] text-base-content/40">{{ reading.timestamp|timesince }} ago</p>{% else %}<p id="latest-timestamp-{{ reading.key }}" class="mt-1 text-[10px] text-base-content/40">Waiting for sample</p>{% endif %}
         </div>
         {% endfor %}
     </div>
@@ -114,27 +116,39 @@
              </div>
              <div>
                 <h3 class="text-sm font-bold text-base-content">Sensor Live View</h3>
-                <p class="text-[10px] text-base-content/50 uppercase tracking-tighter font-black">Live readings from Gateway {{ device.gateway.serial_number }}</p>
+                <p class="text-[10px] text-base-content/50 uppercase font-black">Real-time inspection for this device</p>
+                <p id="telemetry-frequency-copy" class="mt-1 text-xs text-base-content/45">Effective WebSocket frequency appears after connection and depends on plan and device capability.</p>
              </div>
         </div>
         
-        <div class="flex items-center space-x-3">
+        <div class="flex flex-wrap items-center gap-2">
             <a href="{% url 'web_team:telemetry:telemetry_analyzer' request.team.slug device.id %}" class="btn btn-ghost btn-sm rounded-md text-indigo-500 font-black text-xs uppercase tracking-widest bg-indigo-500/5 hover:bg-indigo-500/10 transition-all border border-indigo-500/10">
                 <i class="fa fa-history mr-2"></i> History & Export
             </a>
 
-            <div class="flex items-center space-x-2 bg-base-100 p-1.5 rounded-lg border border-base-content/5 shadow-sm">
-                <i class="fa fa-bolt text-indigo-500 animate-pulse ml-2 text-xs"></i>
-                <span class="text-[10px] font-black uppercase tracking-widest text-base-content/40 mr-1">Live Feed:</span>
+            <label for="telemetry-history-window" class="sr-only">Chart time window</label>
+            <select id="telemetry-history-window" class="select select-bordered select-sm rounded-md text-xs font-bold" aria-label="Chart time window">
+                <option value="1" selected>Last hour</option>
+                <option value="6">Last 6 hours</option>
+                <option value="24">Last 24 hours</option>
+                <option value="168">Last 7 days</option>
+            </select>
+            <button id="telemetry-refresh-button" type="button" onclick="refreshVisibleTelemetryNow()" class="btn btn-ghost btn-sm rounded-md text-xs font-black uppercase tracking-widest">
+                <i class="fa fa-refresh mr-2"></i>Refresh
+            </button>
+            <button id="telemetry-pause-button" type="button" onclick="toggleTelemetryPause()" class="btn btn-ghost btn-sm rounded-md text-xs font-black uppercase tracking-widest">
+                <i class="fa fa-pause mr-2"></i>Pause Live
+            </button>
+            <div id="streaming-status-panel" class="flex items-center space-x-2 bg-base-100 p-1.5 rounded-lg border border-base-content/5 shadow-sm">
+                <span id="streaming-status-dot" class="h-2.5 w-2.5 rounded-full bg-gray-300 ml-2"></span>
+                <span class="text-[10px] font-black uppercase tracking-widest text-base-content/40 mr-1">Browser Stream:</span>
                 <span id="streaming-latency-badge" class="text-xs font-bold text-indigo-600 mr-2 uppercase">Connecting...</span>
+                <span id="streaming-detail" class="hidden md:inline text-[10px] font-semibold text-base-content/35 mr-2">Opening live connection</span>
             </div>
         </div>
     </div>
-
-
-
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
     <script>
+    (() => {
         let charts = {};
         const deviceId = "{{ device.id }}";
         const teamSlug = "{{ request.team.slug }}";
@@ -144,18 +158,45 @@
         let telemetrySampleLimit = 20;
         let telemetrySampleColumns = [];
         let telemetrySampleRows = [];
+        let telemetrySampleFilter = 'all';
+        let telemetryHistoryHours = 1;
         let telemetryFallbackIntervalMs = {{ telemetry_fallback_interval_ms|default:5000 }};
         let telemetryStaleTimer = null;
         let telemetryConnectTimer = null;
+        let telemetryReconnectTimer = null;
+        let telemetryPaused = false;
+        let telemetryMinIntervalSeconds = 0;
+        const telemetryMetricTimers = {};
+        const telemetryLatestTimestamps = {};
         const telemetryStaleGraceMs = 15000;
         const hasDjangoWidgets = {% if widgets %}true{% else %}false{% endif %};
+        const telemetryDiagnostics = {
+            connectionMode: 'connecting',
+            reconnectCount: 0,
+            lastSuccessfulEventAt: null,
+            lastPollingSuccessAt: null,
+            lastParseError: null,
+        };
+        window.NovenaTelemetryDiagnostics = telemetryDiagnostics;
+
+        function waitForChart() {
+            if (window.Chart) return Promise.resolve();
+            return new Promise((resolve, reject) => {
+                const timeout = window.setTimeout(() => reject(new Error('Chart.js did not load')), 8000);
+                window.addEventListener('novena:chart-ready', () => {
+                    window.clearTimeout(timeout);
+                    resolve();
+                }, {once: true});
+            });
+        }
 
         async function initDashboard() {
             try {
-                initTelemetrySampleSelector();
+                initTelemetryControls();
                 await loadTelemetrySamples();
 
                 if (hasDjangoWidgets) {
+                    await waitForChart();
                     const canvases = document.querySelectorAll('canvas[id^="chart-"]');
                     canvases.forEach(canvas => {
                         const key = canvas.id.replace('chart-', '');
@@ -174,7 +215,9 @@
                     initWebSocket();
                 } else {
                     const response = await fetch(`/a/${teamSlug}/telemetry/api/metrics/${deviceId}/`);
+                    if (!response.ok) throw new Error(`Metrics request failed: ${response.status}`);
                     const data = await response.json();
+                    if (!Array.isArray(data.metrics)) throw new Error('Metrics response was malformed');
                     const container = document.getElementById('metrics-container');
                     container.innerHTML = '';
 
@@ -190,16 +233,19 @@
                         return;
                     }
 
+                    await waitForChart();
                     data.metrics.forEach(metric => createMetricCard(metric));
                     initWebSocket();
                 }
             } catch (e) {
                 console.error("Failed to init dashboard", e);
+                setStreamState('error', 'Page error', 'Live telemetry could not be initialized');
+                if (!socket) initWebSocket();
             }
         }
 
         function buildTelemetryChart(ctx, title) {
-            return new Chart(ctx, {
+            const chart = new Chart(ctx, {
                 type: 'line',
                 data: { labels: [], datasets: [{
                     label: title,
@@ -224,6 +270,8 @@
                     }
                 }
             });
+            chart.telemetryTimestamps = [];
+            return chart;
         }
 
         function createMetricCard(metric) {
@@ -246,20 +294,107 @@
                 <div class="h-48">
                     <canvas id="chart-${metric.key}"></canvas>
                 </div>
+                <p id="metric-freshness-${metric.key}" class="mt-3 text-[10px] font-semibold text-base-content/40">Waiting for telemetry</p>
             `;
             container.appendChild(card);
             charts[metric.key] = buildTelemetryChart(document.getElementById(`chart-${metric.key}`).getContext('2d'), metric.label);
             updateMetricHistory(metric.key);
         }
 
-        function initTelemetrySampleSelector() {
-            const selector = document.getElementById('telemetry-sample-limit');
+        function initTelemetryControls() {
+            const limitSelector = document.getElementById('telemetry-sample-limit');
+            if (limitSelector) {
+                limitSelector.value = String(telemetrySampleLimit);
+                limitSelector.addEventListener('change', () => {
+                    telemetrySampleLimit = parseInt(limitSelector.value, 10) || 20;
+                    loadTelemetrySamples();
+                });
+            }
+
+            const filterSelector = document.getElementById('telemetry-sample-filter');
+            if (filterSelector) {
+                filterSelector.addEventListener('change', () => {
+                    telemetrySampleFilter = filterSelector.value;
+                    renderTelemetrySamples();
+                });
+            }
+
+            const historySelector = document.getElementById('telemetry-history-window');
+            if (historySelector) {
+                historySelector.addEventListener('change', () => {
+                    telemetryHistoryHours = parseInt(historySelector.value, 10) || 1;
+                    refreshVisibleTelemetryNow();
+                });
+            }
+
+            const exportButton = document.getElementById('telemetry-samples-export');
+            if (exportButton) exportButton.addEventListener('click', exportVisibleTelemetrySamples);
+        }
+
+        function updateTelemetrySampleFilter() {
+            const selector = document.getElementById('telemetry-sample-filter');
             if (!selector) return;
-            selector.value = String(telemetrySampleLimit);
-            selector.addEventListener('change', () => {
-                telemetrySampleLimit = parseInt(selector.value, 10) || 20;
-                loadTelemetrySamples();
+            const selected = telemetrySampleColumns.some(column => column.key === telemetrySampleFilter)
+                ? telemetrySampleFilter
+                : 'all';
+            selector.innerHTML = '<option value="all">All metrics</option>';
+            telemetrySampleColumns.forEach(column => {
+                const option = document.createElement('option');
+                option.value = column.key;
+                option.textContent = column.label;
+                selector.appendChild(option);
             });
+            telemetrySampleFilter = selected;
+            selector.value = selected;
+        }
+
+        function visibleTelemetrySampleColumns() {
+            if (telemetrySampleFilter === 'all') return telemetrySampleColumns;
+            return telemetrySampleColumns.filter(column => column.key === telemetrySampleFilter);
+        }
+
+        function exportVisibleTelemetrySamples() {
+            const columns = visibleTelemetrySampleColumns();
+            const rows = telemetrySampleRows.slice(0, telemetrySampleLimit);
+            if (!rows.length || !columns.length) return;
+
+            const csvCell = value => {
+                let text = String(value ?? '');
+                if (/^[=+@]/.test(text)) text = `'${text}`;
+                return `"${text.replaceAll('"', '""')}"`;
+            };
+            const header = ['Time', ...columns.map(column => column.unit ? `${column.label} (${column.unit})` : column.label)];
+            const lines = [header.map(csvCell).join(',')];
+            rows.forEach(sample => {
+                const values = [
+                    sample.timestamp_local || formatSampleTime(sample.timestamp),
+                    ...columns.map(column => formatTelemetryValue(sample.values[column.key])),
+                ];
+                lines.push(values.map(csvCell).join(','));
+            });
+
+            const url = URL.createObjectURL(new Blob([lines.join('\n')], {type: 'text/csv;charset=utf-8'}));
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `device-${deviceId}-visible-telemetry.csv`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+        }
+
+        function renderTelemetrySamplesError(message) {
+            if (telemetrySampleRows.length) return;
+            const body = document.getElementById('telemetry-samples-body');
+            if (!body) return;
+            body.innerHTML = '';
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = Math.max(1, telemetrySampleColumns.length + 1);
+            cell.className = 'px-6 py-10 text-center text-xs text-red-500';
+            cell.textContent = message;
+            row.appendChild(cell);
+            body.appendChild(row);
         }
 
         async function loadTelemetrySamples() {
@@ -270,9 +405,13 @@
                 telemetrySampleColumns = data.columns || [];
                 telemetrySampleRows = data.rows || [];
                 telemetrySampleLimit = data.limit || telemetrySampleLimit;
+                updateTelemetrySampleFilter();
                 renderTelemetrySamples();
+                return true;
             } catch (e) {
                 console.warn("Telemetry samples fetch failed", e);
+                renderTelemetrySamplesError('Telemetry samples are temporarily unavailable. Existing readings will remain visible.');
+                return false;
             }
         }
 
@@ -280,11 +419,14 @@
             const head = document.getElementById('telemetry-samples-head');
             const body = document.getElementById('telemetry-samples-body');
             if (!head || !body) return;
+            const visibleColumns = visibleTelemetrySampleColumns();
+            const exportButton = document.getElementById('telemetry-samples-export');
+            if (exportButton) exportButton.disabled = telemetrySampleRows.length === 0 || visibleColumns.length === 0;
 
             head.innerHTML = '';
             const headerRow = document.createElement('tr');
             headerRow.appendChild(buildHeaderCell('Time'));
-            telemetrySampleColumns.forEach(column => {
+            visibleColumns.forEach(column => {
                 const label = column.unit ? `${column.label} (${column.unit})` : column.label;
                 headerRow.appendChild(buildHeaderCell(label));
             });
@@ -294,7 +436,7 @@
             if (telemetrySampleRows.length === 0) {
                 const row = document.createElement('tr');
                 const cell = document.createElement('td');
-                cell.colSpan = Math.max(1, telemetrySampleColumns.length + 1);
+                cell.colSpan = Math.max(1, visibleColumns.length + 1);
                 cell.className = 'px-6 py-10 text-center text-xs text-gray-400 italic';
                 cell.textContent = 'No live readings recorded yet. Check equipment and Gateway connectivity.';
                 row.appendChild(cell);
@@ -304,9 +446,9 @@
 
             telemetrySampleRows.slice(0, telemetrySampleLimit).forEach((sample, index) => {
                 const row = document.createElement('tr');
-                if (index === 0) row.className = 'transition-colors duration-500';
+                if (index === 0) row.className = 'bg-indigo-50/60 dark:bg-indigo-950/20 transition-colors duration-500';
                 row.appendChild(buildValueCell(sample.timestamp_local || formatSampleTime(sample.timestamp), true));
-                telemetrySampleColumns.forEach(column => {
+                visibleColumns.forEach(column => {
                     row.appendChild(buildValueCell(formatTelemetryValue(sample.values[column.key])));
                 });
                 body.appendChild(row);
@@ -362,31 +504,60 @@
             const existing = telemetrySampleRows.find(row => row.timestamp === timestamp);
             if (existing) {
                 existing.values = {...existing.values, ...nextValues};
+                existing.timestamp_local = values.timestamp_local || existing.timestamp_local;
             } else {
-                telemetrySampleRows.unshift({timestamp, timestamp_local: values.timestamp_local, values: nextValues});
+                telemetrySampleRows.push({timestamp, timestamp_local: values.timestamp_local, values: nextValues});
             }
+            telemetrySampleRows.sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp));
             telemetrySampleRows = telemetrySampleRows.slice(0, telemetrySampleLimit);
             renderTelemetrySamples();
         }
 
         async function updateMetricHistory(key) {
             try {
-                const response = await fetch(`/a/${teamSlug}/telemetry/api/history/${deviceId}/?key=${key}&hours=1`);
+                const response = await fetch(`/a/${teamSlug}/telemetry/api/history/${deviceId}/?key=${key}&hours=${telemetryHistoryHours}`);
+                if (!response.ok) throw new Error(`History request failed: ${response.status}`);
                 const data = await response.json();
 
                 if (data.values.length > 0) {
                     const latestValue = data.values[data.values.length - 1];
-                    updateMetricValue(key, latestValue);
+                    const latestTimestamp = data.labels[data.labels.length - 1];
+                    const latestLocalTimestamp = (data.labels_local || [])[data.values.length - 1];
+                    const historyIsCurrent = acceptMetricTimestamp(key, latestTimestamp);
+                    if (historyIsCurrent) {
+                        updateMetricValue(key, latestValue);
+                        updateMetricFreshness(key, latestTimestamp, latestLocalTimestamp);
+                    }
 
                     if (charts[key]) {
                         const chart = charts[key];
+                        const currentLastIndex = chart.telemetryTimestamps.length - 1;
+                        const currentLastTimestamp = chart.telemetryTimestamps[currentLastIndex];
+                        const currentLastLabel = chart.data.labels[currentLastIndex];
+                        const currentLastValue = chart.data.datasets[0].data[currentLastIndex];
                         chart.data.labels = data.labels_local || data.labels.map(l => new Date(l).toLocaleTimeString());
                         chart.data.datasets[0].data = data.values;
+                        chart.telemetryTimestamps = data.labels || [];
+                        if (Date.parse(currentLastTimestamp) > Date.parse(latestTimestamp)) {
+                            chart.data.labels.push(currentLastLabel);
+                            chart.data.datasets[0].data.push(currentLastValue);
+                            chart.telemetryTimestamps.push(currentLastTimestamp);
+                        }
                         chart.update('none');
                     }
+                } else if (charts[key]) {
+                    const chart = charts[key];
+                    chart.data.labels = [];
+                    chart.data.datasets[0].data = [];
+                    chart.telemetryTimestamps = [];
+                    chart.update('none');
+                    setMetricFreshnessText(key, 'No samples in the selected window', 'text-base-content/40');
                 }
+                return true;
             } catch (e) {
                 console.warn(`History fetch failed for ${key}`, e);
+                setMetricFreshnessText(key, 'Telemetry temporarily unavailable', 'text-red-500');
+                return false;
             }
         }
 
@@ -408,6 +579,12 @@
                 }
             }
 
+            const latestEl = document.getElementById(`latest-value-${key}`);
+            if (latestEl) {
+                latestEl.innerText = formatTelemetryValue(val);
+                flashUpdatedElement(latestEl);
+            }
+
             const gaugeEl = document.getElementById(`gauge-${key}`);
             if (gaugeEl) {
                 const min = parseFloat(gaugeEl.getAttribute('data-min') || 0);
@@ -420,14 +597,84 @@
             }
         }
 
-        function updateChartPoint(key, timestamp, val) {
+        function acceptMetricTimestamp(key, timestamp) {
+            const nextTimestamp = Date.parse(timestamp);
+            if (Number.isNaN(nextTimestamp)) return true;
+            const currentTimestamp = Date.parse(telemetryLatestTimestamps[key]);
+            if (!Number.isNaN(currentTimestamp) && nextTimestamp < currentTimestamp) return false;
+            telemetryLatestTimestamps[key] = timestamp;
+            return true;
+        }
+
+        function flashUpdatedElement(el) {
+            el.classList.add('text-indigo-600', 'dark:text-indigo-300');
+            setTimeout(() => {
+                el.classList.remove('text-indigo-600', 'dark:text-indigo-300');
+            }, 700);
+        }
+
+        function setMetricFreshnessText(key, text, colorClass) {
+            const freshnessEl = document.getElementById(`metric-freshness-${key}`);
+            if (!freshnessEl) return;
+            freshnessEl.textContent = text;
+            freshnessEl.className = `mt-3 text-[10px] font-semibold ${colorClass}`;
+        }
+
+        function updateMetricFreshness(key, rawTimestamp, timestampLocal) {
+            if (telemetryMetricTimers[key]) clearTimeout(telemetryMetricTimers[key]);
+            const parsed = new Date(rawTimestamp);
+            const hasValidTimestamp = !Number.isNaN(parsed.getTime());
+            const staleAfter = Math.max(telemetryStaleGraceMs, telemetryFallbackIntervalMs * 3);
+            const age = hasValidTimestamp ? Math.max(0, Date.now() - parsed.getTime()) : 0;
+            const displayTime = timestampLocal || (hasValidTimestamp ? parsed.toLocaleTimeString() : 'just now');
+            const isStale = hasValidTimestamp && age >= staleAfter;
+            const text = isStale ? `Stale - last sample ${displayTime}` : `Updated ${displayTime}`;
+            const colorClass = isStale ? 'text-amber-600' : 'text-base-content/40';
+
+            setMetricFreshnessText(key, text, colorClass);
+            const latestTimestampEl = document.getElementById(`latest-timestamp-${key}`);
+            if (latestTimestampEl) {
+                latestTimestampEl.textContent = text;
+                latestTimestampEl.className = `mt-1 text-[10px] ${colorClass}`;
+            }
+
+            if (!isStale) {
+                telemetryMetricTimers[key] = setTimeout(() => {
+                    setMetricFreshnessText(key, `Stale - last sample ${displayTime}`, 'text-amber-600');
+                    const latestEl = document.getElementById(`latest-timestamp-${key}`);
+                    if (latestEl) {
+                        latestEl.textContent = `Stale - last sample ${displayTime}`;
+                        latestEl.className = 'mt-1 text-[10px] text-amber-600';
+                    }
+                }, Math.max(0, staleAfter - age));
+            }
+        }
+
+        function updateChartPoint(key, timestampLabel, rawTimestamp, val) {
             if (!charts[key]) return;
             const chart = charts[key];
-            chart.data.labels.push(timestamp);
+            if (!chart.telemetryTimestamps) chart.telemetryTimestamps = [];
+
+            const lastRawTimestamp = chart.telemetryTimestamps[chart.telemetryTimestamps.length - 1];
+            if (rawTimestamp && lastRawTimestamp) {
+                const nextTime = Date.parse(rawTimestamp);
+                const lastTime = Date.parse(lastRawTimestamp);
+                if (!Number.isNaN(nextTime) && !Number.isNaN(lastTime) && nextTime < lastTime) return;
+                if (rawTimestamp === lastRawTimestamp) {
+                    chart.data.labels[chart.data.labels.length - 1] = timestampLabel;
+                    chart.data.datasets[0].data[chart.data.datasets[0].data.length - 1] = val;
+                    chart.update('none');
+                    return;
+                }
+            }
+
+            chart.telemetryTimestamps.push(rawTimestamp || timestampLabel);
+            chart.data.labels.push(timestampLabel);
             chart.data.datasets[0].data.push(val);
-            if (chart.data.labels.length > 30) {
+            while (chart.data.labels.length > 1000) {
                 chart.data.labels.shift();
                 chart.data.datasets[0].data.shift();
+                chart.telemetryTimestamps.shift();
             }
             chart.update('none');
         }
@@ -436,10 +683,37 @@
             return Array.from(document.querySelectorAll('[id^="value-"]')).map(el => el.id.replace('value-', ''));
         }
 
-        function refreshVisibleTelemetry() {
+        async function refreshVisibleTelemetry(force = false) {
+            if (telemetryPaused && !force) return false;
             const keys = new Set([...Object.keys(charts), ...telemetryKeysOnPage()]);
-            keys.forEach(key => updateMetricHistory(key));
-            loadTelemetrySamples();
+            const results = await Promise.all([...keys].map(key => updateMetricHistory(key)));
+            results.push(await loadTelemetrySamples());
+            const succeeded = results.some(Boolean);
+            if (telemetryPollingActive) {
+                if (succeeded) {
+                    telemetryDiagnostics.lastPollingSuccessAt = new Date().toISOString();
+                    setStreamState('polling', `Polling ${Math.round(Math.max(5000, telemetryFallbackIntervalMs) / 1000)}s`, 'Using HTTP fallback until the live socket recovers');
+                } else {
+                    setStreamState('error', 'Polling unavailable', 'Live data could not be refreshed');
+                }
+            }
+            return succeeded;
+        }
+
+        async function refreshVisibleTelemetryNow() {
+            const button = document.getElementById('telemetry-refresh-button');
+            if (button) {
+                button.disabled = true;
+                button.innerHTML = '<span class="loading loading-spinner loading-xs mr-2"></span>Refreshing';
+            }
+            try {
+                await refreshVisibleTelemetry(true);
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                    button.innerHTML = '<i class="fa fa-refresh mr-2"></i>Refresh';
+                }
+            }
         }
 
         function setTelemetryBadge(text, className) {
@@ -450,9 +724,52 @@
             }
         }
 
+        function setStreamState(state, label, detail) {
+            const dot = document.getElementById("streaming-status-dot");
+            const detailEl = document.getElementById("streaming-detail");
+            const panel = document.getElementById("streaming-status-panel");
+            const stateClasses = {
+                live: ['bg-green-500', 'animate-pulse'],
+                polling: ['bg-amber-500'],
+                reconnecting: ['bg-gray-400', 'animate-pulse'],
+                stale: ['bg-amber-500', 'animate-pulse'],
+                error: ['bg-red-500'],
+                paused: ['bg-slate-400'],
+            };
+            const textClasses = {
+                live: 'text-xs font-bold text-green-500 mr-2 uppercase',
+                polling: 'text-xs font-bold text-amber-500 mr-2 uppercase',
+                reconnecting: 'text-xs font-bold text-gray-400 mr-2 uppercase',
+                stale: 'text-xs font-bold text-amber-500 mr-2 uppercase',
+                error: 'text-xs font-bold text-red-500 mr-2 uppercase',
+                paused: 'text-xs font-bold text-slate-500 mr-2 uppercase',
+            };
+
+            if (dot) {
+                dot.className = 'h-2.5 w-2.5 rounded-full ml-2';
+                (stateClasses[state] || stateClasses.reconnecting).forEach(cls => dot.classList.add(cls));
+            }
+            if (panel) {
+                panel.classList.toggle('border-red-300', state === 'error');
+                panel.classList.toggle('border-amber-300', state === 'polling' || state === 'stale');
+            }
+            if (detailEl) detailEl.innerText = detail || '';
+            telemetryDiagnostics.connectionMode = state;
+            setTelemetryBadge(label, textClasses[state] || textClasses.reconnecting);
+        }
+
+        function setTelemetryFrequencyCopy(text) {
+            const copy = document.getElementById('telemetry-frequency-copy');
+            if (copy) copy.textContent = text;
+        }
+
         function setLiveBadgeForInterval(minInterval) {
-            const label = minInterval ? (minInterval + 's stream') : 'Live stream';
-            setTelemetryBadge(label, 'text-xs font-bold text-green-500 mr-2 uppercase');
+            const label = minInterval ? ('WebSocket ' + minInterval + 's') : 'WebSocket live';
+            const detail = minInterval ? ('Plan-limited browser updates every ' + minInterval + 's') : 'Receiving live browser updates';
+            setTelemetryFrequencyCopy(minInterval
+                ? `WebSocket updates are limited to every ${minInterval}s by the plan; actual arrival also depends on device and Gateway capability.`
+                : 'WebSocket connected. Effective update frequency is being confirmed.');
+            setStreamState('live', label, detail);
         }
 
         function stopTelemetryPolling() {
@@ -462,6 +779,7 @@
         }
 
         function startTelemetryPolling(label = null) {
+            if (telemetryPaused) return;
             stopTelemetryPolling();
             if (telemetryStaleTimer) clearTimeout(telemetryStaleTimer);
             telemetryPollingActive = true;
@@ -469,77 +787,186 @@
             refreshVisibleTelemetry();
             telemetryPollTimer = setInterval(refreshVisibleTelemetry, interval);
             const badgeLabel = label ? label : ('Polling ' + Math.round(interval / 1000) + 's');
-            setTelemetryBadge(badgeLabel, 'text-xs font-bold text-amber-500 mr-2 uppercase');
+            setTelemetryFrequencyCopy(`HTTP fallback refreshes every ${Math.round(interval / 1000)}s while the WebSocket reconnects.`);
+            setStreamState('polling', badgeLabel, 'Using HTTP fallback until the live socket recovers');
         }
 
         function scheduleTelemetryStaleWatch() {
+            if (telemetryPaused) return;
             if (telemetryStaleTimer) clearTimeout(telemetryStaleTimer);
             const staleAfter = Math.max(telemetryStaleGraceMs, telemetryFallbackIntervalMs * 3);
             telemetryStaleTimer = setTimeout(() => {
-                if (!telemetryPollingActive) startTelemetryPolling();
+                if (!telemetryPollingActive) {
+                    setStreamState('stale', 'Stream stale', 'No WebSocket sample recently');
+                    startTelemetryPolling();
+                }
             }, staleAfter);
         }
 
+        function clearTelemetryTimers() {
+            if (telemetryConnectTimer) clearTimeout(telemetryConnectTimer);
+            if (telemetryReconnectTimer) clearTimeout(telemetryReconnectTimer);
+            if (telemetryStaleTimer) clearTimeout(telemetryStaleTimer);
+            telemetryConnectTimer = null;
+            telemetryReconnectTimer = null;
+            telemetryStaleTimer = null;
+        }
+
+        function closeTelemetrySocket() {
+            if (!socket) return;
+            socket.onopen = null;
+            socket.onmessage = null;
+            socket.onerror = null;
+            socket.onclose = null;
+            if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+                socket.close(1000, 'client navigation');
+            }
+            socket = null;
+        }
+
         function initWebSocket() {
+            if (telemetryPaused) return;
+            closeTelemetrySocket();
             const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
             const wsUrl = `${wsScheme}://${window.location.host}/ws/device/${deviceId}/`;
 
             console.log(`Connecting to WebSocket: ${wsUrl}`);
-            socket = new WebSocket(wsUrl);
+            const activeSocket = new WebSocket(wsUrl);
+            socket = activeSocket;
             if (telemetryConnectTimer) clearTimeout(telemetryConnectTimer);
             telemetryConnectTimer = setTimeout(function() {
+                if (telemetryPaused || socket !== activeSocket) return;
                 if (!socket) {
-                    setTelemetryBadge('Reconnecting', 'text-xs font-bold text-gray-400 mr-2 uppercase');
+                    setStreamState('reconnecting', 'Reconnecting', 'Opening live connection');
                     startTelemetryPolling();
                 } else if (socket.readyState !== WebSocket.OPEN) {
-                    setTelemetryBadge('Reconnecting', 'text-xs font-bold text-gray-400 mr-2 uppercase');
+                    setStreamState('reconnecting', 'Reconnecting', 'Opening live connection');
                     startTelemetryPolling();
                 }
             }, 8000);
 
-            socket.onopen = function() {
+            activeSocket.onopen = function() {
+                if (socket !== activeSocket || telemetryPaused) return;
                 console.log('WebSocket connected successfully.');
                 if (telemetryConnectTimer) clearTimeout(telemetryConnectTimer);
                 setLiveBadgeForInterval(null);
+                scheduleTelemetryStaleWatch();
             };
 
-            socket.onmessage = function(e) {
-                const msg = JSON.parse(e.data);
+            activeSocket.onmessage = function(e) {
+                if (socket !== activeSocket || telemetryPaused) return;
+                let msg;
+                try {
+                    msg = JSON.parse(e.data);
+                } catch (err) {
+                    console.warn("Malformed telemetry stream message", err);
+                    telemetryDiagnostics.lastParseError = String(err).slice(0, 200);
+                    setStreamState('error', 'Stream error', 'Received an unreadable live update');
+                    return;
+                }
 
                 if (msg.type === "connection_established") {
-                    const minInterval = Number(msg.min_interval || 0);
+                    const intervalCandidate = Number(msg.min_interval || 0);
+                    const minInterval = Number.isFinite(intervalCandidate) && intervalCandidate > 0 ? intervalCandidate : 0;
+                    telemetryMinIntervalSeconds = minInterval;
                     telemetryFallbackIntervalMs = Math.max(5000, minInterval * 1000);
                     stopTelemetryPolling();
                     setLiveBadgeForInterval(minInterval);
                     scheduleTelemetryStaleWatch();
                 } else if (msg.type === "telemetry") {
+                    if (!msg.values || typeof msg.values !== 'object' || Array.isArray(msg.values) || Object.keys(msg.values).length === 0) {
+                        telemetryDiagnostics.lastParseError = 'Telemetry update did not contain an object of values';
+                        setStreamState('error', 'Stream error', 'Received a telemetry update without values');
+                        return;
+                    }
                     stopTelemetryPolling();
-                    const timestamp = msg.timestamp_local || new Date(msg.timestamp).toLocaleTimeString();
+                    setLiveBadgeForInterval(telemetryMinIntervalSeconds);
+                    const messageTimestamp = new Date(msg.timestamp);
+                    const rawTimestamp = msg.timestamp && !Number.isNaN(messageTimestamp.getTime())
+                        ? msg.timestamp
+                        : new Date().toISOString();
+                    const timestamp = msg.timestamp_local || new Date(rawTimestamp).toLocaleTimeString();
+                    telemetryDiagnostics.lastSuccessfulEventAt = new Date().toISOString();
+                    telemetryDiagnostics.lastParseError = null;
                     Object.keys(msg.values).forEach(key => {
                         if (key === 'device_name') return;
+                        if (!acceptMetricTimestamp(key, rawTimestamp)) return;
                         const val = msg.values[key];
                         updateMetricValue(key, val);
-                        updateChartPoint(key, timestamp, val);
+                        updateMetricFreshness(key, rawTimestamp, timestamp);
+                        updateChartPoint(key, timestamp, rawTimestamp, val);
                     });
-                    prependTelemetrySample(msg.timestamp, {...msg.values, timestamp_local: msg.timestamp_local});
+                    prependTelemetrySample(rawTimestamp, {...msg.values, timestamp_local: msg.timestamp_local});
                     scheduleTelemetryStaleWatch();
                 }
             };
 
-            socket.onclose = function(e) {
+            activeSocket.onclose = function(e) {
+                if (socket !== activeSocket || telemetryPaused) return;
                 console.log("WebSocket connection closed. Reconnecting in 3s...", e);
-                setTelemetryBadge("Reconnecting", "text-xs font-bold text-gray-400 mr-2 uppercase");
+                telemetryDiagnostics.reconnectCount += 1;
+                setStreamState('reconnecting', 'Reconnecting', 'Live socket closed');
                 startTelemetryPolling();
-                setTimeout(initWebSocket, 3000);
+                if (telemetryReconnectTimer) clearTimeout(telemetryReconnectTimer);
+                telemetryReconnectTimer = setTimeout(initWebSocket, 3000);
             };
 
-            socket.onerror = function(err) {
+            activeSocket.onerror = function(err) {
+                if (socket !== activeSocket || telemetryPaused) return;
                 console.error("WebSocket error observed:", err);
-                setTelemetryBadge("Reconnecting", "text-xs font-bold text-gray-400 mr-2 uppercase");
+                setStreamState('reconnecting', 'Reconnecting', 'Live socket error');
             };
         }
 
-        document.addEventListener('DOMContentLoaded', initDashboard);
+        function toggleTelemetryPause() {
+            if (telemetryPaused) {
+                resumeTelemetryLiveUpdates();
+            } else {
+                pauseTelemetryLiveUpdates();
+            }
+        }
+
+        function pauseTelemetryLiveUpdates() {
+            telemetryPaused = true;
+            stopTelemetryPolling();
+            clearTelemetryTimers();
+            closeTelemetrySocket();
+            setTelemetryFrequencyCopy('Live browser updates are paused. Device and Gateway health continue to be evaluated separately.');
+            setStreamState('paused', 'Paused', 'Live updates paused in this browser');
+            const pauseButton = document.getElementById('telemetry-pause-button');
+            if (pauseButton) pauseButton.innerHTML = '<i class="fa fa-play mr-2"></i>Resume Live';
+        }
+
+        function resumeTelemetryLiveUpdates() {
+            telemetryPaused = false;
+            const pauseButton = document.getElementById('telemetry-pause-button');
+            if (pauseButton) pauseButton.innerHTML = '<i class="fa fa-pause mr-2"></i>Pause Live';
+            refreshVisibleTelemetry(true);
+            initWebSocket();
+        }
+
+        function cleanupTelemetryDashboard() {
+            stopTelemetryPolling();
+            clearTelemetryTimers();
+            closeTelemetrySocket();
+            Object.values(telemetryMetricTimers).forEach(timer => clearTimeout(timer));
+            Object.values(charts).forEach(chart => chart.destroy());
+            charts = {};
+        }
+
+        window.refreshVisibleTelemetryNow = refreshVisibleTelemetryNow;
+        window.toggleTelemetryPause = toggleTelemetryPause;
+        window.addEventListener('beforeunload', cleanupTelemetryDashboard, {once: true});
+        document.body.addEventListener('htmx:beforeSwap', event => {
+            if (event.detail.target && event.detail.target.id === 'app-shell') cleanupTelemetryDashboard();
+        }, {once: true});
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initDashboard, {once: true});
+        } else {
+            setTimeout(initDashboard, 0);
+        }
+    })();
     </script>
 
     </div>
@@ -603,6 +1030,7 @@
                                     <span class="text-xs font-bold text-base-content/30 uppercase mt-1">{{ widget.unit }}</span>
                                 </div>
                             {% endif %}
+                            <p id="metric-freshness-{{ widget.telemetry_key }}" class="mt-3 text-[10px] font-semibold text-base-content/40">Waiting for telemetry</p>
                         </div>
                     {% endfor %}
                 {% else %}
@@ -617,14 +1045,25 @@
                 <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
                         <h3 class="text-sm font-black uppercase tracking-widest text-gray-500">Live Telemetry Samples</h3>
+                        <p class="mt-1 text-xs text-gray-400">Newest samples first. Times use {{ device.site.timezone }}.</p>
                     </div>
-                    <select id="telemetry-sample-limit" class="select select-bordered select-sm rounded-md text-xs font-bold bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
-                        <option value="10">10 samples</option>
-                        <option value="20" selected>20 samples</option>
-                        <option value="30">30 samples</option>
-                        <option value="40">40 samples</option>
-                        <option value="50">50 samples</option>
-                    </select>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <label for="telemetry-sample-filter" class="sr-only">Filter telemetry samples by metric</label>
+                        <select id="telemetry-sample-filter" class="select select-bordered select-sm rounded-md text-xs font-bold bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700" aria-label="Filter telemetry samples by metric">
+                            <option value="all">All metrics</option>
+                        </select>
+                        <label for="telemetry-sample-limit" class="sr-only">Number of telemetry samples</label>
+                        <select id="telemetry-sample-limit" class="select select-bordered select-sm rounded-md text-xs font-bold bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700" aria-label="Number of telemetry samples">
+                            <option value="10">10 samples</option>
+                            <option value="20" selected>20 samples</option>
+                            <option value="30">30 samples</option>
+                            <option value="40">40 samples</option>
+                            <option value="50">50 samples</option>
+                        </select>
+                        <button id="telemetry-samples-export" type="button" class="btn btn-ghost btn-square btn-sm rounded-md" title="Export visible telemetry samples" aria-label="Export visible telemetry samples">
+                            <i class="fa fa-download"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-100 dark:divide-gray-700">
