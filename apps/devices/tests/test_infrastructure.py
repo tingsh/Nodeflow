@@ -386,3 +386,33 @@ class SiteDeleteFlowTest(TestCase):
         self.assertRedirects(response, reverse("web_team:devices:site_list", args=[self.team.slug]))
         self.assertFalse(Site.objects.filter(pk=self.site.pk).exists())
         self.assertFalse(Device.objects.filter(pk=self.device.pk).exists())
+
+    def test_site_delete_refuses_to_bypass_secure_gateway_release(self):
+        gateway = Gateway.objects.create(
+            team=self.team,
+            site=self.site,
+            name="Managed Gateway",
+            serial_number="NF-SITE-DELETE-001",
+            access_token="site-delete-token",
+            mqtt_username="NF-SITE-DELETE-001",
+            mqtt_password="credential-hash",
+        )
+        inventory = GatewayInventory.objects.create(
+            serial_number=gateway.serial_number,
+            status="claimed",
+            gateway=gateway,
+            claimed_by_team=self.team,
+        )
+
+        response = self.client.post(
+            reverse("web_team:devices:site_delete", args=[self.team.slug, self.site.pk]),
+            data={"confirmation_name": self.site.name},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "securely release them first")
+        self.assertTrue(Site.objects.filter(pk=self.site.pk).exists())
+        self.assertTrue(Gateway.objects.filter(pk=gateway.pk).exists())
+        inventory.refresh_from_db()
+        self.assertEqual(inventory.status, "claimed")
+        self.assertEqual(inventory.gateway, gateway)

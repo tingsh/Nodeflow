@@ -1,0 +1,8 @@
+<div class="h-full overflow-auto divide-y divide-base-content/10">
+    {% for group in metric_groups %}
+    <div class="command-center-list-item asset-mix-item px-5 py-4" data-item-index="{{ forloop.counter0 }}">
+        <div class="flex items-center justify-between gap-4"><span class="text-sm font-semibold">{{ group.label }}</span><span class="rounded-md bg-base-200 px-2 py-1 font-mono text-xs font-bold">{{ group.count }}</span></div>
+        <div class="panel-expanded-only mt-3 flex items-center gap-3"><div class="h-1.5 flex-1 overflow-hidden rounded-full bg-base-200"><div class="h-full bg-primary" style="width: {{ group.percentage }}%"></div></div><span class="w-9 text-right font-mono text-[10px] text-base-content/45">{{ group.percentage }}%</span></div>
+    </div>
+    {% empty %}<div class="px-5 py-8 text-sm text-base-content/50">No asset classes detected yet.</div>{% endfor %}
+</div>

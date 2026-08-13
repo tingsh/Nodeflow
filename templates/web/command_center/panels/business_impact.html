@@ -1,0 +1,13 @@
+<a href="{% url 'web_team:impact:overview' team.slug %}" class="block h-full p-5 transition hover:bg-primary/5">
+    <p class="text-xs text-base-content/55">Measured outcomes from your site data</p>
+    <div class="mt-4 grid grid-cols-2 gap-4 xl:grid-cols-5">
+        <div><p class="text-[9px] font-bold uppercase text-base-content/40">Estimated realized</p><p class="mt-1 font-mono font-bold">{{ impact_summary.currency }} {{ impact_summary.estimated_realized_value|default_if_none:"—" }}</p></div>
+        <div><p class="text-[9px] font-bold uppercase text-base-content/40">Open opportunity</p><p class="mt-1 font-mono font-bold">{{ impact_summary.currency }} {{ impact_summary.estimated_opportunity|default_if_none:"—" }}</p></div>
+        <div class="panel-standard-only"><p class="text-[9px] font-bold uppercase text-base-content/40">Novena cost</p><p class="mt-1 font-mono font-bold">{{ impact_summary.currency }} {{ impact_summary.investment_cost|default_if_none:"—" }}</p></div>
+        <div class="panel-standard-only"><p class="text-[9px] font-bold uppercase text-base-content/40">Estimated net</p><p class="mt-1 font-mono font-bold">{{ impact_summary.currency }} {{ impact_summary.net_benefit|default_if_none:"—" }}</p></div>
+        <div class="panel-standard-only"><p class="text-[9px] font-bold uppercase text-base-content/40">Estimated ROI</p><p class="mt-1 font-mono font-bold">{{ impact_summary.roi_pct|default_if_none:"—" }}{% if impact_summary.roi_pct != None %}%{% endif %}</p></div>
+    </div>
+    <div class="panel-expanded-only mt-5 border-t border-primary/15 pt-4 text-xs font-semibold text-base-content/65">
+        Coverage {{ impact_summary.coverage_pct }}% · {{ impact_summary.confidence|title }} confidence{% if impact_summary.leading_opportunity %} · Leading issue: {{ impact_summary.leading_opportunity.site_name }} — {{ impact_summary.leading_opportunity.title }}{% endif %}
+    </div>
+</a>

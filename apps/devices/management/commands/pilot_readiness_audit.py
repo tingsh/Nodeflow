@@ -743,7 +743,8 @@ class Command(BaseCommand):
             "values": {"device_name": device.name, **values},
         }
         if publish_mqtt:
-            self._publish_mqtt(f"v1/gateway/{gateway.serial_number}/telemetry", payload)
+            topic = f"v1/gateway/{gateway.serial_number}/telemetry"
+            transaction.on_commit(lambda topic=topic, payload=payload: self._publish_mqtt(topic, payload))
 
         for event in parse_mqtt_payload(
             f"v1/gateway/{gateway.serial_number}/telemetry",

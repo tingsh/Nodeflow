@@ -40,6 +40,8 @@ static_root/
 .sass-cache/
 *.css.map
 *.js.map
+playwright-report/
+test-results/
 
 # Generated documentation and API tooling
 docs/_build/

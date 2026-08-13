@@ -1,6 +1,7 @@
 import * as JsCookie from "js-cookie";
 import Chart from 'chart.js/auto';
 import { DashboardCharts as AppDashboardCharts } from './dashboard/dashboard-charts';
+import { installCommandCenter } from './dashboard/command-center';
 export { AppDashboardCharts as DashboardCharts };
 export const Cookies = JsCookie.default;
 
@@ -16,3 +17,5 @@ window.SiteJS.app = {
   DashboardCharts: AppDashboardCharts,
   Cookies: JsCookie.default,
 };
+
+installCommandCenter();

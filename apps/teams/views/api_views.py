@@ -1,7 +1,8 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import get_object_or_404
 from django.utils.translation import gettext_lazy as _
 from drf_spectacular.utils import extend_schema, extend_schema_view, inline_serializer
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.response import Response
@@ -15,6 +16,7 @@ from ..models import Invitation, Team
 from ..permissions import TeamAccessPermissions, TeamModelAccessPermissions
 from ..roles import ROLE_OWNER, is_admin, is_member
 from ..serializers import InvitationSerializer, OpenInvitationSerializer, TeamSerializer
+from ..services import close_team
 
 
 @extend_schema_view(
@@ -38,6 +40,15 @@ class TeamViewSet(viewsets.ModelViewSet):
         # ensure logged in user is set on the model during creation
         team = serializer.save()
         team.members.add(self.request.user, through_defaults={"role": ROLE_OWNER})
+
+    def destroy(self, request, *args, **kwargs):
+        team = self.get_object()
+        confirmation_team_name = request.data.get("confirmation_team_name", "")
+        try:
+            close_team(team, request.user, confirmation_team_name)
+        except DjangoValidationError as exc:
+            raise DRFValidationError({"confirmation_team_name": exc.messages}) from exc
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @extend_schema(tags=["teams"])

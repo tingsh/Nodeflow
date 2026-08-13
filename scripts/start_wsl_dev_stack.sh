@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="/home/shouheng/projects/Novena-Hub"
+ROOT="${NOVENA_HUB_ROOT:-/home/shouheng/Novena-Platform/Novena-Hub}"
 cd "$ROOT"
 
 start_service() {

@@ -42,21 +42,41 @@ def team_home(request, team_slug):
     if not Site.objects.filter(team=team).exists():
         return HttpResponseRedirect(reverse("web_team:onboarding:start", args=[team_slug]))
 
+    from apps.dashboard.command_center import client_config, panel_context, resolve_layout
     from apps.dashboard.services import build_team_operations_dashboard
 
+    impact_site_ids = [
+        site.id
+        for site in Site.objects.filter(team=team).only("id")
+        if has_permission(request.user, team, "view_business_impact", site=site)
+    ]
+    include_impact = bool(flag_is_active(request, "business_impact_roi") and impact_site_ids)
+    customization_enabled = bool(flag_is_active(request, "command_center_customization"))
     dashboard_context = build_team_operations_dashboard(
         team,
-        include_impact=bool(flag_is_active(request, "business_impact_roi")),
-        impact_site_ids=[
-            site.id
-            for site in Site.objects.filter(team=team).only("id")
-            if has_permission(request.user, team, "view_business_impact", site=site)
-        ],
+        include_impact=include_impact,
+        impact_site_ids=impact_site_ids,
     )
+    layout_resolution = resolve_layout(team, request.user)
+    layout_urls = {
+        "save": reverse("web_team:command_center:save_layout", args=[team.slug]),
+        "reset": reverse("web_team:command_center:reset_layout", args=[team.slug]),
+        "publish": reverse("web_team:command_center:publish_default", args=[team.slug]),
+        "remove_default": reverse("web_team:command_center:remove_default", args=[team.slug]),
+    }
     context = {
         "team": team,
         "active_tab": "dashboard",
         "page_title": _("{team} Dashboard").format(team=team),
+        "command_center_customization_enabled": customization_enabled,
+        "can_manage_alerts": has_permission(request.user, team, "manage_alerts"),
+        "command_center_panels": panel_context(layout_resolution["layout"], include_impact=include_impact),
+        "command_center_config": client_config(
+            layout_resolution,
+            include_impact=include_impact,
+            can_publish=has_permission(request.user, team, "manage_team"),
+            urls=layout_urls,
+        ),
         **dashboard_context,
     }
     return render(request, "web/app_home.html", context=context)

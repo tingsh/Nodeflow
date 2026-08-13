@@ -1,0 +1,36 @@
+<div class="{% if command_center_customization_enabled %}grid-stack-item{% else %}command-center-static-item{% endif %}"
+     data-panel-id="{{ panel.id }}" data-mobile-order="{{ panel.mobile_order }}" data-density="standard"
+     gs-x="{{ panel.x }}" gs-y="{{ panel.y }}" gs-w="{{ panel.w }}" gs-h="{{ panel.h }}"
+     gs-min-w="{{ panel.min.w }}" gs-min-h="{{ panel.min.h }}" gs-max-w="{{ panel.max.w }}" gs-max-h="{{ panel.max.h }}"
+     style="--panel-width: {{ panel.w }};">
+    <section class="grid-stack-item-content command-center-panel {% if panel.id == 'business_impact' %}command-center-panel-impact{% endif %}">
+        <header class="command-center-panel-header">
+            <div class="min-w-0"><h2 class="truncate text-sm font-bold uppercase tracking-wide text-base-content/60">{{ panel.title }}</h2></div>
+            {% if command_center_customization_enabled %}
+            <div class="command-center-panel-edit-tools" aria-label="{{ panel.title }} layout controls">
+                <button type="button" class="command-center-drag-handle btn btn-ghost btn-square btn-xs rounded-md" title="Drag {{ panel.title }}" aria-label="Drag {{ panel.title }}"><i class="fa fa-grip-vertical"></i></button>
+                <details class="dropdown dropdown-end">
+                    <summary role="button" class="btn btn-ghost btn-square btn-xs rounded-md" title="{{ panel.title }} options" aria-label="{{ panel.title }} options"><i class="fa fa-ellipsis-vertical"></i></summary>
+                    <ul class="menu dropdown-content z-40 mt-1 w-48 rounded-md border border-base-content/10 bg-base-100 p-2 shadow-xl">
+                        <li><button type="button" data-panel-action="move-earlier"><i class="fa fa-arrow-up"></i>Move earlier</button></li>
+                        <li><button type="button" data-panel-action="move-later"><i class="fa fa-arrow-down"></i>Move later</button></li>
+                        <li><button type="button" data-panel-size="compact"><i class="fa fa-compress"></i>Compact</button></li>
+                        <li><button type="button" data-panel-size="default"><i class="fa fa-table-cells"></i>Standard</button></li>
+                        <li><button type="button" data-panel-size="expanded"><i class="fa fa-expand"></i>Expanded</button></li>
+                        <li><button type="button" data-panel-action="hide" class="text-error"><i class="fa fa-eye-slash"></i>Hide</button></li>
+                    </ul>
+                </details>
+            </div>
+            {% endif %}
+        </header>
+        <div class="command-center-panel-body">
+            {% if panel.id == "business_impact" %}{% include "web/command_center/panels/business_impact.html" %}
+            {% elif panel.id == "operations_trend" %}{% include "web/command_center/panels/operations_trend.html" %}
+            {% elif panel.id == "needs_attention" %}{% include "web/command_center/panels/needs_attention.html" %}
+            {% elif panel.id == "asset_mix" %}{% include "web/command_center/panels/asset_mix.html" %}
+            {% elif panel.id == "device_fleet" %}{% include "web/command_center/panels/device_fleet.html" %}
+            {% elif panel.id == "sites_actions" %}{% include "web/command_center/panels/sites_actions.html" %}
+            {% endif %}
+        </div>
+    </section>
+</div>

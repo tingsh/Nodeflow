@@ -19,20 +19,21 @@ def backfill_hardening_state(apps, schema_editor):
     # not strand an otherwise valid existing Gateway.
     for gateway in Gateway.objects.exclude(lifecycle_status="released").iterator():
         inventory = GatewayInventory.objects.filter(serial_number=gateway.serial_number).first()
+        claimed_at = inventory.claimed_at if inventory and inventory.claimed_at else django.utils.timezone.now()
         if inventory is None:
             GatewayInventory.objects.create(
                 serial_number=gateway.serial_number,
                 status="claimed",
                 gateway_id=gateway.pk,
                 claimed_by_team_id=gateway.team_id,
-                claimed_at=gateway.claimed_at,
+                claimed_at=claimed_at,
             )
         elif inventory.gateway_id in {None, gateway.pk}:
             GatewayInventory.objects.filter(pk=inventory.pk).update(
                 status="claimed",
                 gateway_id=gateway.pk,
                 claimed_by_team_id=gateway.team_id,
-                claimed_at=inventory.claimed_at or gateway.claimed_at,
+                claimed_at=claimed_at,
             )
 
     for gateway_id in GatewayActivation.objects.values_list("gateway_id", flat=True).distinct():
