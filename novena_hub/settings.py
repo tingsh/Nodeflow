@@ -747,9 +747,10 @@ DJSTRIPE_FOREIGN_KEY_TO_FIELD = "id"  # change to "djstripe_id" if not a new ins
 DJSTRIPE_SUBSCRIBER_MODEL = "teams.Team"
 DJSTRIPE_SUBSCRIBER_MODEL_REQUEST_CALLBACK = lambda request: request.team  # noqa E731
 
-# For local development with the Stripe CLI, it's sometimes necessary to disable webhook validation
-# if signature verification fails despite matching secrets. In production, remove this!
-DJSTRIPE_WEBHOOK_VALIDATION = None
+# Local Stripe CLI workflows may leave this unset. Production settings default
+# to signature verification and can only be changed explicitly through the
+# environment.
+DJSTRIPE_WEBHOOK_VALIDATION = env("DJSTRIPE_WEBHOOK_VALIDATION", default=None)
 DJSTRIPE_WEBHOOK_SECRET = env("DJSTRIPE_WEBHOOK_SECRET", default="")
 
 NOVENA_OTA_SIGNING_PRIVATE_KEY = env("NOVENA_OTA_SIGNING_PRIVATE_KEY", default="")

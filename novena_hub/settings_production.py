@@ -26,6 +26,7 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 
 USE_HTTPS_IN_ABSOLUTE_URLS = True
+DJSTRIPE_WEBHOOK_VALIDATION = env("DJSTRIPE_WEBHOOK_VALIDATION", default="verify_signature")
 
 # If you don't want to use environment variables to set production hosts you can add them here
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["yourdomain.com"])

@@ -1,18 +1,16 @@
 {% extends "web/app/app_base.html" %}
 {% load i18n %}
 {% load django_vite %}
-{% load team_permissions %}
-{% load waffle_tags %}
 
 {% block app %}
 {% vite_asset 'assets/javascript/app.js' %}
-<div class="px-4 sm:px-6 lg:px-8 py-6">
-    <div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+<div class="px-4 py-6 sm:px-6 lg:px-8" data-command-center-page>
+    <div class="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
-            <h1 class="text-2xl font-bold text-base-content tracking-tight">Command Center</h1>
-            <p class="text-sm text-base-content/60 mt-1">Near-live fleet health across gateways, devices, sites, alerts, and work orders.</p>
+            <h1 class="text-2xl font-bold text-base-content">Command Center</h1>
+            <p class="mt-1 text-sm text-base-content/60">Near-live fleet health across gateways, devices, sites, alerts, and work orders.</p>
         </div>
-        <div class="flex flex-col gap-2 lg:items-end">
+        <div class="flex flex-col gap-2 xl:items-end">
             <div class="flex flex-wrap items-center gap-2 text-xs font-semibold">
                 <span class="inline-flex items-center gap-2 rounded-md border border-base-content/10 bg-base-100 px-3 py-2">
                     <span class="h-2 w-2 rounded-full {% if devices_attention %}bg-amber-500{% else %}bg-green-500{% endif %}"></span>
@@ -23,8 +21,8 @@
                     {{ gateways_online }} / {{ gateways_count }} gateways
                 </span>
             </div>
-            <div class="flex flex-wrap items-center gap-2">
-                <div class="text-right text-[11px] leading-4 text-base-content/50" aria-live="polite">
+            <div class="flex flex-wrap items-center justify-end gap-2">
+                <div class="mr-1 text-right text-[11px] leading-4 text-base-content/50" aria-live="polite">
                     <p id="fleet-refresh-copy">Fleet summary updates every 60s</p>
                     <p>Last refreshed at <time id="fleet-last-refreshed">--:--:--</time></p>
                 </div>
@@ -37,11 +35,48 @@
                 <button id="fleet-refresh-button" type="button" class="btn btn-ghost btn-square btn-sm rounded-md" title="Refresh fleet summary now" aria-label="Refresh fleet summary now">
                     <i class="fa fa-refresh"></i>
                 </button>
+                {% if command_center_customization_enabled and devices_count %}
+                <button id="command-center-customize" type="button" class="btn btn-outline btn-sm rounded-md">
+                    <i class="fa fa-sliders mr-2"></i>Customize
+                </button>
+                <details id="command-center-actions" class="dropdown dropdown-end">
+                    <summary role="button" class="btn btn-ghost btn-square btn-sm rounded-md" title="Dashboard options" aria-label="Dashboard options">
+                        <i class="fa fa-ellipsis-vertical"></i>
+                    </summary>
+                    <ul class="menu dropdown-content z-30 mt-2 w-56 rounded-md border border-base-content/10 bg-base-100 p-2 shadow-xl">
+                        <li><button type="button" data-layout-command="reset"><i class="fa fa-rotate-left"></i>Reset my layout</button></li>
+                        {% if command_center_config.can_publish %}
+                        <li><button type="button" data-layout-command="publish"><i class="fa fa-users"></i>Publish as team default</button></li>
+                        <li><button type="button" data-layout-command="remove-default"><i class="fa fa-trash-can"></i>Remove team default</button></li>
+                        {% endif %}
+                    </ul>
+                </details>
+                {% endif %}
             </div>
         </div>
     </div>
 
-    <div id="dashboard-live-container" hx-get="{% url 'web_team:home' team.slug %}" hx-trigger="fleetSummaryRefresh from:body" hx-select="#dashboard-live-container" hx-swap="outerHTML">
+    {% if command_center_customization_enabled and devices_count %}
+    <div id="command-center-edit-toolbar" class="mb-5 hidden items-center justify-between gap-3 border-y border-primary/20 bg-primary/5 px-3 py-3" aria-label="Dashboard customization controls">
+        <div class="flex items-center gap-2">
+            <span class="inline-flex h-8 w-8 items-center justify-center text-primary"><i class="fa fa-table-cells-large"></i></span>
+            <span class="text-sm font-semibold text-base-content">Editing dashboard</span>
+        </div>
+        <div class="flex flex-wrap items-center justify-end gap-2">
+            <button id="command-center-add-panels" type="button" class="btn btn-ghost btn-sm rounded-md">
+                <i class="fa fa-plus mr-2"></i>Add panels <span id="command-center-hidden-count" class="badge badge-sm ml-1">0</span>
+            </button>
+            <button id="command-center-cancel" type="button" class="btn btn-ghost btn-sm rounded-md">Cancel</button>
+            <button id="command-center-save" type="button" class="btn btn-primary btn-sm rounded-md px-5">
+                <i class="fa fa-check mr-2"></i>Save
+            </button>
+        </div>
+    </div>
+    <p id="command-center-announcer" class="sr-only" aria-live="polite"></p>
+    {% endif %}
+
+    <div id="dashboard-live-container" hx-get="{% url 'web_team:home' team.slug %}" hx-trigger="fleetSummaryRefresh from:body" hx-target="#dashboard-live-container" hx-select="#dashboard-live-container" hx-swap="outerHTML">
+        {{ command_center_config|json_script:"command-center-config" }}
         {% if devices_count == 0 %}
         <div class="mx-auto max-w-2xl rounded-lg border border-base-content/10 bg-base-100 p-8 text-center shadow-sm">
             <div class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -50,349 +85,91 @@
             <h2 class="text-xl font-bold text-base-content">Connect your first gateway</h2>
             <p class="mt-2 text-sm text-base-content/60">Claim a Novena Gateway, detect field devices, and start seeing live operational data.</p>
             <div class="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                <a href="{% url 'web_team:onboarding:setup_start' team.slug %}" class="btn btn-primary btn-sm rounded-md px-5">
-                    <i class="fa fa-plus mr-2"></i>{% trans "Start Setup" %}
-                </a>
+                <a href="{% url 'web_team:onboarding:setup_start' team.slug %}" class="btn btn-primary btn-sm rounded-md px-5"><i class="fa fa-plus mr-2"></i>{% trans "Start Setup" %}</a>
                 <a href="{% url 'web_team:devices:device_list' team.slug %}" class="btn btn-ghost btn-sm rounded-md px-5">{% trans "Device Directory" %}</a>
             </div>
         </div>
         {% else %}
-        <div class="grid grid-cols-2 gap-3 lg:grid-cols-5 mb-5">
-            <a href="{% url 'web_team:devices:device_list' team.slug %}" class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm hover:border-primary/40 transition">
+        <div class="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5" data-fixed-kpi-strip>
+            <a href="{% url 'web_team:devices:device_list' team.slug %}" class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm transition hover:border-primary/40" hx-boost="false" data-command-center-kpi-link>
                 <p class="text-[11px] font-bold uppercase tracking-wide text-base-content/50">Fleet Health</p>
-                <div class="mt-2 flex items-end gap-2">
-                    <span class="text-3xl font-bold font-mono text-base-content">{{ devices_live }}</span>
-                    <span class="pb-1 text-xs font-semibold text-base-content/50">live</span>
-                </div>
+                <div class="mt-2 flex items-end gap-2"><span class="font-mono text-3xl font-bold">{{ devices_live }}</span><span class="pb-1 text-xs font-semibold text-base-content/50">live</span></div>
                 <p class="mt-1 text-xs text-base-content/50">{{ devices_attention }} need attention</p>
             </a>
-            <a href="{% url 'web_team:devices:gateway_list' team.slug %}" class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm hover:border-primary/40 transition">
+            <a href="{% url 'web_team:devices:gateway_list' team.slug %}" class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm transition hover:border-primary/40" hx-boost="false" data-command-center-kpi-link>
                 <p class="text-[11px] font-bold uppercase tracking-wide text-base-content/50">Gateways</p>
-                <div class="mt-2 flex items-end gap-2">
-                    <span class="text-3xl font-bold font-mono text-base-content">{{ gateways_online }}</span>
-                    <span class="pb-1 text-xs font-semibold text-base-content/50">online</span>
-                </div>
+                <div class="mt-2 flex items-end gap-2"><span class="font-mono text-3xl font-bold">{{ gateways_online }}</span><span class="pb-1 text-xs font-semibold text-base-content/50">online</span></div>
                 <p class="mt-1 text-xs text-base-content/50">{{ gateways_offline }} offline</p>
             </a>
-            <a href="{% url 'web_team:alerts:alert_list' team.slug %}" class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm hover:border-red-400/50 transition">
+            <a href="{% url 'web_team:alerts:alert_list' team.slug %}" class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm transition hover:border-red-400/50" hx-boost="false" data-command-center-kpi-link>
                 <p class="text-[11px] font-bold uppercase tracking-wide text-base-content/50">Active Alerts</p>
-                <div class="mt-2 text-3xl font-bold font-mono {% if active_alerts_count %}text-red-600{% else %}text-base-content{% endif %}">{{ active_alerts_count }}</div>
+                <div class="mt-2 font-mono text-3xl font-bold {% if active_alerts_count %}text-red-600{% endif %}">{{ active_alerts_count }}</div>
                 <p class="mt-1 text-xs text-base-content/50">live incidents</p>
             </a>
-            <a href="{% url 'web_team:maintenance:ticket_list' team.slug %}" class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm hover:border-amber-400/50 transition">
+            <a href="{% url 'web_team:maintenance:ticket_list' team.slug %}" class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm transition hover:border-amber-400/50" hx-boost="false" data-command-center-kpi-link>
                 <p class="text-[11px] font-bold uppercase tracking-wide text-base-content/50">Maintenance</p>
-                <div class="mt-2 text-3xl font-bold font-mono text-base-content">{{ open_tickets }}</div>
+                <div class="mt-2 font-mono text-3xl font-bold">{{ open_tickets }}</div>
                 <p class="mt-1 text-xs text-base-content/50">{{ overdue_pms }} overdue PMs</p>
             </a>
-            <a href="{% url 'web_team:automations:list' team.slug %}" class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm hover:border-primary/40 transition">
+            <a href="{% url 'web_team:automations:list' team.slug %}" class="col-span-2 rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm transition hover:border-primary/40 lg:col-span-1" hx-boost="false" data-command-center-kpi-link>
                 <p class="text-[11px] font-bold uppercase tracking-wide text-base-content/50">Automations</p>
-                <div class="mt-2 text-3xl font-bold font-mono text-base-content">{{ active_automations }}</div>
+                <div class="mt-2 font-mono text-3xl font-bold">{{ active_automations }}</div>
                 <p class="mt-1 text-xs text-base-content/50">of {{ total_automations }} active</p>
             </a>
         </div>
 
-        {% flag "business_impact_roi" %}
-        <a href="{% url 'web_team:impact:overview' team.slug %}" class="mb-5 block rounded-lg border border-primary/20 bg-primary/5 p-5 transition hover:border-primary/40">
-            <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                <div>
-                    <p class="text-[11px] font-bold uppercase tracking-widest text-primary">Business Impact</p>
-                    <h2 class="mt-1 text-lg font-bold">Operational value this month</h2>
-                    <p class="mt-1 text-xs text-base-content/50">Measured outcomes and transparent estimates from your own site data.</p>
-                    <p class="mt-2 text-xs font-semibold text-base-content/65">
-                        Coverage {{ impact_summary.coverage_pct }}% · {{ impact_summary.confidence|title }} confidence
-                        {% if impact_summary.leading_opportunity %}
-                        · Leading issue: {{ impact_summary.leading_opportunity.site_name }} — {{ impact_summary.leading_opportunity.title }}
-                        {% endif %}
-                    </p>
-                </div>
-                <div class="grid grid-cols-2 gap-4 sm:grid-cols-5">
-                    <div><p class="text-[9px] font-bold uppercase text-base-content/40">Estimated realized</p><p class="mt-1 font-mono font-bold">{{ impact_summary.currency }} {{ impact_summary.estimated_realized_value|default_if_none:"—" }}</p></div>
-                    <div><p class="text-[9px] font-bold uppercase text-base-content/40">Open opportunity</p><p class="mt-1 font-mono font-bold">{{ impact_summary.currency }} {{ impact_summary.estimated_opportunity|default_if_none:"—" }}</p></div>
-                    <div><p class="text-[9px] font-bold uppercase text-base-content/40">Novena cost</p><p class="mt-1 font-mono font-bold">{{ impact_summary.currency }} {{ impact_summary.investment_cost|default_if_none:"—" }}</p></div>
-                    <div><p class="text-[9px] font-bold uppercase text-base-content/40">Estimated net</p><p class="mt-1 font-mono font-bold">{{ impact_summary.currency }} {{ impact_summary.net_benefit|default_if_none:"—" }}</p></div>
-                    <div><p class="text-[9px] font-bold uppercase text-base-content/40">Estimated ROI</p><p class="mt-1 font-mono font-bold">{{ impact_summary.roi_pct|default_if_none:"—" }}{% if impact_summary.roi_pct != None %}%{% endif %}</p></div>
-                </div>
-            </div>
-        </a>
-        {% endflag %}
-
-        <div class="grid grid-cols-1 gap-5 xl:grid-cols-3 mb-5">
-            <section class="xl:col-span-2 rounded-lg border border-base-content/10 bg-base-100 p-5 shadow-sm">
-                <div class="mb-4 flex items-center justify-between gap-3">
-                    <div>
-                        <h2 class="text-sm font-bold uppercase tracking-wide text-base-content/60">{{ operations_trend.title }}</h2>
-                        <p class="text-xs text-base-content/50 mt-1">{{ operations_trend.subtitle }}</p>
-                    </div>
-                    {% if operations_trend.unit %}<span class="rounded-md bg-base-200 px-2 py-1 text-[10px] font-bold uppercase text-base-content/50">{{ operations_trend.unit }}</span>{% endif %}
-                </div>
-                {% if operations_trend.empty %}
-                <div class="flex min-h-[260px] items-center justify-center rounded-lg border border-dashed border-base-content/10 bg-base-200/30 text-center">
-                    <div>
-                        <i class="fa fa-chart-line text-3xl text-base-content/20"></i>
-                        <p class="mt-3 text-sm font-semibold text-base-content/50">Waiting for numeric telemetry</p>
-                    </div>
-                </div>
-                {% else %}
-                <div class="min-h-[260px]"><canvas id="operations-trend-chart"></canvas></div>
-                {{ operations_trend.labels|json_script:"operations-trend-labels" }}
-                {{ operations_trend.values|json_script:"operations-trend-values" }}
-                {% endif %}
-            </section>
-
-            <section class="rounded-lg border border-base-content/10 bg-base-100 shadow-sm overflow-hidden">
-                <div class="border-b border-base-content/10 px-5 py-4">
-                    <h2 class="text-sm font-bold uppercase tracking-wide text-base-content/60">Needs Attention</h2>
-                </div>
-                <div class="max-h-[350px] overflow-auto divide-y divide-base-content/10">
-                    {% for item in attention_items %}
-                    <div class="px-5 py-4">
-                        <div class="flex items-start gap-3">
-                            <span class="mt-1 h-2.5 w-2.5 rounded-full {% if item.tone == 'red' %}bg-red-500{% elif item.tone == 'amber' %}bg-amber-500{% elif item.tone == 'blue' %}bg-blue-500{% else %}bg-base-content/30{% endif %}"></span>
-                            <div class="min-w-0 flex-1">
-                                <p class="truncate text-sm font-semibold text-base-content">{{ item.title }}</p>
-                                <p class="mt-1 text-xs text-base-content/55">{{ item.message }}</p>
-                                <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-base-content/40">{{ item.kind }}</p>
-                            </div>
-                        </div>
-                    </div>
-                    {% empty %}
-                    <div class="px-5 py-12 text-center text-base-content/45">
-                        <i class="fa fa-shield-check text-2xl"></i>
-                        <p class="mt-2 text-xs font-bold uppercase tracking-wide">All clear</p>
-                    </div>
-                    {% endfor %}
-                </div>
-            </section>
+        <div id="command-center-grid" class="{% if command_center_customization_enabled %}grid-stack{% else %}command-center-static-grid{% endif %}" data-customization-enabled="{{ command_center_customization_enabled|yesno:'true,false' }}">
+            {% for panel in command_center_panels %}
+                {% if not panel.hidden %}{% include "web/command_center/panel.html" with panel=panel stashed=False %}{% endif %}
+            {% endfor %}
         </div>
-
-        <div class="grid grid-cols-1 gap-5 lg:grid-cols-3">
-            <section class="rounded-lg border border-base-content/10 bg-base-100 shadow-sm overflow-hidden">
-                <div class="border-b border-base-content/10 px-5 py-4 flex items-center justify-between">
-                    <h2 class="text-sm font-bold uppercase tracking-wide text-base-content/60">Asset Mix</h2>
-                    <span class="text-xs text-base-content/45">{{ devices_count }} devices</span>
-                </div>
-                <div class="divide-y divide-base-content/10">
-                    {% for group in metric_groups %}
-                    <div class="px-5 py-4 flex items-center justify-between">
-                        <span class="text-sm font-semibold text-base-content">{{ group.label }}</span>
-                        <span class="rounded-md bg-base-200 px-2 py-1 text-xs font-mono font-bold">{{ group.count }}</span>
-                    </div>
-                    {% empty %}
-                    <div class="px-5 py-8 text-sm text-base-content/50">No asset classes detected yet.</div>
-                    {% endfor %}
-                </div>
-            </section>
-
-            <section class="rounded-lg border border-base-content/10 bg-base-100 shadow-sm overflow-hidden">
-                <div class="border-b border-base-content/10 px-5 py-4 flex items-center justify-between">
-                    <h2 class="text-sm font-bold uppercase tracking-wide text-base-content/60">Device Fleet</h2>
-                    <a href="{% url 'web_team:devices:device_list' team.slug %}" class="text-xs font-bold text-primary">All</a>
-                </div>
-                <div class="max-h-[390px] overflow-auto divide-y divide-base-content/10">
-                    {% for card in top_devices %}
-                    <a href="{% url 'web_team:devices:device_detail' team.slug card.device.pk %}" class="block px-5 py-4 hover:bg-base-200/50 transition">
-                        <div class="flex items-start justify-between gap-3">
-                            <div class="min-w-0">
-                                <div class="flex items-center gap-2">
-                                    <span class="h-2 w-2 rounded-full {% if card.freshness.status == 'live' %}bg-green-500{% elif card.freshness.status == 'delayed' %}bg-amber-500{% elif card.freshness.status == 'alarm' %}bg-red-500{% else %}bg-base-content/30{% endif %}"></span>
-                                    <p class="truncate text-sm font-semibold text-base-content">{{ card.device.name }}</p>
-                                </div>
-                                <p class="mt-1 text-[10px] font-bold uppercase tracking-wide text-base-content/40">{{ card.classification.label }} · {{ card.device.site.name }}</p>
-                                <p class="mt-1 text-xs text-base-content/50">{{ card.freshness.display }}</p>
-                            </div>
-                            {% if card.latest_reading %}
-                            <div class="text-right shrink-0">
-                                <p class="text-sm font-mono font-bold text-base-content">{{ card.latest_reading.display_value }} <span class="text-[10px] text-base-content/45">{{ card.latest_reading.unit }}</span></p>
-                                <p class="text-[10px] text-base-content/40">{{ card.latest_reading.label }}</p>
-                            </div>
-                            {% endif %}
-                        </div>
-                    </a>
-                    {% endfor %}
-                </div>
-            </section>
-
-            <section class="rounded-lg border border-base-content/10 bg-base-100 shadow-sm overflow-hidden">
-                <div class="border-b border-base-content/10 px-5 py-4 flex items-center justify-between">
-                    <h2 class="text-sm font-bold uppercase tracking-wide text-base-content/60">Sites & Actions</h2>
-                    {% has_perm 'manage_devices' as can_manage_devices %}
-                    {% if can_manage_devices %}<a href="{% url 'web_team:devices:site_create' team.slug %}" class="btn btn-ghost btn-xs rounded-md"><i class="fa fa-plus"></i></a>{% endif %}
-                </div>
-                <div class="divide-y divide-base-content/10">
-                    {% for site in sites %}
-                    <a href="{% url 'web_team:devices:site_detail' team.slug site.pk %}" class="block px-5 py-4 hover:bg-base-200/50 transition">
-                        <p class="text-sm font-semibold text-base-content">{{ site.name }}</p>
-                        <p class="mt-1 text-xs text-base-content/50">{{ site.devices.count }} devices · {{ site.gateways.count }} gateways</p>
-                    </a>
-                    {% endfor %}
-                </div>
-                <div class="p-4 space-y-2 border-t border-base-content/10">
-                    <a href="{% url 'web_team:onboarding:setup_start' team.slug %}" class="btn btn-primary btn-sm w-full rounded-md"><i class="fa fa-plus mr-2"></i>Add Hardware</a>
-                    {% has_perm 'manage_alerts' as can_manage_alerts %}
-                    {% if can_manage_alerts %}<a href="{% url 'web_team:alerts:rule_create' team.slug %}" class="btn btn-ghost btn-sm w-full rounded-md"><i class="fa fa-bell mr-2"></i>Create Alert Rule</a>{% endif %}
-                </div>
-            </section>
+        <div id="command-center-panel-stash" hidden>
+            {% for panel in command_center_panels %}
+                {% if panel.hidden %}{% include "web/command_center/panel.html" with panel=panel stashed=True %}{% endif %}
+            {% endfor %}
+        </div>
+        <div id="command-center-empty" class="hidden border-y border-dashed border-base-content/15 py-16 text-center">
+            <i class="fa fa-table-cells-large text-2xl text-base-content/25"></i>
+            <p class="mt-3 text-sm font-semibold text-base-content/55">No operational panels are visible</p>
+            <button type="button" class="btn btn-outline btn-sm mt-4 rounded-md" data-open-panel-drawer><i class="fa fa-plus mr-2"></i>Add panels</button>
         </div>
         {% endif %}
     </div>
 </div>
 
-<script>
-    (() => {
-        if (window.NovenaFleetSummaryController) {
-            window.NovenaFleetSummaryController.bindControls();
-            return;
-        }
+{% if command_center_customization_enabled %}
+<dialog id="command-center-panel-drawer" class="command-center-drawer">
+    <div class="command-center-drawer-backdrop" data-close-panel-drawer></div>
+    <section class="command-center-drawer-panel" aria-labelledby="command-center-panel-drawer-title">
+        <header class="flex items-start justify-between border-b border-base-content/10 px-5 py-4">
+            <div><h2 id="command-center-panel-drawer-title" class="text-base font-bold">Add panels</h2><p class="mt-1 text-xs text-base-content/55">Restore information to your Command Center.</p></div>
+            <button type="button" class="btn btn-ghost btn-square btn-sm rounded-md" data-close-panel-drawer aria-label="Close add panels"><i class="fa fa-xmark"></i></button>
+        </header>
+        <div class="flex-1 overflow-auto p-4">
+            <div class="space-y-2">
+                {% for panel in command_center_panels %}
+                <div class="rounded-md border border-base-content/10 p-4" data-panel-catalog-id="{{ panel.id }}">
+                    <div class="flex items-start justify-between gap-4">
+                        <div><h3 class="text-sm font-bold">{{ panel.title }}</h3><p class="mt-1 text-xs leading-5 text-base-content/55">{{ panel.description }}</p></div>
+                        <button type="button" class="btn btn-outline btn-sm rounded-md" data-restore-panel="{{ panel.id }}"><i class="fa fa-plus mr-2"></i>Add</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <footer class="border-t border-base-content/10 p-4"><button id="command-center-restore-all" type="button" class="btn btn-ghost btn-sm w-full rounded-md">Restore all panels</button></footer>
+    </section>
+</dialog>
 
-        const storageKey = 'novena.commandCenter.refreshSeconds';
-        const allowedIntervals = [15, 30, 60];
-        let refreshTimer = null;
-        let trendChart = null;
-
-        function readInterval() {
-            try {
-                const stored = Number(window.localStorage.getItem(storageKey));
-                return allowedIntervals.includes(stored) ? stored : 60;
-            } catch (error) {
-                return 60;
-            }
-        }
-
-        function updateRefreshCopy(seconds) {
-            const copy = document.getElementById('fleet-refresh-copy');
-            if (copy) copy.textContent = `Fleet summary updates every ${seconds}s`;
-        }
-
-        function updateLastRefreshed() {
-            const time = document.getElementById('fleet-last-refreshed');
-            if (time) {
-                const now = new Date();
-                time.dateTime = now.toISOString();
-                time.textContent = now.toLocaleTimeString();
-            }
-        }
-
-        function setRefreshBusy(isBusy) {
-            const button = document.getElementById('fleet-refresh-button');
-            if (!button) return;
-            button.disabled = isBusy;
-            button.innerHTML = isBusy
-                ? '<span class="loading loading-spinner loading-xs"></span>'
-                : '<i class="fa fa-refresh"></i>';
-        }
-
-        function requestRefresh() {
-            if (!document.getElementById('dashboard-live-container')) return;
-            window.htmx.trigger(document.body, 'fleetSummaryRefresh');
-        }
-
-        function applyInterval(seconds) {
-            const interval = allowedIntervals.includes(Number(seconds)) ? Number(seconds) : 60;
-            try {
-                window.localStorage.setItem(storageKey, String(interval));
-            } catch (error) {
-                // The 60-second default still works when browser storage is unavailable.
-            }
-            updateRefreshCopy(interval);
-            if (refreshTimer) window.clearInterval(refreshTimer);
-            refreshTimer = window.setInterval(requestRefresh, interval * 1000);
-        }
-
-        function waitForChart() {
-            if (window.Chart) return Promise.resolve();
-            return new Promise((resolve, reject) => {
-                const timeout = window.setTimeout(() => reject(new Error('Chart.js did not load')), 8000);
-                window.addEventListener('novena:chart-ready', () => {
-                    window.clearTimeout(timeout);
-                    resolve();
-                }, {once: true});
-            });
-        }
-
-        async function initTrendChart() {
-            const canvas = document.getElementById('operations-trend-chart');
-            const labels = document.getElementById('operations-trend-labels');
-            const values = document.getElementById('operations-trend-values');
-            if (trendChart) {
-                trendChart.destroy();
-                trendChart = null;
-            }
-            if (!canvas || !labels || !values) return;
-            try {
-                await waitForChart();
-            } catch (error) {
-                console.warn('Command Center chart unavailable', error);
-                return;
-            }
-
-            trendChart = new Chart(canvas.getContext('2d'), {
-                type: 'line',
-                data: {
-                    labels: JSON.parse(labels.textContent || '[]'),
-                    datasets: [{
-                        data: JSON.parse(values.textContent || '[]'),
-                        borderColor: '#2563eb',
-                        backgroundColor: 'rgba(37, 99, 235, 0.08)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.35,
-                        pointRadius: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#94a3b8', font: { size: 10 } } },
-                        y: { beginAtZero: true, grid: { color: 'rgba(148,163,184,0.18)' }, ticks: { color: '#94a3b8', font: { size: 10 } } }
-                    }
-                }
-            });
-        }
-
-        function bindControls() {
-            const selector = document.getElementById('fleet-refresh-interval');
-            const refreshButton = document.getElementById('fleet-refresh-button');
-            if (!selector || !refreshButton) {
-                if (refreshTimer) window.clearInterval(refreshTimer);
-                refreshTimer = null;
-                return;
-            }
-
-            const interval = readInterval();
-            selector.value = String(interval);
-            selector.onchange = () => applyInterval(selector.value);
-            refreshButton.onclick = requestRefresh;
-            applyInterval(interval);
-            updateLastRefreshed();
-            initTrendChart();
-        }
-
-        document.body.addEventListener('htmx:afterRequest', event => {
-            if (event.detail.elt && event.detail.elt.id === 'dashboard-live-container') {
-                setRefreshBusy(false);
-                if (event.detail.successful) updateLastRefreshed();
-            }
-        });
-        document.body.addEventListener('htmx:beforeRequest', event => {
-            if (event.detail.elt && event.detail.elt.id === 'dashboard-live-container') setRefreshBusy(true);
-        });
-        document.body.addEventListener('htmx:afterSwap', event => {
-            if (event.detail.target && event.detail.target.id === 'dashboard-live-container') {
-                initTrendChart();
-            } else {
-                bindControls();
-            }
-        });
-
-        window.NovenaFleetSummaryController = {bindControls};
-
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', bindControls, {once: true});
-        } else {
-            bindControls();
-        }
-    })();
-</script>
+<dialog id="command-center-confirm-dialog" class="modal modal-bottom sm:modal-middle">
+    <section class="modal-box max-w-md rounded-lg">
+        <div class="flex items-start gap-4">
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-amber-500/10 text-amber-600"><i id="command-center-confirm-icon" class="fa fa-triangle-exclamation"></i></span>
+            <div><h2 id="command-center-confirm-title" class="text-base font-bold">Confirm change</h2><p id="command-center-confirm-message" class="mt-2 text-sm leading-6 text-base-content/65"></p></div>
+        </div>
+        <div class="modal-action"><button type="button" class="btn btn-ghost btn-sm rounded-md" data-confirm-cancel>Cancel</button><button id="command-center-confirm-action" type="button" class="btn btn-primary btn-sm rounded-md px-5">Confirm</button></div>
+    </section>
+    <form method="dialog" class="modal-backdrop"><button data-confirm-cancel>close</button></form>
+</dialog>
+{% endif %}
 {% endblock %}

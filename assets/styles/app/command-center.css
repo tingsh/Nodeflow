@@ -1,0 +1,289 @@
+.command-center-static-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.command-center-static-item {
+  grid-column: span var(--panel-width);
+  min-height: 288px;
+}
+
+.grid-stack > .grid-stack-item > .grid-stack-item-content,
+.command-center-panel {
+  inset: 0;
+  overflow: visible;
+}
+
+.command-center-panel {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, currentColor 10%, transparent);
+  border-radius: 8px;
+  background: var(--color-base-100);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 7%);
+}
+
+.command-center-panel-impact {
+  border-color: color-mix(in oklab, var(--color-primary) 25%, transparent);
+  background: color-mix(in oklab, var(--color-primary) 5%, var(--color-base-100));
+}
+
+.command-center-panel-header {
+  display: flex;
+  min-height: 50px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid color-mix(in oklab, currentColor 10%, transparent);
+  padding: 12px 16px 12px 20px;
+}
+
+.command-center-panel-body {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.command-center-panel-edit-tools {
+  display: none;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+}
+
+.command-center-is-editing .command-center-panel-edit-tools {
+  display: flex;
+}
+
+.command-center-is-editing .command-center-panel {
+  border-color: color-mix(in oklab, var(--color-primary) 38%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-primary) 10%, transparent);
+}
+
+.command-center-is-editing [data-command-center-kpi-link] {
+  cursor: default;
+  opacity: .78;
+}
+
+.command-center-drag-handle {
+  cursor: grab;
+}
+
+.command-center-drag-handle:active {
+  cursor: grabbing;
+}
+
+.grid-stack-placeholder > .placeholder-content {
+  border: 2px dashed color-mix(in oklab, var(--color-primary) 55%, transparent);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--color-primary) 8%, transparent);
+}
+
+.command-center-is-editing .ui-resizable-n,
+.command-center-is-editing .ui-resizable-s {
+  right: 18px !important;
+  left: 18px !important;
+  height: 12px !important;
+}
+
+.command-center-is-editing .ui-resizable-n {
+  top: -4px !important;
+  cursor: n-resize;
+}
+
+.command-center-is-editing .ui-resizable-s {
+  bottom: -4px !important;
+  cursor: s-resize;
+}
+
+.command-center-is-editing .ui-resizable-e,
+.command-center-is-editing .ui-resizable-w {
+  top: 18px !important;
+  bottom: 18px !important;
+  width: 12px !important;
+}
+
+.command-center-is-editing .ui-resizable-e {
+  right: -4px !important;
+  cursor: e-resize;
+}
+
+.command-center-is-editing .ui-resizable-w {
+  left: -4px !important;
+  cursor: w-resize;
+}
+
+.command-center-is-editing .ui-resizable-ne,
+.command-center-is-editing .ui-resizable-nw,
+.command-center-is-editing .ui-resizable-se,
+.command-center-is-editing .ui-resizable-sw {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+.command-center-is-editing .ui-resizable-ne {
+  top: 2px !important;
+  right: 2px !important;
+  cursor: ne-resize;
+  border-top: 2px solid color-mix(in oklab, var(--color-primary) 65%, transparent);
+  border-right: 2px solid color-mix(in oklab, var(--color-primary) 65%, transparent);
+}
+
+.command-center-is-editing .ui-resizable-nw {
+  top: 2px !important;
+  left: 2px !important;
+  cursor: nw-resize;
+  border-top: 2px solid color-mix(in oklab, var(--color-primary) 65%, transparent);
+  border-left: 2px solid color-mix(in oklab, var(--color-primary) 65%, transparent);
+}
+
+.command-center-is-editing .ui-resizable-se {
+  right: 2px !important;
+  bottom: 2px !important;
+  cursor: se-resize;
+  border-right: 2px solid color-mix(in oklab, var(--color-primary) 65%, transparent);
+  border-bottom: 2px solid color-mix(in oklab, var(--color-primary) 65%, transparent);
+}
+
+.command-center-is-editing .ui-resizable-sw {
+  bottom: 2px !important;
+  left: 2px !important;
+  cursor: sw-resize;
+  border-bottom: 2px solid color-mix(in oklab, var(--color-primary) 65%, transparent);
+  border-left: 2px solid color-mix(in oklab, var(--color-primary) 65%, transparent);
+}
+
+.panel-expanded-only {
+  display: none;
+}
+
+[data-density="expanded"] .panel-expanded-only {
+  display: flex;
+}
+
+[data-density="compact"] .panel-standard-only {
+  display: none;
+}
+
+[data-density="compact"] .attention-item[data-item-index="3"],
+[data-density="compact"] .attention-item[data-item-index="4"],
+[data-density="compact"] .attention-item[data-item-index="5"],
+[data-density="compact"] .attention-item[data-item-index="6"],
+[data-density="compact"] .attention-item[data-item-index="7"],
+[data-density="standard"] .attention-item[data-item-index="5"],
+[data-density="standard"] .attention-item[data-item-index="6"],
+[data-density="standard"] .attention-item[data-item-index="7"],
+[data-density="compact"] .device-fleet-item:nth-child(n+6),
+[data-density="standard"] .device-fleet-item:nth-child(n+9),
+[data-density="compact"] .asset-mix-item:nth-child(n+5),
+[data-density="compact"] .site-list-item:nth-child(n+4),
+[data-density="standard"] .site-list-item:nth-child(n+7) {
+  display: none;
+}
+
+.command-center-drawer {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.command-center-drawer[open] {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.command-center-drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(15 23 42 / 32%);
+}
+
+.command-center-drawer-panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(420px, 100vw);
+  height: 100%;
+  flex-direction: column;
+  background: var(--color-base-100);
+  box-shadow: -18px 0 45px rgb(0 0 0 / 16%);
+}
+
+.command-center-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 100;
+  max-width: min(360px, calc(100vw - 32px));
+  border: 1px solid color-mix(in oklab, var(--color-success) 35%, transparent);
+  border-radius: 6px;
+  background: var(--color-base-100);
+  padding: 12px 16px;
+  color: var(--color-base-content);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 16%);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.command-center-toast-error {
+  border-color: color-mix(in oklab, var(--color-error) 45%, transparent);
+}
+
+#command-center-confirm-dialog .modal-box {
+  position: relative;
+  z-index: 1;
+}
+
+#command-center-confirm-dialog .modal-backdrop {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+}
+
+@media (max-width: 767px) {
+  .command-center-static-grid,
+  .grid-stack.command-center-mobile-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    height: auto !important;
+  }
+
+  .grid-stack.command-center-mobile-grid > .grid-stack-item,
+  .command-center-static-item {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 320px;
+    transform: none !important;
+  }
+
+  .grid-stack.command-center-mobile-grid > .grid-stack-item > .grid-stack-item-content {
+    position: relative;
+    min-height: 320px;
+  }
+
+  .command-center-is-editing .command-center-drag-handle,
+  .command-center-is-editing [data-panel-size] {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .command-center-static-item {
+    grid-column: span 6;
+  }
+}

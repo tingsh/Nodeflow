@@ -308,6 +308,14 @@ class SiteDeleteView(PermissionRequiredMixin, DeleteView):
             form.add_error(None, "Type the site name exactly to confirm deletion.")
             return self.form_invalid(form)
 
+        if self.object.gateways.exists():
+            form.add_error(
+                None,
+                "This site still has Gateway records. Move active Gateways to another site or securely release them "
+                "first. Contact Novena support to remove archived Gateway records.",
+            )
+            return self.form_invalid(form)
+
         return super().form_valid(form)
 
     def get_success_url(self):

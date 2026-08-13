@@ -4,6 +4,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.db.models import Count, Sum
 from django.db.models.functions import TruncDate
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.dashboard.models import Dashboard, Widget
@@ -371,13 +372,16 @@ def _build_operations_trend(team, devices):
         "unit": item.get("unit", ""),
         "labels": labels,
         "values": values,
+        "current": values[-1] if values else None,
+        "minimum": min(values) if values else None,
+        "maximum": max(values) if values else None,
         "empty": False,
     }
     cache.set(cache_key, trend, 60)
     return trend
 
 
-def _build_attention_items(devices, gateways, active_alerts, open_tickets, overdue_pms):
+def _build_attention_items(team, devices, gateways, active_alerts, open_tickets, overdue_pms):
     items = []
     for device in devices:
         state = device.freshness
@@ -390,6 +394,9 @@ def _build_attention_items(devices, gateways, active_alerts, open_tickets, overd
                     "message": state.display,
                     "kind": "Device alarm",
                     "device": device,
+                    "occurred_at": device.last_telemetry_at,
+                    "action_url": reverse("web_team:devices:device_detail", args=[team.slug, device.pk]),
+                    "action_label": "Inspect device",
                 }
             )
         elif state.status == "offline" and gateway_state and gateway_state.status == "live":
@@ -400,13 +407,25 @@ def _build_attention_items(devices, gateways, active_alerts, open_tickets, overd
                     "message": "Gateway online - device offline",
                     "kind": "Field device",
                     "device": device,
+                    "occurred_at": device.last_telemetry_at,
+                    "action_url": reverse("web_team:devices:device_detail", args=[team.slug, device.pk]),
+                    "action_label": "Inspect device",
                 }
             )
     for gateway in gateways:
         state = gateway.freshness
         if state.status == "offline":
             items.append(
-                {"tone": "gray", "title": gateway.name, "message": state.display, "kind": "Gateway", "gateway": gateway}
+                {
+                    "tone": "gray",
+                    "title": gateway.name,
+                    "message": state.display,
+                    "kind": "Gateway",
+                    "gateway": gateway,
+                    "occurred_at": gateway.last_seen,
+                    "action_url": reverse("web_team:devices:gateway_detail", args=[team.slug, gateway.pk]),
+                    "action_label": "Inspect gateway",
+                }
             )
     for alert in active_alerts[:5]:
         items.append(
@@ -417,6 +436,9 @@ def _build_attention_items(devices, gateways, active_alerts, open_tickets, overd
                 "kind": "Alert",
                 "alert": alert,
                 "device": alert.device,
+                "occurred_at": alert.triggered_at,
+                "action_url": reverse("web_team:alerts:alert_list", args=[team.slug]),
+                "action_label": "Open alerts",
             }
         )
     if overdue_pms:
@@ -426,6 +448,9 @@ def _build_attention_items(devices, gateways, active_alerts, open_tickets, overd
                 "title": "Preventive maintenance overdue",
                 "message": f"{overdue_pms} schedule needs attention",
                 "kind": "Maintenance",
+                "occurred_at": None,
+                "action_url": reverse("web_team:maintenance:schedule_list", args=[team.slug]),
+                "action_label": "Review schedules",
             }
         )
     if open_tickets:
@@ -435,6 +460,9 @@ def _build_attention_items(devices, gateways, active_alerts, open_tickets, overd
                 "title": "Open maintenance work",
                 "message": f"{open_tickets} ticket(s) in progress",
                 "kind": "Maintenance",
+                "occurred_at": None,
+                "action_url": reverse("web_team:maintenance:ticket_list", args=[team.slug]),
+                "action_label": "Open tickets",
             }
         )
     return items[:8]
@@ -485,7 +513,7 @@ def build_team_operations_dashboard(team, *, include_impact=False, impact_site_i
         metric_groups.setdefault(classification["type"], {"label": classification["label"], "count": 0})["count"] += 1
 
     top_devices = []
-    for device in devices[:8]:
+    for device in devices[:12]:
         readings = _latest_readings_for_device(device, limit=2)
         top_devices.append(
             {
@@ -496,6 +524,26 @@ def build_team_operations_dashboard(team, *, include_impact=False, impact_site_i
                 "latest_reading": readings[0] if readings else None,
             }
         )
+
+    site_cards = []
+    for site in sites:
+        site_devices = [device for device in devices if device.site_id == site.id]
+        site_gateways = [gateway for gateway in gateways if gateway.site_id == site.id]
+        site_cards.append(
+            {
+                "site": site,
+                "devices_count": len(site_devices),
+                "gateways_count": len(site_gateways),
+                "attention_count": sum(
+                    1 for device in site_devices if device.freshness.status in {"delayed", "offline", "alarm"}
+                )
+                + sum(1 for gateway in site_gateways if gateway.freshness.status == "offline"),
+            }
+        )
+
+    metric_group_values = list(metric_groups.values())
+    for group in metric_group_values:
+        group["percentage"] = round((group["count"] / len(devices)) * 100) if devices else 0
 
     impact_summary = None
     if include_impact:
@@ -521,12 +569,15 @@ def build_team_operations_dashboard(team, *, include_impact=False, impact_site_i
         "overdue_pms": overdue_pms,
         "active_automations": active_automations,
         "total_automations": total_automations,
-        "metric_groups": list(metric_groups.values()),
+        "metric_groups": metric_group_values,
         "has_energy_widgets": "energy" in metric_groups,
         "operations_trend": _build_operations_trend(team, devices),
         "recent_alerts": recent_alerts,
         "top_devices": top_devices,
-        "attention_items": _build_attention_items(devices, gateways, active_alerts, open_tickets, overdue_pms),
+        "attention_items": _build_attention_items(
+            team, devices, gateways, active_alerts, open_tickets, overdue_pms
+        ),
+        "site_cards": site_cards,
         "logs": ActivityLog.objects.filter(team=team).order_by("-timestamp")[:15],
         "impact_summary": impact_summary,
     }

@@ -22,6 +22,7 @@ urlpatterns = [
 team_urlpatterns = (
     [
         path("", views.team_home, name="home"),
+        path("command-center/", include("apps.dashboard.command_center_urls")),
         # IoT apps – must live here to get the web_team namespace
         path("devices/", include("apps.devices.urls")),
         path("telemetry/", include("apps.telemetry.urls")),

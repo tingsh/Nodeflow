@@ -35,6 +35,7 @@ Teacher note: ASGI is the Python web interface that supports both normal HTTP re
 Production files added by this kit:
 
 - `Dockerfile.prod`: production app image with frontend build and Python prod dependencies.
+- The frontend production build installs the locked `gridstack` npm dependency used by the feature-flagged Command Center customization experience; run `npm ci && npm run build` when validating or rebuilding this asset.
 - `docker-compose.prod.yml`: production service graph for web, worker, beat, MQTT consumer, Postgres, Redis, and Mosquitto.
 - `deploy/env/production.env.example`: safe placeholder env file.
 - `deploy/nginx/novena.conf.example`: host Nginx reverse proxy example.

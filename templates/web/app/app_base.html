@@ -7,13 +7,14 @@
 {% block body %}
   {% block notifications %}
   {% endblock %}
-  <section class="section" 
-           x-data="{ sidebarOpen: true }" 
-           @toggle-sidebar.window="sidebarOpen = !sidebarOpen">
+  <section class="section"
+           x-data="{ sidebarOpen: window.innerWidth >= 768 }"
+           @toggle-sidebar.window="sidebarOpen = !sidebarOpen"
+           @resize.window="if (window.innerWidth < 768) sidebarOpen = false">
     <div class="max-w-[1800px] mx-auto px-4 sm:px-8 lg:px-12 flex flex-row min-h-screen">
       <!-- Sidebar Container -->
-      <div class="w-64 opacity-100 overflow-hidden flex-shrink-0"
-           :class="sidebarOpen ? 'w-64 opacity-100' : 'w-0 opacity-0 pointer-events-none'">
+      <div class="hidden w-64 opacity-100 overflow-hidden flex-shrink-0 md:block"
+           :class="sidebarOpen ? '!block w-64 opacity-100' : '!hidden w-0 opacity-0 pointer-events-none'">
         <div class="w-64"> <!-- Content wrapper to prevent squishing -->
           {% block sidebar-nav %}
             {% include "web/components/app_nav.html" %}

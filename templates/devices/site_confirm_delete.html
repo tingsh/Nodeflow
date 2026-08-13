@@ -11,14 +11,19 @@
                 <div>
                     <h2 class="text-2xl font-black text-base-content font-heading">Delete Site</h2>
                     <p class="mt-2 text-sm text-base-content/60">
-                        This permanently removes the site and its connected infrastructure from this team.
+                        This permanently removes an empty site and its remaining device records from this team.
                     </p>
                 </div>
             </div>
 
             <div class="mt-6 rounded-xl border border-error/20 bg-error/10 p-4 text-sm text-error">
+                {% if object.gateways.exists %}
+                <p class="font-bold">This site cannot be deleted yet.</p>
+                <p class="mt-1">Move active Gateways to another site or securely release them first. Contact Novena support to remove archived Gateway records.</p>
+                {% else %}
                 <p class="font-bold">This action cannot be undone.</p>
-                <p class="mt-1">Deleting this site will also delete {{ object.gateways.count }} gateway{{ object.gateways.count|pluralize }} and {{ object.devices.count }} device{{ object.devices.count|pluralize }} associated with it.</p>
+                <p class="mt-1">Deleting this site will also delete {{ object.devices.count }} device{{ object.devices.count|pluralize }} associated with it.</p>
+                {% endif %}
             </div>
 
             <dl class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">

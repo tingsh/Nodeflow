@@ -1,6 +1,8 @@
 import uuid
 
+from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -96,3 +98,63 @@ class Widget(BaseTeamModel):
 
     def __str__(self):
         return f"{self.title} ({self.get_widget_type_display()})"
+
+
+class CommandCenterLayout(BaseTeamModel):
+    """A personal or team-default arrangement of Command Center panels."""
+
+    class Scope(models.TextChoices):
+        PERSONAL = "personal", _("Personal")
+        TEAM_DEFAULT = "team_default", _("Team default")
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="command_center_layouts",
+    )
+    scope = models.CharField(max_length=20, choices=Scope.choices)
+    layout = models.JSONField(default=dict)
+    schema_version = models.PositiveSmallIntegerField(default=1)
+    revision = models.PositiveIntegerField(default=1)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="updated_command_center_layouts",
+    )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(scope="personal", user__isnull=False)
+                    | models.Q(scope="team_default", user__isnull=True)
+                ),
+                name="dashboard_layout_scope_user_valid",
+            ),
+            models.UniqueConstraint(
+                fields=["team", "user"],
+                condition=models.Q(scope="personal"),
+                name="dashboard_one_personal_layout",
+            ),
+            models.UniqueConstraint(
+                fields=["team"],
+                condition=models.Q(scope="team_default"),
+                name="dashboard_one_team_default_layout",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.scope == self.Scope.PERSONAL and self.user_id:
+            from apps.teams.models import Membership
+
+            if not Membership.objects.filter(team_id=self.team_id, user_id=self.user_id).exists():
+                raise ValidationError({"user": _("The user must be a member of this team.")})
+
+    def __str__(self):
+        owner = self.user if self.scope == self.Scope.PERSONAL else "team default"
+        return f"Command Center: {self.team} / {owner}"

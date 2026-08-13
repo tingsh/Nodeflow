@@ -1,5 +1,6 @@
 import csv
 import io
+from unittest.mock import patch
 
 import pytest
 from django.core.management import call_command
@@ -44,6 +45,22 @@ def test_pilot_readiness_simulate_creates_live_customer_journey_data():
     facilities = Team.objects.get(slug="pilot-facilities")
     assert Site.objects.filter(team=facilities).count() >= 2
     assert PreventiveSchedule.objects.filter(team=facilities, is_active=True).exists()
+
+
+@pytest.mark.django_db
+def test_pilot_readiness_mqtt_publish_waits_for_claim_transaction_commit(
+    django_capture_on_commit_callbacks,
+):
+    with patch(
+        "apps.devices.management.commands.pilot_readiness_audit.Command._publish_mqtt"
+    ) as publish_mqtt:
+        with django_capture_on_commit_callbacks(execute=True):
+            call_command("pilot_readiness_audit", "simulate", "--publish-mqtt")
+            publish_mqtt.assert_not_called()
+
+        assert publish_mqtt.call_count > 0
+        topic, payload = publish_mqtt.call_args.args
+        assert topic == f"v1/gateway/{payload['serial_number']}/telemetry"
 
 
 @pytest.mark.django_db
