@@ -130,8 +130,7 @@ class CommandCenterLayout(BaseTeamModel):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    models.Q(scope="personal", user__isnull=False)
-                    | models.Q(scope="team_default", user__isnull=True)
+                    models.Q(scope="personal", user__isnull=False) | models.Q(scope="team_default", user__isnull=True)
                 ),
                 name="dashboard_layout_scope_user_valid",
             ),

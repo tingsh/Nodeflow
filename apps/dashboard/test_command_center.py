@@ -41,9 +41,7 @@ class CommandCenterLayoutTests(TestCase):
 
         resolved = resolve_layout(self.team, self.owner)
         self.assertEqual(resolved["source"], CommandCenterLayout.Scope.TEAM_DEFAULT)
-        attention_panel = next(
-            panel for panel in resolved["layout"]["panels"] if panel["id"] == "needs_attention"
-        )
+        attention_panel = next(panel for panel in resolved["layout"]["panels"] if panel["id"] == "needs_attention")
         self.assertTrue(attention_panel["hidden"])
 
         personal_layout = novena_default_layout()
@@ -245,8 +243,8 @@ class CommandCenterRenderingTests(TestCase):
     def test_enabled_dashboard_renders_fixed_kpis_and_customizable_panels(self):
         response = self.client.get(reverse("web_team:home", args=[self.team.slug]))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-fixed-kpi-strip')
-        self.assertContains(response, 'data-command-center-kpi-link', count=5)
+        self.assertContains(response, "data-fixed-kpi-strip")
+        self.assertContains(response, "data-command-center-kpi-link", count=5)
         self.assertContains(response, 'hx-boost="false" data-command-center-kpi-link', count=5)
         self.assertContains(response, 'id="command-center-customize"')
         self.assertContains(response, 'id="command-center-grid" class="grid-stack"')

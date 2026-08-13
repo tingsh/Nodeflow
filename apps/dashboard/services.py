@@ -574,9 +574,7 @@ def build_team_operations_dashboard(team, *, include_impact=False, impact_site_i
         "operations_trend": _build_operations_trend(team, devices),
         "recent_alerts": recent_alerts,
         "top_devices": top_devices,
-        "attention_items": _build_attention_items(
-            team, devices, gateways, active_alerts, open_tickets, overdue_pms
-        ),
+        "attention_items": _build_attention_items(team, devices, gateways, active_alerts, open_tickets, overdue_pms),
         "site_cards": site_cards,
         "logs": ActivityLog.objects.filter(team=team).order_by("-timestamp")[:15],
         "impact_summary": impact_summary,

@@ -51,9 +51,7 @@ def test_pilot_readiness_simulate_creates_live_customer_journey_data():
 def test_pilot_readiness_mqtt_publish_waits_for_claim_transaction_commit(
     django_capture_on_commit_callbacks,
 ):
-    with patch(
-        "apps.devices.management.commands.pilot_readiness_audit.Command._publish_mqtt"
-    ) as publish_mqtt:
+    with patch("apps.devices.management.commands.pilot_readiness_audit.Command._publish_mqtt") as publish_mqtt:
         with django_capture_on_commit_callbacks(execute=True):
             call_command("pilot_readiness_audit", "simulate", "--publish-mqtt")
             publish_mqtt.assert_not_called()

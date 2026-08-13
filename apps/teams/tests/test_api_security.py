@@ -32,9 +32,7 @@ class TeamApiAuthorizationTest(TestCase):
         response = self.client.post(self.list_url, {"name": "Owner Team"}, format="json")
         self.assertEqual(response.status_code, 201)
         created_team = Team.objects.get(pk=response.data["id"])
-        self.assertTrue(
-            Membership.objects.filter(team=created_team, user=self.owner, role=ROLE_OWNER).exists()
-        )
+        self.assertTrue(Membership.objects.filter(team=created_team, user=self.owner, role=ROLE_OWNER).exists())
 
     def test_admin_cannot_delete_team_through_api(self):
         self.client.force_authenticate(self.admin)

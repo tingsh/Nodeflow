@@ -201,9 +201,7 @@ def publish_team_default(request, team_slug):
             team_default.schema_version = published_layout["schema_version"]
             team_default.revision += 1
             team_default.updated_by = request.user
-            team_default.save(
-                update_fields=["layout", "schema_version", "revision", "updated_by", "updated_at"]
-            )
+            team_default.save(update_fields=["layout", "schema_version", "revision", "updated_by", "updated_at"])
         else:
             CommandCenterLayout.objects.create(
                 team=request.team,
