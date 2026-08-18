@@ -27,6 +27,7 @@ The Gateway repository's `ARCHITECTURE.md` is the current edge-runtime guide. Hi
 - [Backup and restore](production_backup_restore.md)
 - [Governed remote-control operations](governed_remote_control_operations.md)
 - [Business Impact and ROI operations](business_impact_roi_operations.md)
+- [Automated first-customer journey](automated_first_customer_journey.md)
 - [Pilot readiness audit](pilot_readiness_audit.md) and [scorecard](pilot_readiness_scorecard.md)
 - [Hardware replay runbook](hardware_replay_runbook_2026-07-09.md)
 - [Local development machine notes](local_development_machine_notes.md)
