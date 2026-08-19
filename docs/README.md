@@ -23,6 +23,7 @@ The Gateway repository's `ARCHITECTURE.md` is the current edge-runtime guide. Hi
 
 ## Operations and deployment
 
+- [Production deployment plan](production_deployment_plan.md)
 - [Production readiness kit](production_readiness_kit.md)
 - [Backup and restore](production_backup_restore.md)
 - [Governed remote-control operations](governed_remote_control_operations.md)

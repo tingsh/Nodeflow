@@ -31,7 +31,7 @@ If the change introduces a new required production dependency, update the readin
 ### Local Shell / Runtime Default
 On this Windows development machine, default to WSL for Novena development and testing. The active Hub project is stored in WSL-native storage at:
 
-    cd ~/projects/Novena-Hub
+    cd ~/Novena-Platform/Novena-Hub
     source ~/.venvs/novena/bin/activate
 
 Use the WSL-native Python virtual environment ~/.venvs/novena by default for Django, Celery, Redis/Mosquitto-related development, and local hardware testing. Do not use the Windows .venv unless explicitly asked or needed as a temporary fallback.

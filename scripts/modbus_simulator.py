@@ -90,11 +90,14 @@ def make_identity(scenario):
 
 
 def set_float(store, address, value):
-    store.setValues(address, float_to_registers(value))
+    # Pymodbus 3.8 device contexts translate client address N to data-block
+    # address N+1. Store replay values at that translated address so the
+    # documented register map remains correct on the wire.
+    store.setValues(address + 1, float_to_registers(value))
 
 
 def set_coil(store, address, value):
-    store.setValues(address, [bool(value)])
+    store.setValues(address + 1, [bool(value)])
 
 
 def update_values(hr_store, coil_store, scenario, interval_seconds):
@@ -156,14 +159,15 @@ def update_values(hr_store, coil_store, scenario, interval_seconds):
 
 
 def build_context():
-    hr_store = ModbusSequentialDataBlock(0, [0] * 10000)
-    coil_store = ModbusSequentialDataBlock(0, [False] * 1000)
+    hr_store = ModbusSequentialDataBlock(1, [0] * 10000)
+    coil_store = ModbusSequentialDataBlock(1, [False] * 1000)
 
+    slave_context = ModbusSlaveContext(co=coil_store, di=coil_store, hr=hr_store, ir=hr_store)
     try:
-        slave_context = ModbusSlaveContext(co=coil_store, di=coil_store, hr=hr_store, ir=hr_store, zero_mode=True)
         context = ModbusServerContext(slaves=slave_context, single=True)
     except TypeError:
-        slave_context = ModbusSlaveContext(co=coil_store, di=coil_store, hr=hr_store, ir=hr_store)
+        # Pymodbus 3.10 renamed both SlaveContext and the ServerContext
+        # collection argument. The imports above already alias DeviceContext.
         context = ModbusServerContext(devices=slave_context, single=True)
     return context, hr_store, coil_store
 

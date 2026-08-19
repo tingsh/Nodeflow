@@ -1,0 +1,20 @@
+{% if include_scan_oob %}
+<div id="scan-state-panel" hx-swap-oob="true" class="p-6 border-b border-base-content/10 bg-base-200/30">
+    {% include "onboarding/partials/discovery_scan_state.html" %}
+</div>
+{% endif %}
+<div id="discovery-list"
+     hx-get="{% url 'web_team:onboarding:discovery_poll' request.team.slug %}"
+     {% if scan_state.key == "scanning" %}hx-trigger="every 2s"{% endif %}
+     hx-swap="outerHTML"
+     x-data="{ selectedCount: {{ commissioning.ready_candidates|length }} }"
+     @change="if ($event.target.name === 'device_index') selectedCount = $root.querySelectorAll('input[name=device_index]:checked').length">
+    {% include "onboarding/partials/discovery_devices.html" %}
+    <div class="flex flex-col gap-3 border-t border-base-content/10 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <p class="text-xs text-base-content/50">Validation performs read-only checks. It does not start monitoring or change equipment.</p>
+        <button type="submit" class="btn btn-primary btn-sm rounded-lg"
+                :disabled="selectedCount === 0" {% if not commissioning.device_candidates %}disabled{% endif %}>
+            Validate selected equipment<i class="fa fa-arrow-right ml-2"></i>
+        </button>
+    </div>
+</div>

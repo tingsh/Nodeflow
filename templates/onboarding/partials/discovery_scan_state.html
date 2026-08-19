@@ -1,0 +1,36 @@
+<div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+    <div class="flex items-start gap-4">
+        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl {% if scan_state.key == 'error' %}bg-error/10 text-error{% elif scan_state.key == 'found' %}bg-success/10 text-success{% else %}bg-primary/10 text-primary{% endif %}">
+            <i class="fa {% if scan_state.key == 'scanning' %}fa-spinner fa-spin{% elif scan_state.key == 'found' %}fa-circle-check{% elif scan_state.key == 'error' %}fa-triangle-exclamation{% else %}fa-search{% endif %}"></i>
+        </div>
+        <div>
+            <p class="text-lg font-black text-base-content">{{ scan_state.title }}</p>
+            <p class="mt-1 text-sm text-base-content/60">{{ scan_state.message }}</p>
+            {% if scan_state.key == "scanning" and scan_state.progress.total %}
+            <progress class="progress progress-primary mt-3 w-full max-w-md" value="{{ scan_state.progress.completed }}" max="{{ scan_state.progress.total }}"></progress>
+            <p class="mt-1 text-xs text-base-content/45">Checked {{ scan_state.progress.completed }} of {{ scan_state.progress.total }} targets</p>
+            {% endif %}
+        </div>
+    </div>
+    <div class="flex flex-wrap gap-2">
+        {% if scan_state.key == "scanning" %}
+        <form method="post">
+            {% csrf_token %}<input type="hidden" name="action" value="cancel_discovery">
+            <button type="submit" class="btn btn-ghost btn-sm text-error"><i class="fa fa-stop mr-2"></i>Cancel scan</button>
+        </form>
+        {% else %}
+        <form method="post">
+            {% csrf_token %}<input type="hidden" name="action" value="start_discovery">
+            <button type="submit" class="btn btn-primary rounded-lg" {% if not guided_setup_available %}disabled{% endif %}>
+                <i class="fa fa-search mr-2"></i>{% if scan_state.key == "idle" %}Scan for devices{% else %}Retry scan{% endif %}
+            </button>
+        </form>
+        <a href="#manual-device" class="btn btn-outline rounded-lg">Add device manually</a>
+        {% endif %}
+    </div>
+</div>
+{% if not guided_setup_available %}
+<div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+    <i class="fa fa-circle-info mr-2"></i>This Gateway is in compatibility mode. You can use saved discovery results with a Novena-verified template. Secure scanning, private templates, and guided manual validation require a Gateway software/key update.
+</div>
+{% endif %}
