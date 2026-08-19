@@ -73,7 +73,7 @@ Moving forward, Novena development on this machine should default to WSL rather 
 Use this project path and virtual environment:
 
 ```bash
-cd ~/projects/Novena-Hub
+cd ~/Novena-Platform/Novena-Hub
 source ~/.venvs/novena/bin/activate
 ```
 

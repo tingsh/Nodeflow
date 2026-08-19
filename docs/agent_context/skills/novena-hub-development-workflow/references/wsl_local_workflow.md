@@ -2,7 +2,7 @@
 
 ## Default Path
 
-cd /home/shouheng/projects/Novena-Hub
+cd /home/shouheng/Novena-Platform/Novena-Hub
 source ~/.venvs/novena/bin/activate
 
 Use the WSL-native Python environment ~/.venvs/novena for Hub work.

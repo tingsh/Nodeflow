@@ -1,64 +1,97 @@
 # Novena Production Readiness Kit
 
-Governed control adds mandatory signing-key, current-policy acknowledgement, audit-retention, Gateway clock/journal/storage, emergency-disable and restore-reset gates. See `docs/governed_remote_control_operations.md`.
+Last reviewed: 2026-08-17
 
-This guide documents the repo-backed assets that help deploy Novena Hub safely on a low-cost single VPS.
+This guide documents the repo-backed production assets and checks for Novena Hub. Use it together with `docs/production_deployment_plan.md`.
 
-It does not replace the production deployment plan. Use that plan for the cloud/vendor setup. Use this kit for the concrete files, checks, and operational guardrails that live in the codebase.
+The deployment plan answers: "How do I set up the VPS and public cloud/DNS environment?"
+
+This readiness kit answers: "What files, checks, env vars, backups, and smoke tests prove the repo is ready to run there?"
+
+## Current CTO Verdict
+
+The July readiness kit is still relevant, but the August codebase has raised the bar. The platform now includes managed Gateway hardening, serial-scoped MQTT identity, signed Guided Setup config delivery, governed remote-control flows, Business Impact private reports, customizable Command Center assets, and stricter Stripe webhook expectations.
+
+So the core deployment model stays the same:
+
+```text
+single VPS + Docker Compose + host Nginx + Cloudflare DNS
+```
+
+But the go-live checks are stricter than the original July version.
 
 ## Current Architecture Summary
 
 Novena Platform has two runtime parts:
 
-- Novena Hub: Django SaaS app for onboarding, dashboards, telemetry, alerts, automations, maintenance, billing, AI, SES email, and WhatsApp.
-- Novena Gateway: Python edge runtime on Raspberry Pi CM4-class hardware that sends field telemetry to Hub through MQTT.
+- Novena Hub: Django SaaS app for onboarding, dashboards, telemetry, alerts, automations, maintenance, billing, AI, SES email, WhatsApp, Business Impact reports, and governed control.
+- Novena Gateway: Python edge runtime on Raspberry Pi CM4-class hardware. It connects field devices and sends MQTT telemetry to Hub.
 
-The first production target is a lean VPS deployment:
+The first production target remains a lean VPS deployment:
 
+- Host Nginx for HTTPS and WebSocket reverse proxy.
 - Django ASGI web app through Gunicorn/Uvicorn.
 - PostgreSQL with TimescaleDB for relational and time-series data.
 - Redis for cache, Celery, and Channels.
-- Celery worker and Celery Beat for background and scheduled jobs.
-- Celery Beat must include `apps.devices.tasks.dispatch_due_remote_command_outboxes`; alert on dead-lettered command outbox rows and repeatedly expired leases.
-- Celery Beat must include `apps.devices.tasks.dispatch_due_gateway_config_outboxes`; alert on dead-lettered configuration rows and repeatedly expired leases.
-- Celery Beat must include `apps.devices.tasks.dispatch_due_gateway_releases`; a Gateway stays quarantined and its inventory stays claimed until Mosquitto confirms credential revocation.
-- Celery Beat must include `apps.devices.tasks.expire_and_retry_gateway_activations`; this expires secrets and retries durable activation delivery without exposing plaintext credentials.
-- Celery Beat must include `apps.devices.tasks.dispatch_due_plan_reconciliations`; this recovers queued or abandoned subscription-driven configuration work.
-- MQTT consumer for gateway telemetry ingestion.
-- Mosquitto with Dynamic Security for gateway credentials.
-- Host Nginx for HTTPS and WebSocket reverse proxy.
+- Celery worker for background jobs.
+- Celery Beat for scheduled dispatch/recovery jobs.
+- MQTT consumer for Gateway telemetry/logs/attributes/RPC responses.
+- Mosquitto with Dynamic Security for per-Gateway credentials.
+- Local filesystem media for the first VPS deployment, including private Business Impact reports.
 
-Teacher note: ASGI is the Python web interface that supports both normal HTTP requests and long-lived WebSocket connections. Novena uses WebSockets for live telemetry, so production should not use a plain WSGI-only server.
+Teacher note: ASGI is the Python web interface that supports both normal HTTP requests and WebSockets. Novena uses WebSockets on device detail pages, so production must run the ASGI app through an ASGI-capable worker.
+
+## Active Repo Paths
+
+Current local development checkout:
+
+```bash
+/home/shouheng/Novena-Platform/Novena-Hub
+```
+
+Recommended production server checkout:
+
+```bash
+/opt/novena/Novena-Hub
+```
+
+Do not treat old `/home/shouheng/projects/Novena-Hub` references as current unless you intentionally restore that path.
 
 ## Deployment Asset Map
 
-Production files added by this kit:
+Production assets in this repo:
 
-- `Dockerfile.prod`: production app image with frontend build and Python prod dependencies.
-- The frontend production build installs the locked `gridstack` npm dependency used by the feature-flagged Command Center customization experience; run `npm ci && npm run build` when validating or rebuilding this asset.
-- `docker-compose.prod.yml`: production service graph for web, worker, beat, MQTT consumer, Postgres, Redis, and Mosquitto.
-- `deploy/env/production.env.example`: safe placeholder env file.
-- `deploy/nginx/novena.conf.example`: host Nginx reverse proxy example.
-- `deploy/mosquitto/mosquitto.prod.conf`: Mosquitto production listener config.
-- `deploy/mosquitto/dynamic-security.example.json`: empty seed file; initialize real credentials before production.
-- `deploy/backups/*.sh`: Postgres and private-report backup, restore, and retention scripts.
-- `deploy/systemd/*.example`: nightly backup timer examples.
-- `docs/production_backup_restore.md`: backup and restore walkthrough.
+| Asset | Purpose |
+| --- | --- |
+| `Dockerfile.prod` | Production app image. Builds Vite assets, installs Python prod dependencies, runs as non-root `django`. |
+| `docker-compose.prod.yml` | Production service graph for web, worker, Beat, MQTT consumer, Postgres/TimescaleDB, Redis, and Mosquitto. |
+| `deploy/env/production.env.example` | Production-safe env template with placeholders only. |
+| `deploy/nginx/novena.conf.example` | Host Nginx HTTPS reverse proxy with WebSocket headers. |
+| `deploy/mosquitto/mosquitto.prod.conf` | Mosquitto listeners for internal Hub traffic, private Dynamic Security control, and public TLS MQTT. |
+| `deploy/mosquitto/dynamic-security.example.json` | Safe seed/example for Dynamic Security roles. Real credentials must be generated on the server. |
+| `deploy/backups/backup_postgres.sh` | Compressed Postgres/TimescaleDB backup. |
+| `deploy/backups/backup_private_media.sh` | Backup for confidential Business Impact report files. |
+| `deploy/backups/restore_postgres.sh` | Guarded database restore tool. |
+| `deploy/backups/backup_retention.sh` | Local daily/weekly/monthly retention cleanup. |
+| `deploy/systemd/*.example` | Nightly backup timer examples. |
+| `apps/web/management/commands/production_readiness_check.py` | App-level production preflight. |
+| `docs/production_deployment_plan.md` | VPS/cloud setup guide. |
+| `docs/production_backup_restore.md` | Backup and restore guide. |
 
-Do not commit `deploy/env/production.env` or real Mosquitto credential files with secrets.
+The frontend production build includes the locked `gridstack` package used by the customizable Command Center. `npm run build` must pass before deploying a new image.
 
-## Required DNS Records
+## DNS Records
 
 Use Cloudflare DNS:
 
 | Host | Type | Target | Cloudflare mode |
 | --- | --- | --- | --- |
-| `novenaplatform.com` | A | VPS IP | Proxied |
+| `novenaplatform.com` | A | VPS public IP | Proxied |
 | `www.novenaplatform.com` | CNAME | `novenaplatform.com` | Proxied |
-| `app.novenaplatform.com` | A | VPS IP | Proxied |
-| `mqtt.novenaplatform.com` | A | VPS IP | DNS only |
+| `app.novenaplatform.com` | A | VPS public IP | Proxied |
+| `mqtt.novenaplatform.com` | A | VPS public IP | DNS only |
 
-Use DNS-only for MQTT because standard Cloudflare proxying is for HTTP(S), not raw MQTT.
+MQTT must be DNS only because standard Cloudflare proxying is HTTP(S), not raw MQTT.
 
 ## Required Environment Variables
 
@@ -68,48 +101,117 @@ Start from:
 cp deploy/env/production.env.example deploy/env/production.env
 ```
 
-Then fill real values for:
+Then fill real values. Important groups:
 
-- Django: `SECRET_KEY`, `ALLOWED_HOSTS`, `APP_BASE_URL`, `HEALTH_CHECK_TOKENS`.
-- Database: `POSTGRES_PASSWORD`, `DATABASE_URL`.
-- MQTT: `MQTT_DYNSEC_ADMIN_USER`, `MQTT_DYNSEC_ADMIN_PASS`, `GATEWAY_CLAIM_SECRET`.
-- Gateway security: `GATEWAY_ACTIVATION_ENCRYPTION_KEY`, `MQTT_PROVISIONING_REQUIRED=True`, and `MQTT_ACCEPT_LEGACY_SHARED_INBOUND=False`.
-- Public gateway instructions: `PUBLIC_MQTT_BROKER_HOST=mqtt.novenaplatform.com`, `PUBLIC_MQTT_BROKER_PORT=8883`.
-- SES: `AWS_SES_ACCESS_KEY_ID`, `AWS_SES_SECRET_ACCESS_KEY`, sender emails.
-- WhatsApp: Meta phone ID, access token, verify token, approved alert template.
-- Stripe: keep `STRIPE_LIVE_MODE=False` for unpaid pilots; configure live keys before paid launch.
-- Sentry: strongly recommended before pilots.
+### Django and URLs
 
-### Guided Setup configuration delivery
+- `DJANGO_SETTINGS_MODULE=novena_hub.settings_production`
+- `NOVENA_DEPLOYMENT_MODE=production`
+- `DEBUG=False`
+- `SECRET_KEY`
+- `ALLOWED_HOSTS=novenaplatform.com,www.novenaplatform.com,app.novenaplatform.com`
+- `APP_DOMAIN=app.novenaplatform.com`
+- `SESSION_COOKIE_DOMAIN=.novenaplatform.com`
+- `APP_BASE_URL=https://app.novenaplatform.com`
+- `FRONTEND_ADDRESS=https://app.novenaplatform.com`
+- `CORS_ALLOWED_ORIGINS`
+- `CSRF_TRUSTED_ORIGINS`
+- `USE_HTTPS_IN_ABSOLUTE_URLS=True`
+- `HEALTH_CHECK_TOKENS`
+- `ACCOUNT_EMAIL_VERIFICATION=optional` for canaries, consider `mandatory` before broad self-serve signup.
 
-Guided Setup uses the same Ed25519 signing authority as governed remote commands. Set
-`GATEWAY_CONFIG_ENVELOPE_TTL_SECONDS` between 60 and 900 seconds,
-`GATEWAY_CONFIG_INTENT_TTL_SECONDS` to the required offline-delivery window (86400 seconds by default), and
-`GATEWAY_CONFIG_OUTBOX_MAX_ATTEMPTS` between 1 and 10. Celery Beat must run
-`apps.devices.tasks.dispatch_due_gateway_config_outboxes` so queued or abandoned
-delivery leases recover after worker restarts. Set
-`GUIDED_SETUP_FIRST_TELEMETRY_TIMEOUT_SECONDS` to the longest normal interval
-before a newly activated device should report data; the default is 180 seconds.
+### Database and Redis
 
-Before enabling `guided_setup_v1` on a Gateway:
+- `POSTGRES_DB`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `DATABASE_URL`
+- `REDIS_URL`
 
-1. Install the Hub signing public key under the Gateway RPC
-   `trusted_command_keys` setting.
-2. Confirm the Gateway reports a trusted clock and writable configuration journal.
-3. Prove a failed connector activation restores the last-known-good configuration.
-4. Confirm the Hub receives matching revision, checksum, and idempotency evidence.
+### MQTT and Gateway Activation
 
-Until those checks pass, the Gateway does not advertise the capability and Hub reports
-that a Gateway update is required. Hub does not send unsigned configuration. Never copy
-a Hub private signing key to a Gateway.
+- `MQTT_BROKER_HOST=mosquitto`
+- `MQTT_BROKER_PORT=1883`
+- `MQTT_CONSUMER_CLIENT_ID`
+- `MQTT_PUBLISHER_CLIENT_ID`
+- `MQTT_DYNSEC_PORT=1884`
+- `MQTT_DYNSEC_ADMIN_USER`
+- `MQTT_DYNSEC_ADMIN_PASS`
+- `MQTT_PROVISIONING_REQUIRED=True`
+- `MQTT_ACCEPT_LEGACY_SHARED_INBOUND=False`
+- `GATEWAY_CLAIM_SECRET`
+- `GATEWAY_ACTIVATION_ENCRYPTION_KEY`
+- `PUBLIC_MQTT_BROKER_SCHEME=mqtts`
+- `PUBLIC_MQTT_BROKER_HOST=mqtt.novenaplatform.com`
+- `PUBLIC_MQTT_BROKER_PORT=8883`
+
+Teacher note: `GATEWAY_CLAIM_SECRET` protects the sticker claim code flow. `GATEWAY_ACTIVATION_ENCRYPTION_KEY` protects the activation credential escrow used when a Gateway is offline during claim and comes online later.
+
+### Signed Guided Setup and Governed Control
+
+- `REMOTE_CONTROL_ACTIVE_SIGNING_KEY_ID`
+- `REMOTE_CONTROL_SIGNING_KEYS`
+- `REMOTE_CONTROL_AUDIT_RETENTION_DAYS=2555`
+- `REMOTE_CONTROL_OUTBOX_*`
+- `GATEWAY_CONFIG_ENVELOPE_TTL_SECONDS`
+- `GATEWAY_CONFIG_OUTBOX_*`
+- `GATEWAY_CONFIG_INTENT_TTL_SECONDS`
+- `GATEWAY_CONFIG_APPLY_TIMEOUT_SECONDS`
+- `GUIDED_SETUP_FIRST_TELEMETRY_TIMEOUT_SECONDS`
+
+Guided Setup uses the same Ed25519 signing authority as governed remote commands. The Gateway must have the matching public key installed before it advertises `guided_setup_v1`.
+
+Do not copy a Hub private signing key to a Gateway.
+
+### Notifications and Billing
+
+- SES: `EMAIL_BACKEND`, `AWS_SES_REGION_NAME`, `AWS_SES_ACCESS_KEY_ID`, `AWS_SES_SECRET_ACCESS_KEY`, sender emails.
+- WhatsApp: `WHATSAPP_PROVIDER=meta`, Meta phone number ID, access token, verify token, approved alert template.
+- Stripe: `STRIPE_LIVE_MODE=False` is acceptable for unpaid pilots; live keys and `DJSTRIPE_WEBHOOK_SECRET` are required before paid rollout.
+- Sentry: strongly recommended before technical canaries.
+
+### Business Impact Reports and Media
+
+- Use local filesystem media first: `USE_S3_MEDIA=False`.
+- Ensure Compose mounts both `./media` and `./private_media`.
+- Run both database and private-media backups.
+- If you later enable S3-compatible media, configure `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_STORAGE_BUCKET_NAME`, then revise backup/restore expectations.
+
+### Gateway OTA
+
+OTA settings are present but optional for unpaid canaries:
+
+- `NOVENA_OTA_SIGNING_PRIVATE_KEY`
+- `NOVENA_OTA_SIGNING_KEY_ID`
+- `NOVENA_OTA_MANIFEST_TTL_DAYS`
+
+If the signing key is blank, do not use the OTA update flow. For pilots, it is acceptable to disable OTA operationally and update Gateway software manually through a controlled field procedure. Before paid rollout, signed OTA should be tested on representative CM4 hardware.
+
+## Required Celery Beat Tasks
+
+`production_readiness_check` requires these scheduled tasks to exist:
+
+- `apps.devices.tasks.dispatch_due_gateway_config_outboxes`
+- `apps.devices.tasks.dispatch_due_gateway_releases`
+- `apps.devices.tasks.dispatch_due_plan_reconciliations`
+- `apps.devices.tasks.dispatch_due_remote_command_outboxes`
+- `apps.devices.tasks.expire_and_retry_gateway_activations`
+- `apps.devices.tasks.expire_control_activations`
+- `apps.devices.tasks.check_device_heartbeats`
+- `apps.devices.tasks.check_gateway_heartbeats`
+- `apps.telemetry.tasks.flush_telemetry_buffer_task`
+- `apps.telemetry.tasks.flush_logs_buffer_task`
+- `apps.maintenance.tasks.generate_preventive_tickets`
+- `apps.impact.tasks.dispatch_impact_refreshes`
+- `apps.impact.tasks.dispatch_daily_impact_finalization`
+- `apps.impact.tasks.dispatch_monthly_impact_reports`
+- `apps.impact.tasks.cleanup_impact_history`
+
+Teacher note: Celery Beat is the scheduler. It is what keeps background recovery work happening even if a web request or worker crashes halfway through a Gateway operation.
 
 ## First Server Build
 
-From the Hub repo on the VPS:
-
-Deploy migrations first. Then deploy the matching web, worker, Beat, and MQTT consumer
-processes together so new lifecycle states and acknowledgement fields are interpreted
-consistently.
+From `/opt/novena/Novena-Hub` on the VPS:
 
 ```bash
 docker compose -f docker-compose.prod.yml config
@@ -121,20 +223,26 @@ docker compose -f docker-compose.prod.yml run --rm web python manage.py collects
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Then configure host Nginx using `deploy/nginx/novena.conf.example`.
+Deploy migrations before bringing the final app stack up. Web, worker, Beat, and MQTT consumer should run the same Git SHA.
 
 ## Mosquitto Dynamic Security
 
-The production Mosquitto config expects a real `deploy/mosquitto/data/dynamic-security.json`.
+Production Mosquitto expects:
 
-Do not use the development credential file from `mosquitto/dynamic-security.json`.
+```text
+deploy/mosquitto/data/dynamic-security.json
+```
 
-Create production credentials using Mosquitto Dynamic Security tooling, then ensure:
+Do not use the development file from a local broker.
 
-- Hub internal services can publish/subscribe on internal listener `1883`.
-- Dynamic Security admin credentials match `MQTT_DYNSEC_ADMIN_USER` and `MQTT_DYNSEC_ADMIN_PASS`.
-- Gateways connect publicly through `mqtt.novenaplatform.com:8883`.
-- Port `1884` is private and not exposed through the VPS firewall.
+Current Hub behavior:
+
+- Hub uses Dynamic Security admin credentials on internal port `1884`.
+- Hub creates per-Gateway operational clients and per-Gateway bootstrap clients during claim/provisioning.
+- Each Gateway should publish only to serial-scoped topics such as `v1/gateway/{serial}/telemetry`.
+- `MQTT_ACCEPT_LEGACY_SHARED_INBOUND=False` must stay false for production customer traffic.
+
+The readiness command checks Dynamic Security JSON files for unsafe shared publish ACLs such as `v1/gateway/telemetry` on non-admin roles.
 
 ## Production Readiness Command
 
@@ -150,18 +258,42 @@ For machine-readable output:
 docker compose -f docker-compose.prod.yml run --rm web python manage.py production_readiness_check --json
 ```
 
-The command fails on blockers such as:
+Current blocker checks include:
 
-- `DEBUG=True`
-- default Django secret
-- default gateway claim secret
-- wildcard `ALLOWED_HOSTS`
-- missing TimescaleDB hypertable
-- missing Redis/MQTT connectivity
-- default MQTT Dynamic Security admin credentials
-- missing SES, WhatsApp, or health check token settings
+- production settings module;
+- `DEBUG=False`;
+- custom `SECRET_KEY`;
+- custom `GATEWAY_CLAIM_SECRET`;
+- configured `GATEWAY_ACTIVATION_ENCRYPTION_KEY`;
+- no wildcard `ALLOWED_HOSTS`;
+- production domains present;
+- HTTPS app base URL;
+- HTTPS absolute URLs;
+- production CSRF trusted origins;
+- required Celery Beat tasks;
+- non-default Dynamic Security credentials;
+- required Gateway MQTT provisioning enabled;
+- legacy shared inbound MQTT disabled;
+- no unsafe shared Gateway publish ACLs in Dynamic Security files;
+- SES configured;
+- WhatsApp configured when provider is `meta`;
+- health check token configured;
+- database connection;
+- TimescaleDB extension and telemetry hypertable;
+- Redis connectivity;
+- MQTT broker connectivity;
+- managed command signing key configured;
+- remote-control audit retention at least seven years;
+- controlled teams have acknowledged policy bundles;
+- Guided Setup TTL/retry bounds;
+- private Business Impact report storage separated from public media;
+- WeasyPrint import works for PDF rendering.
 
-Warnings are allowed for unpaid pilots, especially Stripe test mode. Treat missing Sentry as a strong warning, not a blocker.
+Warnings include:
+
+- Stripe test mode, which is acceptable for unpaid pilots.
+- Missing Stripe webhook secret, acceptable only before paid launch.
+- Missing Sentry, not ideal but not a hard blocker.
 
 ## Backup And Restore
 
@@ -178,13 +310,12 @@ Minimum routine:
 First restore drill:
 
 ```bash
-RESTORE_DATABASE_URL=postgresql://novena:<password>@localhost:5432/novena_restore_test \
-BACKUP_FILE=/opt/novena/Novena-Hub/backups/postgres/daily/<backup>.dump.gz \
-RESTORE_CONFIRM=restore-now \
-./deploy/backups/restore_postgres.sh
+RESTORE_DATABASE_URL=postgresql://novena:<password>@localhost:5432/novena_restore_test BACKUP_FILE=/opt/novena/Novena-Hub/backups/postgres/daily/<backup>.dump.gz RESTORE_CONFIRM=restore-now ./deploy/backups/restore_postgres.sh
 ```
 
-Teacher note: a backup is the file. A restore drill is proof that the file can actually bring Novena back.
+Also restore private media into a disposable directory and confirm Business Impact report files match restored database rows.
+
+Teacher note: a database restore recovers rows. It does not automatically recover files stored on disk. That is why private report backup is separate.
 
 ## Go-Live Smoke Test
 
@@ -194,47 +325,63 @@ Before inviting customers:
 2. `https://app.novenaplatform.com` loads login/signup.
 3. `/health/?token=<token>` returns healthy.
 4. `production_readiness_check` has no `FAIL` results.
-5. WebSocket live telemetry works on a device page.
+5. WebSocket live telemetry works on a device detail page.
 6. Gateway connects to `mqtts://mqtt.novenaplatform.com:8883`.
-7. Gateway claim, discovery, config push, telemetry, alert, email, WhatsApp, and maintenance ticket flow works end-to-end.
-8. SES sends from the production sender.
-9. WhatsApp webhook verifies against the public HTTPS app domain.
-10. Backup runs and restore drill has passed.
+7. Gateway claim creates managed MQTT credentials.
+8. Serial-scoped MQTT accepts correct Gateway topics and rejects cross-Gateway/shared-topic misuse.
+9. Guided Setup sends signed config and receives matching acknowledgement evidence.
+10. First telemetry reaches TimescaleDB and the correct customer dashboard.
+11. Alert, email, approved WhatsApp template, and maintenance ticket flow works end to end.
+12. Business Impact private report generation and authorized download works.
+13. Backup runs and restore drill has passed.
+14. Stripe webhook signature validation is configured before paid rollout.
 
 ## Hardware Replay Handoff
 
-While production setup is happening, hardware replay should prove this path:
+Hardware replay should prove this path:
 
 ```text
 field device -> Novena Gateway -> mqtt.novenaplatform.com:8883 -> Mosquitto -> mqtt_consumer -> TimescaleDB -> dashboard -> alert -> email/WhatsApp -> maintenance ticket
 ```
 
-Do not use `pilot_readiness_audit keepalive` during hardware replay. Physical gateways must prove heartbeat, discovery, telemetry, alerting, and recovery themselves.
+Do not use `pilot_readiness_audit keepalive` during physical replay. Physical Gateways must prove heartbeat, discovery, telemetry, alerting, buffering, restart recovery, and configuration acknowledgement themselves.
+
+## Current Release Gates
+
+As of 2026-08-17, do not widen beyond a 3-5 customer technical canary until these are proven:
+
+1. Offline buffering across process restart and reconnect on physical CM4 hardware.
+2. Factory-energy, cold-chain, and facilities/HVAC CM4 hardware replays with representative equipment.
+3. Governed write-back on representative devices, including power loss, key rotation, restore, and emergency-disable recovery.
+4. Production Stripe webhooks/live billing and inbound WhatsApp security before paid rollout.
+5. A 3-5 customer technical canary before a 20-customer cohort.
 
 ## Rollback Basics
 
-For normal bad deploy:
+For a normal bad deploy:
 
 1. Revert to the previous Git SHA.
-2. Rebuild the web image.
-3. Restart web, worker, beat, and MQTT consumer.
+2. Rebuild the production image.
+3. Restart web, worker, Beat, and MQTT consumer.
+4. Run readiness and smoke tests.
 
-For bad database migration:
+For a bad database migration:
 
-1. Stop web, worker, beat, and MQTT consumer.
+1. Stop web, worker, Beat, and MQTT consumer.
 2. Take a backup of the broken current state.
-3. Restore the last known good backup only if needed.
+3. Restore the last known-good backup only if data is corrupted.
 4. Deploy the matching code version.
 5. Run migrations and readiness checks.
 
-Avoid database restore for ordinary UI bugs. Restoring the database rewinds customer data.
+For governed remote-control deployments, keep command workers stopped after restore and run the governed-control recovery reset from `docs/governed_remote_control_operations.md`. Restored command/outbox rows must not execute accidentally.
 
 ## Upgrade Path
 
-This kit is intentionally lean. Around 20 paying customers, or sooner if customers rely on Novena operationally, plan to:
+Stay lean for unpaid canaries. Around 20 paying customers, or sooner if customers rely on Novena operationally, plan to:
 
-- migrate Postgres/TimescaleDB to a managed database if extension support fits;
-- move media to object storage;
+- migrate Postgres/TimescaleDB to a managed database if TimescaleDB extension support fits;
+- move media/private reports to object storage with versioning;
 - add GitHub Actions deployment with manual approval;
 - add external uptime monitoring;
-- consider a separate MQTT VPS if gateway traffic grows.
+- consider a separate MQTT VPS if gateway traffic grows;
+- add centralized log retention and alerting.

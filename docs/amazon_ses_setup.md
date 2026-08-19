@@ -133,7 +133,7 @@ Changing `.env` only affects newly started processes. Celery is especially impor
 From WSL:
 
 ```bash
-cd /home/shouheng/projects/Novena-Hub
+cd /home/shouheng/Novena-Platform/Novena-Hub
 source ~/.venvs/novena/bin/activate
 DJANGO_SETTINGS_MODULE=novena_hub.settings python manage.py send_test_email verified-recipient@example.com
 ```
