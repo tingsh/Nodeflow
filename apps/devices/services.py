@@ -542,9 +542,9 @@ def _commissioning_candidates(gateway):
         if matched_template_id:
             matched_template = visible_templates_for_team(gateway.team).filter(id=matched_template_id).first()
         score = min(100, max(0, int(discovery.get("matched_template_score") or 0)))
-        status = "ready" if matched_template and matched_template.is_verified and score >= 80 else "needs_template"
         if interface and interface in registered_ports:
-            status = "registered"
+            continue
+        status = "ready" if matched_template and matched_template.is_verified and score >= 80 else "needs_template"
         candidates.append(
             {
                 "index": index,

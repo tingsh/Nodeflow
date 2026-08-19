@@ -1,6 +1,7 @@
 import ipaddress
 import json
 import re
+import uuid
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
@@ -9,6 +10,7 @@ from django.core.exceptions import ValidationError
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from waffle import flag_is_active
 
 from apps.alerts.models import AlertRule
@@ -470,6 +472,7 @@ def step_3_discover(request, team_slug):
         append_setup_event,
         connection_from_candidate,
         create_or_update_candidate_item,
+        discovery_scan_state,
         get_or_create_setup_run,
         start_validation,
         sync_setup_run,
@@ -499,8 +502,7 @@ def step_3_discover(request, team_slug):
                     "Update its software or use the manual option.",
                 )
             else:
-                raw_targets = request.POST.get("tcp_hosts", "")
-                tcp_hosts = [target.strip() for target in re.split(r"[\s,]+", raw_targets) if target.strip()][:64]
+                scan_id = str(uuid.uuid4())
                 try:
                     from apps.devices.remote_control import request_remote_command
 
@@ -508,19 +510,26 @@ def step_3_discover(request, team_slug):
                         gateway=gateway,
                         operation="deployment_discover",
                         requested_by=request.user,
-                        params={"tcp_hosts": tcp_hosts},
+                        params={"scan_id": scan_id, "scope": "attached_interfaces"},
                         reason="Customer-approved equipment discovery",
                         ttl_seconds=300,
                     )
+                    summary = dict(run.summary or {})
+                    summary["discovery"] = {
+                        "active_scan_id": scan_id,
+                        "command_id": str(command.pk),
+                        "started_at": timezone.now().isoformat(),
+                    }
+                    run.summary = summary
                     run.state = DeploymentSetupRun.State.DISCOVERING
                     run.current_step = "equipment"
-                    run.save(update_fields=["state", "current_step", "updated_at"])
+                    run.save(update_fields=["summary", "state", "current_step", "updated_at"])
                     append_setup_event(
                         run,
                         "discovery_started",
                         "Equipment discovery started.",
                         actor=request.user,
-                        evidence={"command_id": str(command.pk), "target_count": len(tcp_hosts)},
+                        evidence={"command_id": str(command.pk), "scan_id": scan_id, "scope": "attached_interfaces"},
                     )
                     gateway.lifecycle_status = "commissioning"
                     gateway.save(update_fields=["lifecycle_status"])
@@ -532,11 +541,14 @@ def step_3_discover(request, team_slug):
             try:
                 from apps.devices.remote_control import request_remote_command
 
+                scan_id = str(((run.summary or {}).get("discovery") or {}).get("active_scan_id") or "")
+                if not scan_id:
+                    raise ValueError("No equipment scan is active")
                 command = request_remote_command(
                     gateway=gateway,
                     operation="deployment_discover",
                     requested_by=request.user,
-                    params={"cancel": True},
+                    params={"scan_id": scan_id, "cancel": True},
                     reason="Customer cancelled equipment discovery",
                     ttl_seconds=60,
                 )
@@ -545,7 +557,7 @@ def step_3_discover(request, team_slug):
                     "discovery_cancel_requested",
                     "Equipment discovery cancellation was requested.",
                     actor=request.user,
-                    evidence={"command_id": str(command.pk)},
+                    evidence={"command_id": str(command.pk), "scan_id": scan_id},
                 )
                 messages.info(request, "Cancelling equipment discovery…")
             except Exception as exc:
@@ -894,6 +906,11 @@ def step_3_discover(request, team_slug):
             request.session["onboarding_device_id"] = validated_items[0].device_id
             return redirect("web_team:onboarding:step_4_alert", team_slug=team_slug)
 
+    scan_state = discovery_scan_state(run)
+    can_deploy = run.items.filter(
+        state__in=[DeploymentSetupItem.State.VALIDATED, DeploymentSetupItem.State.TELEMETRY_CONFIRMED],
+        device__isnull=False,
+    ).exists()
     context = {
         "steps": ONBOARDING_STEPS,
         "current_step": 3,
@@ -905,6 +922,8 @@ def step_3_discover(request, team_slug):
         "setup_items": run.items.select_related("device", "selected_template", "validation_command"),
         "config_preview": human_config_preview(gateway),
         "guided_setup_available": guided_capable,
+        "scan_state": scan_state,
+        "can_deploy": can_deploy,
         "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
     }
     return render(request, "onboarding/step_3_discover.html", context)
@@ -926,12 +945,19 @@ def discovery_poll(request, team_slug):
         else None
     )
     if setup_run:
-        from apps.devices.deployment_setup import sync_setup_run
+        from apps.devices.deployment_setup import discovery_scan_state, sync_setup_run
 
         setup_run = sync_setup_run(setup_run)
+        scan_state = discovery_scan_state(setup_run)
+    else:
+        scan_state = {
+            "key": "idle",
+            "title": "Ready to scan",
+            "message": "Connect your equipment to the Gateway, then start a scan.",
+        }
     return render(
         request,
-        "onboarding/partials/discovery_devices.html",
+        "onboarding/partials/discovery_region.html",
         {
             "discovered_devices": discovered_devices,
             "templates": templates,
@@ -939,6 +965,9 @@ def discovery_poll(request, team_slug):
             "profile": profile,
             "setup_run": setup_run,
             "setup_items": setup_run.items.select_related("device", "selected_template") if setup_run else [],
+            "scan_state": scan_state,
+            "guided_setup_available": bool(gateway and "guided_setup_v1" in set(gateway.gateway_capabilities or [])),
+            "include_scan_oob": True,
             "commissioning": build_commissioning_context(request.team, gateway=gateway, session=request.session),
         },
     )

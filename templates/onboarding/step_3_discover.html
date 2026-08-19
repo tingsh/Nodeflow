@@ -19,54 +19,14 @@
             </span>
         </div>
 
-        <form method="post" class="p-6 border-b border-base-content/10 bg-base-200/30">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="start_discovery">
-            <div class="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
-                <div>
-                    <label for="tcp_hosts" class="block text-xs font-black uppercase tracking-widest text-base-content/50 mb-2">
-                        Approved Modbus TCP equipment addresses
-                    </label>
-                    <input id="tcp_hosts" name="tcp_hosts" type="text"
-                           placeholder="192.168.1.50, 192.168.1.51:502"
-                           class="input input-bordered w-full rounded-lg">
-                    <p class="mt-2 text-xs text-base-content/50">Optional. Novena never scans the wider site network unless you enter the equipment addresses here. Connected RS485 interfaces are checked automatically.</p>
-                </div>
-                <button type="submit" class="btn btn-primary rounded-lg" {% if not guided_setup_available %}disabled{% endif %}>
-                    <i class="fa fa-search mr-2"></i>Find equipment
-                </button>
-            </div>
-            {% if not guided_setup_available %}
-            <div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-                <i class="fa fa-circle-info mr-2"></i>This Gateway is in compatibility mode. You can use saved discovery results with a Novena-verified template. Secure scanning, private templates, and guided manual validation require a Gateway software/key update.
-            </div>
-            {% endif %}
-        </form>
-        {% if setup_run.state == "discovering" %}
-        <form method="post" class="border-b border-base-content/10 px-6 py-3 text-right">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="cancel_discovery">
-            <button type="submit" class="btn btn-ghost btn-sm text-error">
-                <i class="fa fa-stop mr-2"></i>Cancel scan
-            </button>
-        </form>
-        {% endif %}
+        <div id="scan-state-panel" class="p-6 border-b border-base-content/10 bg-base-200/30">
+            {% include "onboarding/partials/discovery_scan_state.html" %}
+        </div>
 
         <form method="post">
             {% csrf_token %}
             <input type="hidden" name="action" value="validate_selected">
-            <div id="discovery-list"
-                 hx-get="{% url 'web_team:onboarding:discovery_poll' request.team.slug %}"
-                 hx-trigger="load, every 5s"
-                 hx-swap="innerHTML">
-                {% include "onboarding/partials/discovery_devices.html" %}
-            </div>
-            <div class="flex flex-col gap-3 border-t border-base-content/10 p-5 sm:flex-row sm:items-center sm:justify-between">
-                <p class="text-xs text-base-content/50">Validation performs read-only checks. It does not start monitoring or change equipment.</p>
-                <button type="submit" class="btn btn-primary btn-sm rounded-lg">
-                    Validate selected equipment<i class="fa fa-arrow-right ml-2"></i>
-                </button>
-            </div>
+            {% include "onboarding/partials/discovery_region.html" %}
         </form>
     </section>
 
@@ -111,7 +71,7 @@
     </section>
     {% endif %}
 
-    <details class="rounded-2xl border border-base-content/10 bg-base-100 shadow-sm">
+    <details id="manual-device" class="rounded-2xl border border-base-content/10 bg-base-100 shadow-sm">
         <summary class="cursor-pointer list-none p-6">
             <div class="flex items-center justify-between gap-4">
                 <div>
@@ -272,7 +232,7 @@
             <form method="post">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="deploy">
-                <button class="btn btn-primary rounded-lg" type="submit">Deploy validated equipment<i class="fa fa-arrow-right ml-2"></i></button>
+                <button class="btn btn-primary rounded-lg" type="submit" {% if not can_deploy %}disabled{% endif %}>Deploy validated equipment<i class="fa fa-arrow-right ml-2"></i></button>
             </form>
         </div>
         <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">

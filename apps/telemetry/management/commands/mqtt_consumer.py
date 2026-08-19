@@ -578,19 +578,68 @@ class Command(BaseCommand):
         Process a discovery report from the Edge gateway.
         Stores it in Gateway.discovery_data and auto-matches against DeviceTemplates.
         """
+        if not isinstance(report, dict):
+            logger.warning("Rejected malformed discovery report for %s", gateway.serial_number)
+            return
+        current = gateway.discovery_data or {}
+        try:
+            incoming_ts = int(report.get("scan_ts") or 0)
+            current_ts = int(current.get("scan_ts") or 0)
+        except (TypeError, ValueError):
+            logger.warning("Rejected discovery report with invalid timestamp for %s", gateway.serial_number)
+            return
+        if current_ts and incoming_ts and incoming_ts < current_ts:
+            logger.info(
+                "Ignored stale discovery report for %s (scan_ts=%s, current=%s)",
+                gateway.serial_number,
+                incoming_ts,
+                current_ts,
+            )
+            return
+        incoming_scan_id = str(report.get("scan_id") or "")
+        current_scan_id = str(current.get("scan_id") or "")
+        if current_ts and not incoming_ts:
+            logger.info("Ignored unversioned discovery report for %s", gateway.serial_number)
+            return
+        if incoming_scan_id and incoming_scan_id == current_scan_id and incoming_ts == current_ts:
+            terminal = {"complete", "cancelled", "error"}
+            if current.get("status") in terminal and report.get("status") not in terminal:
+                logger.info("Ignored non-terminal discovery regression for %s", gateway.serial_number)
+                return
+            try:
+                incoming_updated = int(report.get("updated_at") or 0)
+                current_updated = int(current.get("updated_at") or 0)
+            except (TypeError, ValueError):
+                logger.warning("Rejected discovery report with invalid update timestamp for %s", gateway.serial_number)
+                return
+            if incoming_updated and current_updated and incoming_updated < current_updated:
+                logger.info("Ignored out-of-order discovery progress for %s", gateway.serial_number)
+                return
+
         discovered_devices = report.get("discovered_devices", [])
+        if not isinstance(discovered_devices, list):
+            logger.warning("Rejected discovery report with invalid device list for %s", gateway.serial_number)
+            return
         from apps.devices.discovery_matching import enrich_discovered_device
 
         discovered_devices = [enrich_discovered_device(device, team=gateway.team) for device in discovered_devices]
 
         # Store enriched discovery data
         gateway.discovery_data = {
+            "schema_version": report.get("schema_version", 0),
+            "scan_id": report.get("scan_id", ""),
             "last_discovered_at": str(timezone.now()),
             "scan_ts": report.get("scan_ts"),
+            "started_at": report.get("started_at"),
+            "updated_at": report.get("updated_at"),
+            "completed_at": report.get("completed_at"),
             "scan_type": report.get("scan_type", "unknown"),
             "status": report.get("status", "complete"),
+            "phase": report.get("phase", ""),
+            "progress": report.get("progress", {}),
             "interfaces": report.get("interfaces", []),
             "devices": discovered_devices,
+            "skipped_configured": report.get("skipped_configured", []),
             "errors": report.get("errors", []),
         }
         gateway.save(update_fields=["discovery_data"])

@@ -23,6 +23,7 @@ from .models import (
     DeploymentSetupItem,
     DeploymentSetupRun,
     Gateway,
+    RemoteCommand,
     RpcCommand,
 )
 
@@ -289,6 +290,103 @@ def gateway_readiness(gateway: Gateway) -> dict:
     }
 
 
+def discovery_scan_state(run: DeploymentSetupRun) -> dict:
+    """Return the customer-facing state for the active correlated discovery scan."""
+    discovery_meta = (run.summary or {}).get("discovery") or {}
+    scan_id = str(discovery_meta.get("active_scan_id") or "")
+    if not scan_id:
+        return {
+            "key": "idle",
+            "title": "Ready to scan",
+            "message": "Connect your equipment to the Gateway, then start a scan.",
+            "scan_id": "",
+            "progress": {"completed": 0, "total": 0},
+        }
+
+    report = run.gateway.discovery_data or {}
+    matching_report = report if str(report.get("scan_id") or "") == scan_id else {}
+    status = matching_report.get("status")
+    devices = matching_report.get("devices") or []
+    progress = matching_report.get("progress") or {"completed": 0, "total": 0}
+    base = {
+        "scan_id": scan_id,
+        "progress": progress,
+        "interfaces": matching_report.get("interfaces") or [],
+        "device_count": len(devices),
+    }
+    if status == "complete":
+        if devices:
+            return {
+                **base,
+                "key": "found",
+                "title": f"Found {len(devices)} device{'s' if len(devices) != 1 else ''}",
+                "message": "Select the equipment you want to configure.",
+            }
+        return {
+            **base,
+            "key": "empty",
+            "title": "No devices found",
+            "message": "Check power and cabling, retry the scan, or add the device manually.",
+        }
+    if status == "cancelled":
+        return {
+            **base,
+            "key": "idle",
+            "title": "Ready to scan",
+            "message": "The previous scan was cancelled. You can retry when the equipment is ready.",
+        }
+    if status == "error":
+        return {
+            **base,
+            "key": "error",
+            "title": "Scan failed",
+            "message": customer_safe_error((matching_report.get("errors") or [{}])[0].get("error", "")),
+        }
+
+    command_id = discovery_meta.get("command_id")
+    if command_id:
+        command = RemoteCommand.objects.filter(pk=command_id, gateway=run.gateway).first()
+        if command and command.status in {
+            RemoteCommand.Status.POLICY_DENIED,
+            RemoteCommand.Status.REJECTED,
+            RemoteCommand.Status.FAILED,
+            RemoteCommand.Status.EXPIRED,
+            RemoteCommand.Status.TIMED_OUT,
+            RemoteCommand.Status.OUTCOME_UNKNOWN,
+        }:
+            return {
+                **base,
+                "key": "error",
+                "title": "Scan failed",
+                "message": customer_safe_error(command.error_message),
+            }
+        rpc = (
+            RpcCommand.objects.filter(remote_command_id=command_id)
+            .order_by("-sent_at")
+            .first()
+        )
+        if rpc and rpc.status in {"error", "timeout"}:
+            return {
+                **base,
+                "key": "error",
+                "title": "Scan failed",
+                "message": customer_safe_error(rpc.error_message),
+            }
+    if status == "running" or (run.state == DeploymentSetupRun.State.DISCOVERING and not status):
+        return {
+            **base,
+            "key": "scanning",
+            "title": "Scanning connected devices",
+            "message": "The Gateway is checking its Ethernet, RS485, and USB serial interfaces.",
+        }
+    return {
+        **base,
+        "key": "scanning",
+        "title": "Scanning connected devices",
+        "message": "The scan request is on its way to the Gateway.",
+    }
+
+
 def create_or_update_candidate_item(*, run, index: int, candidate: dict) -> DeploymentSetupItem:
     score = min(100, max(0, int(candidate.get("matched_template_score") or 0)))
     item, _ = DeploymentSetupItem.objects.update_or_create(
@@ -411,23 +509,37 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
 
     discovery = run.gateway.discovery_data or {}
     discovery_status = discovery.get("status")
-    if run.state == DeploymentSetupRun.State.DISCOVERING and discovery_status in {
+    discovery_meta = (run.summary or {}).get("discovery") or {}
+    active_scan_id = str(discovery_meta.get("active_scan_id") or "")
+    report_matches = bool(active_scan_id and str(discovery.get("scan_id") or "") == active_scan_id)
+    if run.state == DeploymentSetupRun.State.DISCOVERING and report_matches and discovery_status in {
         "complete",
         "cancelled",
+        "error",
     }:
         run.state = DeploymentSetupRun.State.CONFIGURING
         run.current_step = "equipment"
-        event_type = "discovery_cancelled" if discovery_status == "cancelled" else "discovery_completed"
-        if not run.events.filter(event_type=event_type).exists():
+        discovery_meta["last_terminal_scan_id"] = active_scan_id
+        discovery_meta["last_status"] = discovery_status
+        run.summary = {**(run.summary or {}), "discovery": discovery_meta}
+        run.save(update_fields=["state", "current_step", "summary", "updated_at"])
+        event_type = {
+            "cancelled": "discovery_cancelled",
+            "error": "discovery_failed",
+        }.get(discovery_status, "discovery_completed")
+        if not run.events.filter(event_type=event_type, evidence__scan_id=active_scan_id).exists():
             append_setup_event(
                 run,
                 event_type,
                 (
                     "Equipment discovery was cancelled. Partial results were preserved."
                     if discovery_status == "cancelled"
+                    else "Equipment discovery failed. Retry the scan or add equipment manually."
+                    if discovery_status == "error"
                     else f"Equipment discovery found {len(discovery.get('devices') or [])} candidate(s)."
                 ),
                 evidence={
+                    "scan_id": active_scan_id,
                     "device_count": len(discovery.get("devices") or []),
                     "error_count": len(discovery.get("errors") or []),
                 },

@@ -10,6 +10,7 @@ from django.utils import timezone
 from apps.devices.deployment_setup import (
     confidence_label,
     customer_safe_error,
+    discovery_scan_state,
     gateway_readiness,
     get_or_create_setup_run,
     support_bundle,
@@ -312,6 +313,202 @@ class GuidedSetupViewTest(TestCase):
         session.save()
         self.url = reverse("web_team:onboarding:step_3_discover", args=[self.team.slug])
 
+    def _enable_guided_setup(self):
+        self.gateway.gateway_capabilities = ["guided_setup_v1"]
+        self.gateway.save(update_fields=["gateway_capabilities"])
+
+    def _scan_run(self, scan_id="scan-current"):
+        run = get_or_create_setup_run(
+            team=self.team,
+            gateway=self.gateway,
+            initiated_by=self.user,
+        )
+        run.state = run.State.DISCOVERING
+        run.current_step = "equipment"
+        run.summary = {
+            **(run.summary or {}),
+            "discovery": {"active_scan_id": scan_id},
+        }
+        run.save(update_fields=["state", "current_step", "summary", "updated_at"])
+        return run
+
+    @override_settings(
+        REMOTE_CONTROL_ACTIVE_SIGNING_KEY_ID="setup-test",
+        REMOTE_CONTROL_SIGNING_KEYS={"setup-test": SIGNING_SEED},
+        REMOTE_CONTROL_SIGNING_PRIVATE_KEY=SIGNING_SEED,
+    )
+    @patch("apps.devices.remote_control._schedule_outbox_dispatch")
+    def test_scan_button_creates_correlated_hardened_command(self, schedule):
+        self._enable_guided_setup()
+
+        response = self.client.post(self.url, {"action": "start_discovery"})
+
+        self.assertEqual(response.status_code, 302)
+        command = RemoteCommand.objects.get(gateway=self.gateway, operation="deployment_discover")
+        scan_id = command.request_payload["params"]["scan_id"]
+        self.assertEqual(command.request_payload["params"]["scope"], "attached_interfaces")
+        self.assertEqual(command.risk, "diagnostic")
+        from apps.devices.remote_control_crypto import build_signed_command_envelope
+
+        envelope = build_signed_command_envelope(command, request_id=uuid.uuid4())
+        self.assertEqual(envelope["method"], "deployment_discover")
+        self.assertEqual(envelope["params"]["scan_id"], scan_id)
+        self.assertEqual(envelope["target"]["gateway_serial"], self.gateway.serial_number)
+        self.assertEqual(envelope["signing_key_id"], "setup-test")
+        self.assertTrue(envelope["signature"])
+        run = self.gateway.deployment_setup_runs.get()
+        self.assertEqual(run.summary["discovery"]["active_scan_id"], scan_id)
+        self.assertEqual(run.summary["discovery"]["command_id"], str(command.pk))
+        self.assertEqual(run.state, run.State.DISCOVERING)
+        schedule.assert_not_called()
+
+    def test_scan_states_render_idle_running_found_empty_and_error(self):
+        self._enable_guided_setup()
+        idle = self.client.get(self.url)
+        self.assertContains(idle, "Ready to scan")
+        self.assertContains(idle, "Scan for devices")
+
+        run = self._scan_run()
+        cases = [
+            (
+                {"scan_id": "scan-current", "status": "running", "progress": {"completed": 7, "total": 253}},
+                "Scanning connected devices",
+            ),
+            (
+                {
+                    "scan_id": "scan-current",
+                    "status": "complete",
+                    "devices": [{"interface": "10.0.0.20:502"}],
+                },
+                "Found 1 device",
+            ),
+            ({"scan_id": "scan-current", "status": "complete", "devices": []}, "No devices found"),
+            ({"scan_id": "scan-current", "status": "error", "errors": [{"error": "probe failed"}]}, "Scan failed"),
+        ]
+        for report, expected in cases:
+            with self.subTest(expected=expected):
+                self.gateway.discovery_data = report
+                self.gateway.save(update_fields=["discovery_data"])
+                run.refresh_from_db()
+                self.assertEqual(discovery_scan_state(run)["title"], expected)
+                response = self.client.get(self.url)
+                self.assertContains(response, expected)
+
+    def test_stale_terminal_report_cannot_complete_retry(self):
+        run = self._scan_run(scan_id="scan-retry")
+        self.gateway.discovery_data = {
+            "scan_id": "scan-old",
+            "status": "complete",
+            "devices": [{"interface": "10.0.0.20:502"}],
+        }
+        self.gateway.save(update_fields=["discovery_data"])
+
+        synced = sync_setup_run(run)
+
+        self.assertEqual(synced.state, synced.State.DISCOVERING)
+        self.assertEqual(discovery_scan_state(synced)["title"], "Scanning connected devices")
+
+    @patch("apps.devices.remote_control._schedule_outbox_dispatch")
+    def test_retry_uses_a_new_scan_id(self, _schedule):
+        self._enable_guided_setup()
+        self.client.post(self.url, {"action": "start_discovery"})
+        run = self.gateway.deployment_setup_runs.get()
+        first_scan_id = run.summary["discovery"]["active_scan_id"]
+        self.gateway.discovery_data = {"scan_id": first_scan_id, "status": "complete", "devices": []}
+        self.gateway.save(update_fields=["discovery_data"])
+        sync_setup_run(run)
+
+        self.client.post(self.url, {"action": "start_discovery"})
+
+        run.refresh_from_db()
+        self.assertNotEqual(run.summary["discovery"]["active_scan_id"], first_scan_id)
+        self.assertEqual(RemoteCommand.objects.filter(gateway=self.gateway, operation="deployment_discover").count(), 2)
+
+    def test_matching_rpc_failure_becomes_scan_failed(self):
+        run = self._scan_run()
+        command = RemoteCommand.objects.create(
+            team=self.team,
+            gateway=self.gateway,
+            requested_by=self.user,
+            operation="deployment_discover",
+            risk="diagnostic",
+            request_payload={"method": "deployment_discover", "params": {"scan_id": "scan-current"}},
+            expires_at=timezone.now() + timedelta(minutes=5),
+        )
+        summary = dict(run.summary)
+        summary["discovery"]["command_id"] = str(command.pk)
+        run.summary = summary
+        run.save(update_fields=["summary", "updated_at"])
+        RpcCommand.objects.create(
+            team=self.team,
+            gateway=self.gateway,
+            request_id=uuid.uuid4(),
+            method="deployment_discover",
+            params={"scan_id": "scan-current"},
+            status="timeout",
+            error_message="Gateway did not respond",
+            remote_command=command,
+        )
+
+        state = discovery_scan_state(run)
+
+        self.assertEqual(state["title"], "Scan failed")
+
+    def test_mqtt_progress_is_cached_and_older_reports_are_ignored(self):
+        from apps.telemetry.management.commands.mqtt_consumer import Command
+
+        consumer = Command()
+        consumer._process_discovery_report(
+            self.gateway,
+            {
+                "schema_version": 1,
+                "scan_id": "scan-current",
+                "scan_ts": 200,
+                "status": "running",
+                "phase": "scanning_ethernet",
+                "progress": {"completed": 20, "total": 253},
+                "discovered_devices": [],
+            },
+        )
+        self.gateway.refresh_from_db()
+        self.assertEqual(self.gateway.discovery_data["progress"]["completed"], 20)
+
+        consumer._process_discovery_report(
+            self.gateway,
+            {
+                "scan_id": "scan-old",
+                "scan_ts": 100,
+                "status": "complete",
+                "discovered_devices": [{"interface": "10.0.0.99:502"}],
+            },
+        )
+        self.gateway.refresh_from_db()
+        self.assertEqual(self.gateway.discovery_data["scan_id"], "scan-current")
+
+        consumer._process_discovery_report(
+            self.gateway,
+            {
+                "scan_id": "scan-current",
+                "scan_ts": 200,
+                "updated_at": 300,
+                "status": "complete",
+                "discovered_devices": [],
+            },
+        )
+        self.gateway.refresh_from_db()
+        consumer._process_discovery_report(
+            self.gateway,
+            {
+                "scan_id": "scan-current",
+                "scan_ts": 200,
+                "updated_at": 250,
+                "status": "running",
+                "discovered_devices": [],
+            },
+        )
+        self.gateway.refresh_from_db()
+        self.assertEqual(self.gateway.discovery_data["status"], "complete")
+
     def test_page_exposes_manual_fallback_without_raw_json(self):
         response = self.client.get(self.url)
 
@@ -334,7 +531,7 @@ class GuidedSetupViewTest(TestCase):
                 "manual_manufacturer": "PrivateCo",
                 "manual_model": "P1",
                 "manual_device_type": "power_meter",
-                "manual_host": "192.168.1.50",
+                "manual_host": "10.0.0.20",
                 "manual_port": "502",
                 "manual_slave_id": "1",
                 "manual_timeout": "3",
@@ -355,7 +552,7 @@ class GuidedSetupViewTest(TestCase):
         self.assertFalse(template.is_verified)
         self.assertEqual(template.source, "user_created")
         device = Device.objects.get(team=self.team, name="Main Meter")
-        self.assertEqual(device.connection_config["host"], "192.168.1.50")
+        self.assertEqual(device.connection_config["host"], "10.0.0.20")
         self.assertEqual(device.metadata["guided_setup_validation"], "pending")
 
     @patch("apps.devices.deployment_setup.start_validation")
