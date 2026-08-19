@@ -360,11 +360,7 @@ def discovery_scan_state(run: DeploymentSetupRun) -> dict:
                 "title": "Scan failed",
                 "message": customer_safe_error(command.error_message),
             }
-        rpc = (
-            RpcCommand.objects.filter(remote_command_id=command_id)
-            .order_by("-sent_at")
-            .first()
-        )
+        rpc = RpcCommand.objects.filter(remote_command_id=command_id).order_by("-sent_at").first()
         if rpc and rpc.status in {"error", "timeout"}:
             return {
                 **base,
@@ -512,11 +508,16 @@ def sync_setup_run(run: DeploymentSetupRun) -> DeploymentSetupRun:
     discovery_meta = (run.summary or {}).get("discovery") or {}
     active_scan_id = str(discovery_meta.get("active_scan_id") or "")
     report_matches = bool(active_scan_id and str(discovery.get("scan_id") or "") == active_scan_id)
-    if run.state == DeploymentSetupRun.State.DISCOVERING and report_matches and discovery_status in {
-        "complete",
-        "cancelled",
-        "error",
-    }:
+    if (
+        run.state == DeploymentSetupRun.State.DISCOVERING
+        and report_matches
+        and discovery_status
+        in {
+            "complete",
+            "cancelled",
+            "error",
+        }
+    ):
         run.state = DeploymentSetupRun.State.CONFIGURING
         run.current_step = "equipment"
         discovery_meta["last_terminal_scan_id"] = active_scan_id
