@@ -317,6 +317,31 @@ class GuidedSetupViewTest(TestCase):
         self.gateway.gateway_capabilities = ["guided_setup_v1"]
         self.gateway.save(update_fields=["gateway_capabilities"])
 
+    def test_gateway_wait_refreshes_stale_blocked_readiness_after_heartbeat(self):
+        self.gateway.status = "offline"
+        self.gateway.mqtt_connected = False
+        self.gateway.last_seen = None
+        self.gateway.save(update_fields=["status", "mqtt_connected", "last_seen"])
+        run = get_or_create_setup_run(team=self.team, gateway=self.gateway, initiated_by=self.user)
+        run.readiness = gateway_readiness(self.gateway)
+        run.save(update_fields=["readiness", "updated_at"])
+        self.assertEqual(run.readiness["status"], "blocked")
+
+        self.gateway.status = "online"
+        self.gateway.mqtt_connected = True
+        self.gateway.tls_ok = True
+        self.gateway.last_seen = timezone.now()
+        self.gateway.save(update_fields=["status", "mqtt_connected", "tls_ok", "last_seen"])
+
+        response = self.client.get(reverse("web_team:onboarding:step_2b_wait", args=[self.team.slug]))
+
+        self.assertEqual(response.status_code, 200)
+        run.refresh_from_db()
+        self.assertEqual(run.readiness["status"], "ready")
+        self.assertContains(response, "Continue to Equipment")
+        self.assertContains(response, 'hx-disinherit="hx-target hx-select"')
+        self.assertContains(response, 'hx-target="this"')
+
     def _scan_run(self, scan_id="scan-current"):
         run = get_or_create_setup_run(
             team=self.team,
@@ -367,6 +392,8 @@ class GuidedSetupViewTest(TestCase):
         idle = self.client.get(self.url)
         self.assertContains(idle, "Ready to scan")
         self.assertContains(idle, "Scan for devices")
+        self.assertContains(idle, 'hx-disinherit="hx-target hx-select"')
+        self.assertContains(idle, 'hx-target="this"')
 
         run = self._scan_run()
         cases = [
@@ -508,6 +535,31 @@ class GuidedSetupViewTest(TestCase):
         )
         self.gateway.refresh_from_db()
         self.assertEqual(self.gateway.discovery_data["status"], "complete")
+
+    def test_legacy_guided_discovery_report_without_scan_id_completes_active_scan(self):
+        from apps.telemetry.management.commands.mqtt_consumer import Command
+
+        run = self._scan_run(scan_id="scan-current")
+        consumer = Command()
+
+        consumer._process_discovery_report(
+            self.gateway,
+            {
+                "schema_version": 0,
+                "scan_id": "",
+                "scan_ts": 200,
+                "scan_type": "guided",
+                "status": "complete",
+                "interfaces": [{"name": "/dev/ttyAMA3", "type": "serial"}],
+                "discovered_devices": [],
+            },
+        )
+
+        self.gateway.refresh_from_db()
+        self.assertEqual(self.gateway.discovery_data["scan_id"], "scan-current")
+        self.assertEqual(discovery_scan_state(run)["title"], "No devices found")
+        synced = sync_setup_run(run)
+        self.assertEqual(synced.state, synced.State.CONFIGURING)
 
     def test_page_exposes_manual_fallback_without_raw_json(self):
         response = self.client.get(self.url)

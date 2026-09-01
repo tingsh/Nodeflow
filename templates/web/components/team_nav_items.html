@@ -20,7 +20,7 @@
 {% endfor %}
 {% endif %}
 {% endif %}
-{% if request.user.is_authenticated %}
+{% if request.user|can_create_team %}
 <li class="menu-title">
   <hr/>
 </li>

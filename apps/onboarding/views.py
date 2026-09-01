@@ -390,7 +390,14 @@ def step_2b_wait(request, team_slug):
     run = get_or_create_setup_run(team=request.team, gateway=gateway, initiated_by=request.user)
     run = sync_setup_run(run)
     readiness = gateway_readiness(gateway)
-    if not run.readiness or not run.events.filter(event_type="gateway_preflight_completed").exists():
+    cached_status = (run.readiness or {}).get("status")
+    should_refresh_readiness = (
+        not run.readiness
+        or not run.events.filter(event_type="gateway_preflight_completed").exists()
+        or cached_status != "ready"
+        or readiness.get("status") == "ready"
+    )
+    if should_refresh_readiness:
         run.readiness = readiness
         run.save(update_fields=["readiness", "updated_at"])
     else:

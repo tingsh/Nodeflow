@@ -143,6 +143,49 @@ def test_gateway_attribute_ingest_persists_edge_diagnostics():
 
 
 @pytest.mark.django_db
+def test_gateway_attribute_ingest_normalizes_null_edge_diagnostic_strings():
+    team = Team.objects.create(name="Gateway Null Diagnostics", slug="gateway-null-diagnostics")
+    site = Site.objects.create(team=team, name="Factory")
+    gateway = Gateway.objects.create(
+        team=team,
+        site=site,
+        name="GW-NULL-DIAG",
+        serial_number="GW-NULL-DIAG-001",
+        access_token="diag-null-token",
+    )
+    claim_gateway(gateway)
+
+    command = MqttConsumerCommand()
+    command._handle_attributes(
+        {
+            "serial_number": "GW-NULL-DIAG-001",
+            "attributes": {
+                "status": "online",
+                "broker_host": "192.168.100.7",
+                "broker_port": 1883,
+                "broker_tcp_ok": True,
+                "broker_tcp_error": None,
+                "dns_error": None,
+                "tls_error": None,
+                "mqtt_connected": True,
+                "mqtt_last_error": None,
+                "ota_error": None,
+            },
+        }
+    )
+
+    gateway.refresh_from_db()
+
+    assert gateway.status == "online"
+    assert gateway.lifecycle_status == "online"
+    assert gateway.broker_tcp_error == ""
+    assert gateway.dns_error == ""
+    assert gateway.tls_error == ""
+    assert gateway.mqtt_last_error == ""
+    assert gateway.ota_error == ""
+
+
+@pytest.mark.django_db
 def test_scoped_mqtt_rejects_payload_topic_serial_mismatch(caplog):
     team_a = Team.objects.create(name="Tenant A", slug="tenant-a")
     team_b = Team.objects.create(name="Tenant B", slug="tenant-b")
@@ -549,6 +592,7 @@ def test_device_telemetry_history_api_retention_limit():
     user = CustomUser.objects.create_user(
         username="test_telemetry_user", email="test@telemetry.com", password="password123"
     )
+    Membership.objects.create(team=team, user=user, role=ROLE_OWNER)
 
     factory = RequestFactory()
     # Request 30 days (720 hours) which exceeds the Starter 7-day limit (168 hours)
@@ -561,9 +605,10 @@ def test_device_telemetry_history_api_retention_limit():
     assert response.status_code == 200
 
 
-def _sample_request(user, limit="20"):
+def _sample_request(user, team, limit="20"):
     request = RequestFactory().get(f"/telemetry/samples/?limit={limit}")
     request.user = user
+    request.team = team
     return request
 
 
@@ -577,6 +622,7 @@ def test_device_telemetry_samples_api_groups_template_columns():
         password="password123",
     )
     team = Team.objects.create(name="Samples Team", slug="samples-team")
+    Membership.objects.create(team=team, user=user, role=ROLE_OWNER)
     site = Site.objects.create(team=team, name="Samples Site")
     template = DeviceTemplate.objects.create(
         name="Power Meter Template",
@@ -613,7 +659,7 @@ def test_device_telemetry_samples_api_groups_template_columns():
         ]
     )
 
-    response = device_telemetry_samples_api(_sample_request(user), team.slug, device.id)
+    response = device_telemetry_samples_api(_sample_request(user, team), team.slug, device.id)
     data = json.loads(response.content)
 
     assert response.status_code == 200
@@ -641,6 +687,7 @@ def test_device_telemetry_samples_api_discovers_keys_and_clamps_limit():
         password="password123",
     )
     team = Team.objects.create(name="Manual Samples Team", slug="manual-samples-team")
+    Membership.objects.create(team=team, user=user, role=ROLE_OWNER)
     site = Site.objects.create(team=team, name="Manual Site")
     device = Device.objects.create(
         team=team,
@@ -658,7 +705,7 @@ def test_device_telemetry_samples_api_discovers_keys_and_clamps_limit():
         ]
     )
 
-    response = device_telemetry_samples_api(_sample_request(user, limit="999"), team.slug, device.id)
+    response = device_telemetry_samples_api(_sample_request(user, team, limit="999"), team.slug, device.id)
     data = json.loads(response.content)
 
     assert response.status_code == 200
@@ -681,6 +728,7 @@ def test_device_telemetry_samples_api_rejects_wrong_team_slug():
     )
     team = Team.objects.create(name="Right Team", slug="right-team")
     other_team = Team.objects.create(name="Other Team", slug="other-team")
+    Membership.objects.create(team=other_team, user=user, role=ROLE_OWNER)
     site = Site.objects.create(team=team, name="Right Site")
     device = Device.objects.create(
         team=team,
@@ -691,7 +739,50 @@ def test_device_telemetry_samples_api_rejects_wrong_team_slug():
     )
 
     with pytest.raises(Http404):
-        device_telemetry_samples_api(_sample_request(user), other_team.slug, device.id)
+        device_telemetry_samples_api(_sample_request(user, other_team), other_team.slug, device.id)
+
+
+@pytest.mark.django_db
+def test_telemetry_surfaces_reject_authenticated_user_from_another_team():
+    user = CustomUser.objects.create_user(
+        username="tenant-a-operator",
+        email="tenant-a-operator@example.com",
+        password="password123",
+    )
+    tenant_a = Team.objects.create(name="Tenant A", slug="telemetry-tenant-a")
+    tenant_b = Team.objects.create(name="Tenant B", slug="telemetry-tenant-b")
+    Membership.objects.create(team=tenant_a, user=user, role=ROLE_OWNER)
+    site_b = Site.objects.create(team=tenant_b, name="Private Site")
+    device_b = Device.objects.create(
+        team=tenant_b,
+        site=site_b,
+        name="Private Meter",
+        device_type="power_meter",
+        protocol="modbus_tcp",
+    )
+    TelemetryData.objects.create(
+        device=device_b,
+        timestamp=timezone.now(),
+        key="active_power",
+        value_numeric=123.0,
+    )
+    client = Client()
+    client.force_login(user)
+
+    protected_urls = [
+        reverse("web_team:telemetry:chart_partial", args=[tenant_b.slug, device_b.id, "active_power"]),
+        reverse("web_team:telemetry:kpi_partial", args=[tenant_b.slug, device_b.id, "active_power"]),
+        reverse("web_team:telemetry:telemetry_analyzer", args=[tenant_b.slug, device_b.id]),
+        reverse("web_team:telemetry:device_metrics_api", args=[tenant_b.slug, device_b.id]),
+        reverse("web_team:telemetry:device_telemetry_history_api", args=[tenant_b.slug, device_b.id]),
+        reverse("web_team:telemetry:device_telemetry_samples_api", args=[tenant_b.slug, device_b.id]),
+        reverse("web_team:telemetry:export_telemetry_csv", args=[tenant_b.slug, device_b.id]),
+        reverse("web_team:telemetry:site_profile_report", args=[tenant_b.slug, site_b.id]),
+        reverse("web_team:telemetry:export_site_profile_report_csv", args=[tenant_b.slug, site_b.id]),
+    ]
+
+    for url in protected_urls:
+        assert client.get(url).status_code == 404
 
 
 @pytest.mark.django_db
@@ -705,6 +796,7 @@ def test_telemetry_history_api_returns_utc_and_site_local_labels():
         password="password123",
     )
     team = Team.objects.create(name="History TZ Team", slug="history-tz-team")
+    Membership.objects.create(team=team, user=user, role=ROLE_OWNER)
     site = Site.objects.create(team=team, name="Jakarta Site", timezone="Asia/Jakarta")
     device = Device.objects.create(
         team=team,
@@ -739,6 +831,7 @@ def test_telemetry_history_api_preserves_boolean_values_for_status_widgets():
         password="password123",
     )
     team = Team.objects.create(name="History Bool Team", slug="history-bool-team")
+    Membership.objects.create(team=team, user=user, role=ROLE_OWNER)
     site = Site.objects.create(team=team, name="Bool Site")
     device = Device.objects.create(
         team=team,
@@ -772,6 +865,7 @@ def test_telemetry_history_api_handles_invalid_time_windows(hours):
         password="password123",
     )
     team = Team.objects.create(name=f"History Window {hours}", slug=f"history-window-{hours}")
+    Membership.objects.create(team=team, user=user, role=ROLE_OWNER)
     site = Site.objects.create(team=team, name="History Window Site")
     device = Device.objects.create(team=team, site=site, name="Window Meter", protocol="modbus_tcp")
     request = RequestFactory().get(f"/a/{team.slug}/telemetry/api/history/{device.id}/?hours={hours}")
@@ -830,6 +924,7 @@ def test_telemetry_csv_export_uses_site_local_timestamp():
         password="password123",
     )
     team = Team.objects.create(name="CSV TZ Team", slug="csv-tz-team")
+    Membership.objects.create(team=team, user=user, role=ROLE_OWNER)
     site = Site.objects.create(team=team, name="Tokyo Site", timezone="Asia/Tokyo")
     device = Device.objects.create(
         team=team,
@@ -867,6 +962,7 @@ def test_same_utc_telemetry_displays_different_site_local_times():
         password="password123",
     )
     team = Team.objects.create(name="Multi Site TZ Team", slug="multi-site-tz-team")
+    Membership.objects.create(team=team, user=user, role=ROLE_OWNER)
     singapore_site = Site.objects.create(team=team, name="Singapore Site", timezone="Asia/Singapore")
     auckland_site = Site.objects.create(team=team, name="Auckland Site", timezone="Pacific/Auckland")
     instant = timezone.now().replace(microsecond=0)

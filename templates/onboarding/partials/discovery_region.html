@@ -5,6 +5,8 @@
 {% endif %}
 <div id="discovery-list"
      hx-get="{% url 'web_team:onboarding:discovery_poll' request.team.slug %}"
+     hx-disinherit="hx-target hx-select"
+     hx-target="this"
      {% if scan_state.key == "scanning" %}hx-trigger="every 2s"{% endif %}
      hx-swap="outerHTML"
      x-data="{ selectedCount: {{ commissioning.ready_candidates|length }} }"

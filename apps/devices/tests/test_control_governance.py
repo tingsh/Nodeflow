@@ -168,6 +168,8 @@ class GovernedControlPolicyTest(TestCase):
         )
         with override_settings(
             REMOTE_CONTROL_SIGNING_KEY_ID="test-key",
+            REMOTE_CONTROL_ACTIVE_SIGNING_KEY_ID="test-key",
+            REMOTE_CONTROL_SIGNING_KEYS={},
             REMOTE_CONTROL_SIGNING_PRIVATE_KEY=base64.b64encode(private_raw).decode(),
         ):
             command = request_remote_command(

@@ -119,6 +119,21 @@ class TeamChangeForm(forms.ModelForm):
         return slug
 
 
+class TeamCreateForm(forms.Form):
+    name = forms.CharField(
+        label=_("Team Name"),
+        max_length=100,
+        help_text=_("Use the company, business unit, or operating group name your team will recognise."),
+        widget=forms.TextInput(attrs={"autofocus": True, "placeholder": _("Example: Acme Facilities")}),
+    )
+
+    def clean_name(self):
+        name = " ".join(self.cleaned_data["name"].split())
+        if not name:
+            raise ValidationError(_("Please provide a team name."))
+        return name
+
+
 class InvitationForm(forms.ModelForm):
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)

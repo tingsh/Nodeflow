@@ -1,0 +1,33 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n %}
+
+{% block app %}
+<div class="mx-auto max-w-2xl space-y-6">
+  <div>
+    <p class="text-sm font-semibold uppercase tracking-wide text-primary">{% translate "Owner action" %}</p>
+    <h1 class="mt-1 text-3xl font-bold text-base-content">{% translate "Create another team" %}</h1>
+    <p class="mt-2 text-base-content/70">
+      {% translate "Teams keep sites, gateways, devices, telemetry, alerts, and billing separate. You will become the owner of the new team." %}
+    </p>
+  </div>
+
+  <div class="card border border-base-content/10 bg-base-100 shadow-xl">
+    <form method="post" class="card-body space-y-5">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="alert alert-error">{{ form.non_field_errors }}</div>
+      {% endif %}
+      <label class="form-control w-full">
+        <span class="label"><span class="label-text font-semibold">{{ form.name.label }}</span></span>
+        {{ form.name }}
+        {% if form.name.help_text %}<span class="mt-2 text-sm text-base-content/60">{{ form.name.help_text }}</span>{% endif %}
+        {% for error in form.name.errors %}<span class="mt-2 text-sm text-error">{{ error }}</span>{% endfor %}
+      </label>
+      <div class="flex flex-wrap justify-end gap-3">
+        <a class="btn btn-ghost" href="{% url 'teams:manage_teams' %}">{% translate "Cancel" %}</a>
+        <button class="btn btn-primary" type="submit">{% translate "Create Team" %}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
