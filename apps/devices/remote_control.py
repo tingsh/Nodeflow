@@ -341,7 +341,7 @@ def _request_remote_command_atomic(
         raise CommandDenied(f"Unsupported remote operation '{operation}'.", code="unsupported_operation")
     gateway = gateway.__class__.objects.select_for_update().get(pk=gateway.pk)
     if device:
-        device = Device.objects.select_for_update().select_related("template").get(pk=device.pk)
+        device = Device.objects.select_for_update(of=("self",)).select_related("template").get(pk=device.pk)
     if definition.device_required and not device:
         raise CommandDenied("This operation requires an exact device target.", code="device_required")
     if operation == "write_device" and not command_key:
@@ -776,7 +776,10 @@ def dispatch_outbox(outbox_id: int) -> RemoteCommand | None:
         team = Team.objects.select_for_update().get(pk=command.team_id)
         gateway = command.gateway.__class__.objects.select_for_update().get(pk=command.gateway_id)
         device = (
-            Device.objects.select_for_update().select_related("template").filter(pk=command.device_id).first()
+            Device.objects.select_for_update(of=("self",))
+            .select_related("template")
+            .filter(pk=command.device_id)
+            .first()
             if command.device_id
             else None
         )

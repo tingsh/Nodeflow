@@ -1,18 +1,18 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
 
 from apps.teams.decorators import login_and_team_required, require_permission, team_admin_required
-from apps.teams.forms import InvitationForm, TeamChangeForm
-from apps.teams.helpers import get_open_invitations_for_user
+from apps.teams.forms import InvitationForm, TeamChangeForm, TeamCreateForm
+from apps.teams.helpers import create_default_team_for_user, get_open_invitations_for_user
 from apps.teams.invitations import send_invitation
-from apps.teams.models import Invitation, Team
-from apps.teams.roles import ROLE_DESCRIPTIONS, has_permission
+from apps.teams.models import Invitation, Membership, Team
+from apps.teams.roles import ROLE_DESCRIPTIONS, ROLE_OWNER, has_permission
 from apps.teams.services import close_team
 from apps.web.forms import set_form_fields_disabled
 
@@ -20,13 +20,46 @@ from apps.web.forms import set_form_fields_disabled
 @login_required
 def manage_teams(request):
     teams = request.user.teams.filter(status=Team.Status.ACTIVE).order_by("name")
+    can_create_team = Membership.objects.filter(
+        user=request.user,
+        role=ROLE_OWNER,
+        team__status=Team.Status.ACTIVE,
+    ).exists()
     return render(
         request,
         "teams/list_teams.html",
         {
             "teams": teams,
             "invitations": get_open_invitations_for_user(request.user),
+            "can_create_team": can_create_team,
             "page_title": _("Manage Teams"),
+        },
+    )
+
+
+@login_required
+def create_team(request):
+    can_create_team = Membership.objects.filter(
+        user=request.user,
+        role=ROLE_OWNER,
+        team__status=Team.Status.ACTIVE,
+    ).exists()
+    if not can_create_team:
+        return HttpResponseForbidden("Only an existing team owner can create another team.")
+
+    form = TeamCreateForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        team = create_default_team_for_user(request.user, form.cleaned_data["name"])
+        request.session["team"] = team.pk
+        messages.success(request, _("Team created. You are its owner."))
+        return HttpResponseRedirect(reverse("single_team:manage_team", args=[team.slug]))
+
+    return render(
+        request,
+        "teams/create_team.html",
+        {
+            "form": form,
+            "page_title": _("Create Team"),
         },
     )
 

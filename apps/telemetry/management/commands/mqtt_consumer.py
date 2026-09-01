@@ -4,6 +4,7 @@ import logging
 import paho.mqtt.client as mqtt
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from django.db.models.fields import NOT_PROVIDED
 from django.utils import timezone
 
 logger = logging.getLogger("novena_hub")
@@ -365,7 +366,10 @@ class Command(BaseCommand):
 
         for attr_key, model_field in field_mapping.items():
             if attr_key in attrs:
-                setattr(gateway, model_field, attrs[attr_key])
+                value = self._normalize_gateway_attribute_value(gateway, model_field, attrs[attr_key])
+                if value is None:
+                    continue
+                setattr(gateway, model_field, value)
                 update_fields.append(model_field)
 
         if attrs.get("status") == "online" and gateway.lifecycle_status == "claimed":
@@ -472,6 +476,18 @@ class Command(BaseCommand):
                 gateway.save(update_fields=["credential_rotation_status"])
 
         logger.debug("Updated attributes for gateway %s (status=%s)", gateway_sn, attrs.get("status"))
+
+    def _normalize_gateway_attribute_value(self, gateway, model_field, value):
+        if value is not None:
+            return value
+        field = gateway._meta.get_field(model_field)
+        if field.null:
+            return None
+        if field.get_internal_type() in {"CharField", "TextField"}:
+            return ""
+        if field.default is not NOT_PROVIDED:
+            return field.get_default()
+        return None
 
     # ── RPC Response ────────────────────────────────────────────────────
 
@@ -598,6 +614,16 @@ class Command(BaseCommand):
             return
         incoming_scan_id = str(report.get("scan_id") or "")
         current_scan_id = str(current.get("scan_id") or "")
+        if not incoming_scan_id and report.get("scan_type") == "guided":
+            active_scan_id = self._active_guided_setup_scan_id(gateway)
+            if active_scan_id:
+                report = {**report, "scan_id": active_scan_id}
+                incoming_scan_id = active_scan_id
+                logger.info(
+                    "Backfilled missing guided discovery scan_id for %s from active setup run: %s",
+                    gateway.serial_number,
+                    active_scan_id,
+                )
         if current_ts and not incoming_ts:
             logger.info("Ignored unversioned discovery report for %s", gateway.serial_number)
             return
@@ -650,3 +676,18 @@ class Command(BaseCommand):
             len(discovered_devices),
             sum(1 for d in discovered_devices if d.get("matched_template_id")),
         )
+
+    def _active_guided_setup_scan_id(self, gateway):
+        from apps.devices.models import DeploymentSetupRun
+
+        run = (
+            DeploymentSetupRun.objects.filter(
+                gateway=gateway,
+                state=DeploymentSetupRun.State.DISCOVERING,
+            )
+            .order_by("-updated_at")
+            .first()
+        )
+        if not run:
+            return ""
+        return str(((run.summary or {}).get("discovery") or {}).get("active_scan_id") or "")

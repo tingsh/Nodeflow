@@ -23,6 +23,8 @@
             <div id="gateway-status"
                  class="mt-6 rounded-lg border border-base-content/10 bg-base-200/30"
                  hx-get="{% url 'web_team:onboarding:gateway_status_poll' request.team.slug %}"
+                 hx-disinherit="hx-target hx-select"
+                 hx-target="this"
                  hx-trigger="load, every 3s"
                  hx-swap="innerHTML">
                 <div class="flex items-center gap-3 p-5">

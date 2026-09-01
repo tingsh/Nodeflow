@@ -8,6 +8,7 @@ app_name = "teams"
 urlpatterns = [
     path("", views.manage_teams, name="teams_home"),
     path("manage/", views.manage_teams, name="manage_teams"),
+    path("create/", views.create_team, name="create_team"),
     # invitation acceptance views
     path("invitation/<slug:invitation_id>/", views.accept_invitation, name="accept_invitation"),
     path("invitation/<slug:invitation_id>/signup/", views.SignupAfterInvite.as_view(), name="signup_after_invite"),

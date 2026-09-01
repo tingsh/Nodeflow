@@ -1,6 +1,5 @@
 import csv
 
-from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from waffle import flag_is_active
@@ -8,6 +7,7 @@ from waffle import flag_is_active
 from apps.devices.datapoint_maps import effective_register_map
 from apps.devices.models import Device, Site
 from apps.devices.solution_profiles import get_site_profile
+from apps.teams.decorators import login_and_team_required
 from apps.utils.timezones import format_site_datetime, site_timezone_metadata
 
 from .models import TelemetryData
@@ -71,7 +71,7 @@ def _device_telemetry_columns(device):
     return columns, seen
 
 
-@login_required
+@login_and_team_required
 def get_chart_partial(request, team_slug, device_id, key):
     # Security: Ensure device belongs to the team
     device = get_object_or_404(Device, id=device_id, team__slug=team_slug)
@@ -85,7 +85,7 @@ def get_chart_partial(request, team_slug, device_id, key):
     return render(request, "telemetry/partials/chart_partial.html", context)
 
 
-@login_required
+@login_and_team_required
 def get_kpi_partial(request, team_slug, device_id, key):
     device = get_object_or_404(Device, id=device_id, team__slug=team_slug)
     value = get_latest_telemetry_value(device, key)
@@ -100,7 +100,7 @@ def get_kpi_partial(request, team_slug, device_id, key):
     return render(request, "telemetry/partials/kpi_card.html", context)
 
 
-@login_required
+@login_and_team_required
 def telemetry_analyzer(request, team_slug, device_id):
     """
     Main view for the historical data analyzer.
@@ -111,7 +111,7 @@ def telemetry_analyzer(request, team_slug, device_id):
     return render(request, "telemetry/analyzer.html", context)
 
 
-@login_required
+@login_and_team_required
 def device_metrics_api(request, team_slug, device_id):
     """
     JSON endpoint returning available telemetry metrics (keys, labels, units) for a device.
@@ -136,7 +136,7 @@ def device_metrics_api(request, team_slug, device_id):
     return JsonResponse({"metrics": metrics})
 
 
-@login_required
+@login_and_team_required
 def device_telemetry_samples_api(request, team_slug, device_id):
     """
     JSON endpoint returning the latest grouped telemetry samples for a device.
@@ -187,7 +187,7 @@ def get_retention_limit_days(team) -> int:
     return get_retention_limit_days_for_team(team)
 
 
-@login_required
+@login_and_team_required
 def device_telemetry_history_api(request, team_slug, device_id):
     """
     JSON endpoint for historical and real-time Chart.js updates.
@@ -236,7 +236,7 @@ def device_telemetry_history_api(request, team_slug, device_id):
     )
 
 
-@login_required
+@login_and_team_required
 def export_telemetry_csv(request, team_slug, device_id):
     """
     Exports device telemetry to CSV.
@@ -334,7 +334,7 @@ def _site_profile_report_rows(site, days):
     }
 
 
-@login_required
+@login_and_team_required
 def site_profile_report(request, team_slug, site_id):
     site = get_object_or_404(Site, id=site_id, team=request.team)
     if flag_is_active(request, "business_impact_roi"):
@@ -349,7 +349,7 @@ def site_profile_report(request, team_slug, site_id):
     return render(request, "telemetry/site_profile_report.html", context)
 
 
-@login_required
+@login_and_team_required
 def export_site_profile_report_csv(request, team_slug, site_id):
     site = get_object_or_404(Site, id=site_id, team__slug=team_slug)
     days = int(request.GET.get("days", 7))
