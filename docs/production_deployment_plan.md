@@ -304,6 +304,8 @@ Set up local backup plus off-server upload. The current system needs both:
 - Postgres/TimescaleDB backup for relational data and telemetry.
 - Private media backup for confidential Business Impact PDF reports.
 
+Subscription telemetry limits are access windows, not backup or database deletion schedules. PostgreSQL/TimescaleDB may still contain telemetry outside a team's current visible plan window until the global physical retention policy, currently 90 days, drops it.
+
 Manual first backup:
 
 ```bash

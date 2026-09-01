@@ -202,7 +202,7 @@ ACTIVE_PRODUCTS = [
         features=[
             _("1 Edge Gateway"),
             _("Up to 5 Devices"),
-            _("7-Day Data Retention"),
+            _("7-Day Visible Telemetry History"),
             _("Email Threshold Alerts"),
         ],
     ),
@@ -219,7 +219,7 @@ ACTIVE_PRODUCTS = [
         features=[
             _("3 Edge Gateways"),
             _("Up to 20 Devices"),
-            _("30-Day Data Retention"),
+            _("30-Day Visible Telemetry History"),
             _("AI Anomaly Detection"),
             _("EEG Grant Ready Docs"),
         ],
@@ -236,7 +236,7 @@ ACTIVE_PRODUCTS = [
         features=[
             _("Unlimited Gateways"),
             _("Up to 100 Devices"),
-            _("90-Day Data Retention"),
+            _("90-Day Visible Telemetry History"),
             _("Multi-site Management"),
             _("SLA Support"),
         ],

@@ -66,7 +66,9 @@ def device_telemetry_history_api(request, team_slug, device_id):
     plan_days = get_retention_limit_days(request.team)
     max_hours = plan_days * 24
 
-    # Safety cap: don't allow querying beyond the plan's limit
+    # Plan retention controls the visible query window only. Physical telemetry
+    # rows may remain until the global TimescaleDB retention policy expires so
+    # upgrades can reveal retained history and downgrades shrink access at once.
     if hours > max_hours:
         hours = max_hours
 
@@ -113,6 +115,8 @@ def export_telemetry_csv(request, team_slug, device_id):
     days = int(request.GET.get("days", 7))
 
     plan_days = get_retention_limit_days(request.team)
+    # Export is capped by the current plan's visible-history window; physical
+    # deletion is handled separately by the global database retention policy.
     if days > plan_days:
         days = plan_days
 

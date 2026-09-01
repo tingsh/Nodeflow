@@ -204,6 +204,10 @@ def device_telemetry_history_api(request, team_slug, device_id):
     plan_days = get_retention_limit_days(request.team)
     max_hours = plan_days * 24
 
+    # Plan retention is a customer-visible history window. Rows can remain in
+    # TimescaleDB until the global physical retention window expires, which
+    # lets an upgrade reveal retained history without making downgrade access
+    # linger.
     if hours > max_hours:
         hours = max_hours
 
@@ -247,6 +251,8 @@ def export_telemetry_csv(request, team_slug, device_id):
     days = int(request.GET.get("days", 7))
 
     plan_days = get_retention_limit_days(request.team)
+    # CSV export follows the same visible-history rule as charts/API queries;
+    # it is not responsible for physical database deletion.
     if days > plan_days:
         days = plan_days
 

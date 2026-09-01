@@ -30,12 +30,16 @@ def update_aggregates_and_retention(apps, schema_editor):
             schedule_interval => INTERVAL '1 hour',
             if_not_exists => TRUE);
 
-        -- Add 90-day retention policy to the raw telemetry hypertable
+        -- Add the global 90-day physical retention policy to the raw telemetry
+        -- hypertable. Subscription plans intentionally control customer-visible
+        -- query/export history, not immediate row deletion; retained rows can
+        -- become visible after an upgrade while still shrinking access
+        -- immediately after a downgrade.
         SELECT add_retention_policy('telemetry_telemetrydata', 
             drop_after => INTERVAL '90 days', 
             if_not_exists => TRUE);
 
-        -- Add 90-day retention policy to the continuous aggregate
+        -- Add matching global physical retention to the continuous aggregate
         SELECT add_retention_policy('hourly_telemetry_stats', 
             drop_after => INTERVAL '90 days', 
             if_not_exists => TRUE);

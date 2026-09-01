@@ -193,11 +193,13 @@ The current code and public content align around this direction:
 
 | Plan | Current public direction | Included capacity | Role |
 | --- | ---: | --- | --- |
-| Starter | S$99/month | 1 Gateway, up to 5 devices, 7-day retention, 10-second interval, email alerts | Low-friction single-site entry |
-| Business | S$299/month | 3 Gateways, up to 20 devices, 30-day retention, 5-second interval, AI/trend features | Core SME plan |
-| Enterprise | Custom | Custom/multi-site capacity; code defaults include up to 100 devices and 90-day retention | SLA, larger fleet, implementation needs |
+| Starter | S$99/month | 1 Gateway, up to 5 devices, 7-day visible telemetry history, 10-second interval, email alerts | Low-friction single-site entry |
+| Business | S$299/month | 3 Gateways, up to 20 devices, 30-day visible telemetry history, 5-second interval, AI/trend features | Core SME plan |
+| Enterprise | Custom | Custom/multi-site capacity; code defaults include up to 100 devices and 90-day visible telemetry history | SLA, larger fleet, implementation needs |
 
 Pricing is still a market hypothesis. It must be validated against support burden and willingness to pay. Also align the remaining legacy `$99/$299/$699` Django pricing template with the Wagtail S$99/S$299/custom public offer before paid launch.
+
+Telemetry history limits are customer-visible access windows, not immediate physical deletion rules. Novena may retain telemetry internally until the global TimescaleDB retention window, currently 90 days, expires. This lets an upgrade reveal previously stored telemetry inside the upgraded plan window while a downgrade immediately reduces customer access without requiring an immediate database purge.
 
 ### Revenue model
 

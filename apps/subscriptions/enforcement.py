@@ -7,6 +7,7 @@ logger = logging.getLogger("novena_hub")
 DEFAULT_LIMIT = 3  # For teams with no active subscription
 DEFAULT_GATEWAY_LIMIT = 1
 DEFAULT_LATENCY_LIMIT = 10.0
+DEFAULT_VISIBLE_TELEMETRY_HISTORY_DAYS = 7
 
 
 def get_product_metadata_for_team(team):
@@ -101,10 +102,15 @@ def get_effective_polling_interval_seconds(device):
 
 def get_retention_limit_days_for_team(team):
     """
-    Returns the telemetry retention window allowed for a team.
+    Return the plan-controlled customer-visible telemetry history window.
+
+    This is intentionally an access limit, not a physical deletion policy. Raw
+    telemetry may remain in TimescaleDB until the global database retention
+    policy expires, so upgrades can reveal already-retained history and
+    downgrades can shrink access immediately without purging rows on the spot.
     """
     product_metadata = get_product_metadata_for_team(team)
     if product_metadata:
         return product_metadata.retention_days
 
-    return 7
+    return DEFAULT_VISIBLE_TELEMETRY_HISTORY_DAYS

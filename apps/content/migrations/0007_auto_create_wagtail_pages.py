@@ -290,7 +290,12 @@ def create_wagtail_pages(apps, schema_editor):
                         },
                         {
                             "question": "Is there a limit on how much data I can store?",
-                            "answer": "We don't limit storage by gigabytes. Instead, we limit by retention time (7 days, 30 days, or 1 year) based on your plan. All critical alerts are logged indefinitely."
+                            "answer": (
+                                "Your plan controls the telemetry history you can view and export, such as 7, 30, "
+                                "or 90 days. Novena may retain telemetry internally for up to the global database "
+                                "retention window, currently 90 days, so upgrades can make already-retained "
+                                "history visible."
+                            )
                         },
                         {
                             "question": "Can I cancel my subscription at any time?",

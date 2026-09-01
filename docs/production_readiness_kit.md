@@ -41,6 +41,8 @@ The first production target remains a lean VPS deployment:
 
 Teacher note: ASGI is the Python web interface that supports both normal HTTP requests and WebSockets. Novena uses WebSockets on device detail pages, so production must run the ASGI app through an ASGI-capable worker.
 
+Telemetry retention has two layers. Subscription plans cap customer-visible chart/API/export history, while TimescaleDB enforces the global physical cleanup window. The current global physical telemetry retention window is 90 days. This is intentional: upgrades can reveal previously stored telemetry inside the upgraded plan window, and downgrades shrink access immediately without requiring an immediate row purge.
+
 ## Active Repo Paths
 
 Current local development checkout:

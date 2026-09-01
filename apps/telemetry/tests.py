@@ -605,6 +605,69 @@ def test_device_telemetry_history_api_retention_limit():
     assert response.status_code == 200
 
 
+@pytest.mark.django_db
+def test_plan_history_window_changes_visibility_without_deleting_retained_rows():
+    from django.test import RequestFactory
+
+    from apps.subscriptions.metadata import ACTIVE_PRODUCTS
+    from apps.subscriptions.tests.utils import create_subscription_for_team
+    from apps.telemetry.views import device_telemetry_history_api
+
+    team = Team.objects.create(name="Telemetry Upgrade Team", slug="telemetry-upgrade-team")
+    site = Site.objects.create(team=team, name="Telemetry Site")
+    device = Device.objects.create(
+        team=team,
+        site=site,
+        name="Upgrade Meter",
+        device_type="power_meter",
+        protocol="modbus_tcp",
+        status="online",
+    )
+    user = CustomUser.objects.create_user(
+        username="retention-window-user",
+        email="retention-window@example.com",
+        password="password123",
+    )
+    Membership.objects.create(team=team, user=user, role=ROLE_OWNER)
+
+    old_point = TelemetryData.objects.create(
+        device=device,
+        key="active_power",
+        value_numeric=20.0,
+        timestamp=timezone.now() - timezone.timedelta(days=20),
+    )
+    recent_point = TelemetryData.objects.create(
+        device=device,
+        key="active_power",
+        value_numeric=2.0,
+        timestamp=timezone.now() - timezone.timedelta(days=2),
+    )
+
+    starter = next(product for product in ACTIVE_PRODUCTS if product.slug == "starter")
+    business = next(product for product in ACTIVE_PRODUCTS if product.slug == "business")
+    starter_subscription = create_subscription_for_team(team, starter)
+
+    factory = RequestFactory()
+
+    def visible_values():
+        request = factory.get(f"/a/{team.slug}/telemetry/api/history/{device.id}/?key=active_power&hours=720")
+        request.team = Team.objects.get(pk=team.pk)
+        request.user = user
+        response = device_telemetry_history_api(request, team_slug=team.slug, device_id=device.id)
+        assert response.status_code == 200
+        return json.loads(response.content)["values"]
+
+    assert visible_values() == [2.0]
+
+    create_subscription_for_team(team, business)
+    assert visible_values() == [20.0, 2.0]
+
+    team.subscription = starter_subscription
+    team.save(update_fields=["subscription"])
+    assert visible_values() == [2.0]
+    assert TelemetryData.objects.filter(id__in=[old_point.id, recent_point.id]).count() == 2
+
+
 def _sample_request(user, team, limit="20"):
     request = RequestFactory().get(f"/telemetry/samples/?limit={limit}")
     request.user = user
